@@ -1,0 +1,17 @@
+{
+  "defaultAudience": {
+    "addressTerm": "家人们",
+    "painPointsHint": "好用、实惠、品质靠谱",
+    "label": "通用"
+  },
+  "rules": [
+    { "keywords": ["多猫家庭", "多猫", "好几只猫", "多只猫"], "addressTerm": "家里好几只主子的铲屎官们", "painPointsHint": "多只猫的卫生、空间不好管理，笼子要耐用又好清洁", "label": "多猫家庭" },
+    { "keywords": ["资深中产", "中产", "品质", "讲究"], "addressTerm": "注重品质的家人们", "painPointsHint": "既要品质靠谱又要省心耐用", "label": "品质型用户" },
+    { "keywords": ["铲屎官", "养宠", "养猫", "养狗", "宠物"], "addressTerm": "养宠的家人们", "painPointsHint": "主子的健康与卫生、用品耐用好打理", "label": "养宠用户" },
+    { "keywords": ["宝妈", "妈妈", "母婴", "带娃"], "addressTerm": "宝妈们", "painPointsHint": "孩子用的要安全、省心、好用", "label": "宝妈" },
+    { "keywords": ["25-45岁女性", "女性", "姐妹"], "addressTerm": "姐妹们", "painPointsHint": "好用、好看、性价比", "label": "女性用户" },
+    { "keywords": ["学生", "年轻人", "学生党"], "addressTerm": "同学们", "painPointsHint": "实惠、好用、不踩雷", "label": "年轻用户" },
+    { "keywords": ["白领", "上班族", "忙碌"], "addressTerm": "上班族家人们", "painPointsHint": "省时省心、品质稳定", "label": "上班族" },
+    { "keywords": ["银发", "老年", "中老年"], "addressTerm": "叔叔阿姨们", "painPointsHint": "简单好用、安全放心", "label": "中老年" }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "noPricePlaceholder": {
+    "zh-CN": "超值价",
+    "en-US": "amazing price",
+    "th-TH": "ราคาพิเศษ"
+  },
+  "defaultGiftLine": {
+    "zh-CN": "今天下单还有超值大礼包、配套赠品，具体以直播间/详情页为准！",
+    "en-US": "Order today and get a free gift pack - see livestream or product page for details!",
+    "th-TH": "สั่งวันนี้ได้ของแถมฟรี รายละเอียดดูในไลฟ์หรือหน้ารายละเอียดสินค้า!"
+  },
+  "defaultDeadlineLine": {
+    "zh-CN": "活动限时，结束即恢复原价，欲购从速！",
+    "en-US": "Limited time - price goes back up when the deal ends. Get yours now!",
+    "th-TH": "จำกัดเวลา ราคากลับเป็นปกติเมื่อโปรจบ รีบสั่งเลย!"
+  },
+  "defaultPromoLine": {
+    "zh-CN": "还有超值福利，活动结束即恢复原价！",
+    "en-US": "Plus extra value - back to full price when the deal ends!",
+    "th-TH": "และยังมีของแถมคุ้มค่า ราคาเต็มเมื่อโปรจบ!"
+  },
+  "interactionRankHint": {
+    "zh-CN": "先到先得，手慢无！",
+    "en-US": "First come, first served!",
+    "th-TH": "มาก่อนได้ก่อน!"
+  }
+}

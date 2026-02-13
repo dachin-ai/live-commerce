@@ -1,0 +1,13 @@
+diff --git a/node_modules/spawn-command/lib/spawn-command.js b/node_modules/spawn-command/lib/spawn-command.js
+index 24d56ab..924eb54 100644
+--- a/node_modules/spawn-command/lib/spawn-command.js
++++ b/node_modules/spawn-command/lib/spawn-command.js
+@@ -6,7 +6,7 @@ module.exports = function (command, options) {
+   if (process.platform === 'win32') {
+     file = 'cmd.exe';
+     args = ['/s', '/c', '"' + command + '"'];
+-    options = util._extend({}, options);
++    options = Object.assign({}, options);
+     options.windowsVerbatimArguments = true;
+   }
+   else {

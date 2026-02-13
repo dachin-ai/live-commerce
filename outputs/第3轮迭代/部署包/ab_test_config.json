@@ -1,0 +1,17 @@
+# A/B 测试配置 - 第3轮迭代
+{
+  "tests": [
+    {
+      "id": "test_1",
+      "name": "标题样式 A/B：短标题 vs 长标题（结合话术优化）",
+      "traffic_split": 0.5,
+      "status": "pending"
+    },
+    {
+      "id": "test_2",
+      "name": "开播时间 A/B：19:00 vs 20:00（配合互动环节设置）",
+      "traffic_split": 0.5,
+      "status": "pending"
+    }
+  ]
+}

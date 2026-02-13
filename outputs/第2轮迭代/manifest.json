@@ -1,0 +1,49 @@
+{
+  "roundLabel": "第2轮迭代",
+  "entries": [
+    {
+      "roleId": "planner",
+      "files": [
+        "主题.md",
+        "路线图.md"
+      ],
+      "summary": "规划师产出：主题与路线图（第2轮迭代）",
+      "collectedAt": "2026-01-29T12:36:49.408Z"
+    },
+    {
+      "roleId": "industry_expert",
+      "files": [
+        "行业最佳实践.json"
+      ],
+      "summary": "行业专家产出：结构化最佳实践方案",
+      "collectedAt": "2026-01-29T12:36:49.449Z"
+    },
+    {
+      "roleId": "senior_user",
+      "files": [
+        "用户体验测试报告.md",
+        "AB测试建议.md"
+      ],
+      "summary": "资深用户产出：体验报告与 A/B 建议",
+      "collectedAt": "2026-01-29T12:36:49.489Z"
+    },
+    {
+      "roleId": "engineer",
+      "files": [
+        "技术实施方案.md",
+        "部署包/README.md"
+      ],
+      "summary": "程序工程师产出：技术方案与部署包占位",
+      "collectedAt": "2026-01-29T12:36:49.529Z"
+    },
+    {
+      "roleId": "novice",
+      "files": [
+        "疑问库.md"
+      ],
+      "summary": "小白产出：疑问库与潜在优化点",
+      "collectedAt": "2026-01-29T12:36:49.565Z"
+    }
+  ],
+  "updatedAt": "2026-01-29T12:36:49.565Z"
+}

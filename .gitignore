@@ -1,0 +1,46 @@
+# 依赖和构建产物
+node_modules/
+dist/
+build/
+*.log
+
+# 环境变量
+.env
+.env.local
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 数据库文件
+backend/data.db
+backend/data.db-wal
+backend/data.db-shm
+backend/data.db.backup
+data/shared_state/state.db
+
+# 上传文件
+backend/uploads/
+frontend/uploads/
+
+# IDE 配置
+.vscode/
+.idea/
+
+# npm 缓存
+_cacache/
+_update-notifier-last-checked
+
+# 临时文件和演示文件
+demo*.html
+server*.js
+
+# 话术/Coze 调试输出（本地查看用）
+last-script-raw.txt
+backend/last-script-raw.txt
+coze-debug.log
+coze-stream-debug.log
+
+# 保留测试入口文件
+# index.html - 统一测试入口
+# test-terminal.html - API测试终端

@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-gray-50 text-gray-900;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-lg shadow-sm border border-gray-200 p-6;
+  }
+  
+  .stat-card {
+    @apply card hover:shadow-md transition-shadow;
+  }
+  .stat-card--compact {
+    @apply p-3;
+  }
+  
+  .btn-primary {
+    @apply bg-primary-600 text-white px-4 py-2 rounded-lg hover:bg-primary-700 transition-colors;
+  }
+  
+  .btn-secondary {
+    @apply bg-gray-200 text-gray-700 px-4 py-2 rounded-lg hover:bg-gray-300 transition-colors;
+  }
+}
+
+@layer utilities {
+  @keyframes slide-in-from-right {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  
+  .animate-in {
+    animation: slide-in-from-right 0.3s ease-out, fade-in 0.3s ease-out;
+  }
+  
+  .slide-in-from-right {
+    animation: slide-in-from-right 0.3s ease-out;
+  }
+  
+  .fade-in {
+    animation: fade-in 0.3s ease-out;
+  }
+}

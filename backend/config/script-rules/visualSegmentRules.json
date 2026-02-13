@@ -1,0 +1,11 @@
+{
+  "placeholderFallbacks": {
+    "productName": "本品",
+    "features": "核心卖点",
+    "promoCopy": "本场福利",
+    "targetAudience": "目标人群"
+  },
+  "featureDemoHints": [],
+  "defaultPartColor": "#374151",
+  "rulesByType": {}
+}

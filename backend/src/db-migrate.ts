@@ -1,0 +1,170 @@
+/**
+ * 数据库迁移和种子数据更新工具
+ * 
+ * 使用方法：
+ * 1. 更新种子数据：npm run db:update-seed
+ * 2. 重置数据库：npm run db:reset
+ */
+
+import { getDatabase, dbRun, dbGet, initDatabase } from './db'
+import crypto from 'crypto'
+
+// 数据库版本表
+const DB_VERSION_TABLE = 'db_version'
+
+/**
+ * 初始化数据库版本表
+ */
+async function initVersionTable() {
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS ${DB_VERSION_TABLE} (
+      version INTEGER PRIMARY KEY,
+      description TEXT,
+      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+}
+
+/**
+ * 获取当前数据库版本
+ */
+async function getCurrentVersion(): Promise<number> {
+  const result = await dbGet<{ version: number }>(
+    `SELECT MAX(version) as version FROM ${DB_VERSION_TABLE}`
+  )
+  return result?.version || 0
+}
+
+/**
+ * 记录迁移版本
+ */
+async function recordMigration(version: number, description: string) {
+  await dbRun(
+    `INSERT INTO ${DB_VERSION_TABLE} (version, description) VALUES (?, ?)`,
+    [version, description]
+  )
+}
+
+/**
+ * 更新种子数据（不删除现有数据）
+ * 只更新分类等种子数据，保留业务数据
+ */
+export async function updateSeedData() {
+  console.log('🔄 开始更新种子数据...')
+  
+  await initVersionTable()
+  const currentVersion = await getCurrentVersion()
+  
+  // 检查分类数据是否存在
+  const existingCategories = await dbGet<{ count: number }>(
+    'SELECT COUNT(*) as count FROM categories'
+  )
+  
+  console.log('📦 检查并插入分类种子数据...')
+  await insertCategories()
+  await recordMigration(1, '初始化/更新分类数据')
+  
+  // 检查用户数据
+  const existingUsers = await dbGet<{ count: number }>(
+    'SELECT COUNT(*) as count FROM users'
+  )
+  
+  if (existingUsers && existingUsers.count === 0) {
+    console.log('📦 插入用户种子数据...')
+    await insertUsers()
+    await recordMigration(2, '初始化用户数据')
+  }
+  
+  // 检查版本日志
+  const existingLogs = await dbGet<{ count: number }>(
+    'SELECT COUNT(*) as count FROM version_logs'
+  )
+  
+  if (existingLogs && existingLogs.count === 0) {
+    console.log('📦 插入版本日志种子数据...')
+    await insertVersionLogs()
+    await recordMigration(3, '初始化版本日志数据')
+  }
+  
+  console.log('✅ 种子数据更新完成')
+}
+
+/**
+ * 插入分类数据
+ * 如果分类表为空，则插入；如果已有数据，则跳过
+ */
+async function insertCategories() {
+  const existing = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM categories')
+  if (existing && existing.count > 0) {
+    console.log('⚠️  分类数据已存在，跳过插入')
+    console.log('💡 如需更新分类，请先重置数据库（选项1）')
+    return
+  }
+
+  // 调用 initDatabase 插入分类数据
+  const { initDatabase } = require('./db')
+  await initDatabase()
+  console.log('✅ 分类数据已插入')
+}
+
+/**
+ * 插入用户数据
+ */
+async function insertUsers() {
+  const bcrypt = require('bcryptjs')
+  const adminPassword = bcrypt.hashSync('123456', 10)
+  const userPassword = bcrypt.hashSync('123456', 10)
+
+  const sampleUsers = [
+    ['user-1', 'Admin User', 'admin@example.com', adminPassword, 'admin', 'active'],
+    ['user-2', '运营专员', 'operator@example.com', userPassword, 'operator', 'active'],
+    ['user-3', '主播测试', 'anchor@example.com', userPassword, 'anchor', 'active'],
+  ]
+
+  for (const user of sampleUsers) {
+    await dbRun(
+      'INSERT INTO users (id, name, email, password, role, status) VALUES (?, ?, ?, ?, ?, ?)',
+      user
+    )
+    await dbRun(
+      'INSERT INTO user_preferences (id, userId, preferences) VALUES (?, ?, ?)',
+      [crypto.randomUUID(), user[0], '{}']
+    )
+  }
+}
+
+/**
+ * 插入版本日志数据
+ */
+async function insertVersionLogs() {
+  const sampleLogs = [
+    ['v1.0.0', '初始版本发布', '系统初始版本，包含基础功能', 'release'],
+    ['v1.1.0', '新增AI功能', '添加AI生成脚本、报告等功能', 'feature'],
+    ['v1.2.0', '优化用户体验', '改进界面设计，优化操作流程', 'improvement'],
+  ]
+
+  for (const log of sampleLogs) {
+    const id = crypto.randomUUID()
+    await dbRun(
+      'INSERT INTO version_logs (id, version, title, content, type, createdAt) VALUES (?, ?, ?, ?, ?, ?)',
+      [id, ...log, new Date().toISOString()]
+    )
+  }
+}
+
+// 如果直接运行此文件（先建表再插种子数据）
+if (require.main === module) {
+  ;(async () => {
+    try {
+      console.log('🔄 初始化数据库表结构...')
+      await initDatabase()
+      console.log('✅ 表结构就绪')
+      await updateSeedData()
+      console.log('✅ 完成')
+      process.exit(0)
+    } catch (err) {
+      console.error('❌ 错误:', err)
+      process.exit(1)
+    }
+  })()
+}

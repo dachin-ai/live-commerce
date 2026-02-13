@@ -1,0 +1,21 @@
+{
+  "roundLabel": "第2轮迭代",
+  "generatedAt": "2026-01-29T12:36:49.448Z",
+  "practices": [
+    {
+      "area": "话术",
+      "recommendation": "开场 30 秒强调核心优惠",
+      "priority": "high"
+    },
+    {
+      "area": "互动",
+      "recommendation": "每 10 分钟设置一次互动环节",
+      "priority": "high"
+    },
+    {
+      "area": "商品展示",
+      "recommendation": "高转化商品前置",
+      "priority": "medium"
+    }
+  ]
+}

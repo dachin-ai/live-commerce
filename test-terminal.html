@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>项目测试终端</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #252526;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 2px solid #007acc;
+        }
+
+        .header h1 {
+            color: #4ec9b0;
+            font-size: 18px;
+            margin-bottom: 10px;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            font-size: 12px;
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #f48771;
+        }
+
+        .status-dot.online {
+            background: #4ec9b0;
+            box-shadow: 0 0 8px #4ec9b0;
+        }
+
+        .terminal {
+            flex: 1;
+            background: #1e1e1e;
+            border: 1px solid #3c3c3c;
+            border-radius: 0 0 8px 8px;
+            padding: 15px;
+            overflow-y: auto;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .terminal-line {
+            margin-bottom: 5px;
+            word-wrap: break-word;
+        }
+
+        .terminal-line.success {
+            color: #4ec9b0;
+        }
+
+        .terminal-line.error {
+            color: #f48771;
+        }
+
+        .terminal-line.warning {
+            color: #dcdcaa;
+        }
+
+        .terminal-line.info {
+            color: #569cd6;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            background: #007acc;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #005a9e;
+        }
+
+        button:disabled {
+            background: #3c3c3c;
+            cursor: not-allowed;
+        }
+
+        button.danger {
+            background: #f48771;
+        }
+
+        button.danger:hover {
+            background: #d16969;
+        }
+
+        .test-section {
+            margin-top: 20px;
+            padding: 15px;
+            background: #252526;
+            border-radius: 4px;
+        }
+
+        .test-section h2 {
+            color: #4ec9b0;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        .test-item {
+            padding: 10px;
+            margin-bottom: 10px;
+            background: #1e1e1e;
+            border-radius: 4px;
+            border-left: 3px solid #007acc;
+        }
+
+        .test-item.success {
+            border-left-color: #4ec9b0;
+        }
+
+        .test-item.error {
+            border-left-color: #f48771;
+        }
+
+        .test-result {
+            margin-top: 5px;
+            font-size: 12px;
+            color: #858585;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid #3c3c3c;
+            border-top-color: #4ec9b0;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .log-timestamp {
+            color: #858585;
+            font-size: 12px;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🚀 直播电商中台 - 测试终端</h1>
+        <div class="status-bar">
+            <div class="status-item">
+                <div class="status-dot" id="frontendStatus"></div>
+                <span>前端 (5173)</span>
+            </div>
+            <div class="status-item">
+                <div class="status-dot" id="backendStatus"></div>
+                <span>后端 (3000)</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="terminal" id="terminal">
+        <div class="terminal-line info">
+            <span class="log-timestamp">[系统]</span>
+            测试终端已就绪，点击下方按钮开始测试...
+        </div>
+    </div>
+
+    <div class="controls">
+        <button onclick="checkStatus()">检查服务状态</button>
+        <button onclick="testBackend()">测试后端 API</button>
+        <button onclick="testFrontend()">测试前端页面</button>
+        <button onclick="testTasks()">测试任务管理</button>
+        <button onclick="testStats()">测试统计数据</button>
+        <button onclick="clearTerminal()" class="danger">清空日志</button>
+    </div>
+
+    <div class="test-section">
+        <h2>📊 测试结果</h2>
+        <div id="testResults"></div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000';
+        const FRONTEND_URL = 'http://localhost:5173';
+
+        function log(message, type = 'info') {
+            const terminal = document.getElementById('terminal');
+            const line = document.createElement('div');
+            line.className = `terminal-line ${type}`;
+            
+            const timestamp = new Date().toLocaleTimeString();
+            line.innerHTML = `<span class="log-timestamp">[${timestamp}]</span>${message}`;
+            
+            terminal.appendChild(line);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function clearTerminal() {
+            document.getElementById('terminal').innerHTML = '';
+            log('终端已清空', 'info');
+        }
+
+        function updateStatus(service, online) {
+            const statusDot = document.getElementById(`${service}Status`);
+            if (online) {
+                statusDot.classList.add('online');
+            } else {
+                statusDot.classList.remove('online');
+            }
+        }
+
+        async function checkStatus() {
+            log('🔍 开始检查服务状态...', 'info');
+            
+            // 检查后端
+            try {
+                const response = await fetch(`${API_BASE}/health`, {
+                    method: 'GET',
+                    mode: 'cors',
+                    cache: 'no-cache',
+                    signal: AbortSignal.timeout(3000)
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    log(`✅ 后端服务正常 (${data.timestamp})`, 'success');
+                    updateStatus('backend', true);
+                } else {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+            } catch (error) {
+                if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
+                    log(`❌ 后端服务不可用: 连接失败`, 'error');
+                    log(`   💡 请确保后端服务已启动`, 'warning');
+                    log(`   💡 双击运行"启动.bat"选择「单独启动后端」`, 'warning');
+                    log(`   💡 或直接运行"单独启动后端.bat"`, 'warning');
+                    log(`   💡 或手动运行: cd backend && npm run dev`, 'warning');
+                } else {
+                    log(`❌ 后端服务不可用: ${error.message}`, 'error');
+                }
+                updateStatus('backend', false);
+            }
+
+            // 检查前端
+            try {
+                const response = await fetch(FRONTEND_URL, {
+                    method: 'GET',
+                    mode: 'no-cors',
+                    cache: 'no-cache',
+                    signal: AbortSignal.timeout(3000)
+                });
+                log(`✅ 前端服务可访问`, 'success');
+                updateStatus('frontend', true);
+            } catch (error) {
+                if (error.name === 'AbortError' || error.message.includes('Failed to fetch')) {
+                    log(`❌ 前端服务不可用: 连接失败`, 'error');
+                    log(`   💡 请确保前端服务已启动`, 'warning');
+                    log(`   💡 运行: cd frontend && npm run dev`, 'warning');
+                    log(`   💡 或运行: npm run dev:frontend`, 'warning');
+                } else {
+                    log(`❌ 前端服务不可用: ${error.message}`, 'error');
+                }
+                updateStatus('frontend', false);
+            }
+
+            // 如果两个服务都不可用，显示启动提示
+            const backendOnline = document.getElementById('backendStatus').classList.contains('online');
+            const frontendOnline = document.getElementById('frontendStatus').classList.contains('online');
+            
+            if (!backendOnline && !frontendOnline) {
+                log('', 'info');
+                log('⚠️  两个服务都未启动', 'warning');
+                log('', 'info');
+                log('📋 启动方法：', 'info');
+                log('   1. 双击运行"启动.bat"选择「一键启动」', 'info');
+                log('   2. 或直接运行"启动项目.bat"', 'info');
+                log('   3. 或手动运行: npm run dev', 'info');
+                log('', 'info');
+            }
+        }
+
+        async function testBackend() {
+            log('🧪 测试后端 API...', 'info');
+            
+            const tests = [
+                { name: '健康检查', url: '/health' },
+                { name: '统计数据', url: '/api/stats/live' },
+                { name: '任务列表', url: '/api/tasks' }
+            ];
+
+            for (const test of tests) {
+                try {
+                    const response = await fetch(`${API_BASE}${test.url}`, {
+                        method: 'GET',
+                        mode: 'cors'
+                    });
+                    
+                    if (response.ok) {
+                        const data = await response.json();
+                        log(`✅ ${test.name}: 成功`, 'success');
+                        log(`   响应: ${JSON.stringify(data).substring(0, 100)}...`, 'info');
+                    } else {
+                        log(`❌ ${test.name}: HTTP ${response.status}`, 'error');
+                    }
+                } catch (error) {
+                    log(`❌ ${test.name}: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        async function testFrontend() {
+            log('🧪 测试前端页面...', 'info');
+            
+            try {
+                const response = await fetch(FRONTEND_URL, {
+                    method: 'GET',
+                    mode: 'no-cors'
+                });
+                log(`✅ 前端页面可访问`, 'success');
+                log(`   URL: ${FRONTEND_URL}`, 'info');
+                log(`   💡 在浏览器中打开此地址查看完整应用`, 'info');
+            } catch (error) {
+                log(`❌ 前端页面不可访问: ${error.message}`, 'error');
+                log(`   💡 请确保前端服务已启动 (npm run dev:frontend)`, 'warning');
+            }
+        }
+
+        async function testTasks() {
+            log('🧪 测试任务管理 API...', 'info');
+            
+            // 获取任务列表
+            try {
+                const response = await fetch(`${API_BASE}/api/tasks`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    const tasks = await response.json();
+                    log(`✅ 获取任务列表成功 (${tasks.length} 个任务)`, 'success');
+                    
+                    // 创建任务
+                    const newTask = {
+                        title: '测试任务',
+                        description: '这是一个自动测试任务',
+                        priority: 'normal',
+                        status: 'pending'
+                    };
+                    
+                    const createResponse = await fetch(`${API_BASE}/api/tasks`, {
+                        method: 'POST',
+                        mode: 'cors',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(newTask)
+                    });
+                    
+                    if (createResponse.ok) {
+                        const created = await createResponse.json();
+                        log(`✅ 创建任务成功 (ID: ${created.id})`, 'success');
+                    } else {
+                        log(`❌ 创建任务失败: HTTP ${createResponse.status}`, 'error');
+                    }
+                } else {
+                    log(`❌ 获取任务列表失败: HTTP ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ 任务管理测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        async function testStats() {
+            log('🧪 测试统计数据 API...', 'info');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/stats/live`, {
+                    method: 'GET',
+                    mode: 'cors'
+                });
+                
+                if (response.ok) {
+                    const stats = await response.json();
+                    log(`✅ 获取统计数据成功`, 'success');
+                    log(`   GMV: ¥${stats.totalGMV?.toLocaleString() || 'N/A'}`, 'info');
+                    log(`   观看人数: ${stats.totalViewers?.toLocaleString() || 'N/A'}`, 'info');
+                    log(`   订单数: ${stats.totalOrders?.toLocaleString() || 'N/A'}`, 'info');
+                } else {
+                    log(`❌ 获取统计数据失败: HTTP ${response.status}`, 'error');
+                }
+            } catch (error) {
+                log(`❌ 统计数据测试失败: ${error.message}`, 'error');
+            }
+        }
+
+        // 页面加载时自动检查状态
+        window.addEventListener('load', () => {
+            setTimeout(checkStatus, 1000);
+        });
+
+        // 定期检查状态（每30秒）
+        setInterval(checkStatus, 30000);
+    </script>
+</body>
+</html>

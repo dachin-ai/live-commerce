@@ -1,0 +1,13 @@
+diff --git a/node_modules/node-gyp/lib/find-python.js b/node_modules/node-gyp/lib/find-python.js
+index a445e82..c0ff0b7 100644
+--- a/node_modules/node-gyp/lib/find-python.js
++++ b/node_modules/node-gyp/lib/find-python.js
+@@ -3,7 +3,7 @@
+ const log = require('npmlog')
+ const semver = require('semver')
+ const cp = require('child_process')
+-const extend = require('util')._extend // eslint-disable-line
++const extend = Object.assign
+ const win = process.platform === 'win32'
+ const logWithPrefix = require('./util').logWithPrefix
+ 
