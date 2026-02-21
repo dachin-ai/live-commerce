@@ -1,12 +1,8 @@
+import './loadEnv' // 必须最先执行，否则 auth/email 等读不到 .env
+
 import express from 'express'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import path from 'path'
-
-// 固定从 backend 目录加载 .env，避免因启动目录不同读不到 backend/.env（如 AGENT_API_BODY=1）
-dotenv.config({ path: path.join(__dirname, '..', '.env') })
-dotenv.config() // 再加载 cwd 下的 .env（dotenv 不会覆盖已存在的键）
-
 import statsRoutes from './routes/stats'
 import tasksRoutes from './routes/tasks'
 import storesRoutes from './routes/stores'
@@ -22,6 +18,8 @@ import workflowRoutes from './routes/workflow'
 import dataImportRoutes from './routes/dataImport'
 import configRoutes from './routes/config'
 import translateRoutes from './routes/translate'
+import feedbackRoutes from './routes/feedback'
+import messagesRoutes from './routes/messages'
 import { initDatabase } from './db'
 import { loadScriptLLMConfigCache } from './services/scriptLLMConfig'
 import { rateLimitMiddleware } from './middleware/rateLimit'
@@ -61,6 +59,8 @@ app.use('/api/workflow', workflowRoutes)
 app.use('/api/data-import', dataImportRoutes)
 app.use('/api/config', configRoutes)
 app.use('/api/translate', translateRoutes)
+app.use('/api/feedback', feedbackRoutes)
+app.use('/api/messages', messagesRoutes)
 
 // 错误处理
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -91,6 +91,11 @@ async function startServer() {
     app.listen(PORT, () => {
       console.log(`🚀 服务器运行在 http://localhost:${PORT}`)
       console.log(`✅ 后端服务已启动，按 Ctrl+C 停止`)
+      if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+        console.log(`📧 邮件服务已配置（忘记密码将发验证码至邮箱）`)
+      } else {
+        console.log(`📧 邮件服务未配置（忘记密码不会发邮件，开发环境会返回验证码）`)
+      }
     }).on('error', (err: any) => {
       if (err.code === 'EADDRINUSE') {
         console.error(`❌ 错误: 端口 ${PORT} 已被占用`)

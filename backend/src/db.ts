@@ -179,6 +179,14 @@ export async function initDatabase() {
     await dbRun('CREATE INDEX IF NOT EXISTS idx_reset_codes_email ON password_reset_codes(email)')
   } catch (_) {}
 
+  // 新 IP 首次登录是否已看过教程（按 IP 哈希记录，用于前端仅在新 IP 首次登录时展示教程）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tutorial_seen_ips (
+      ipHash TEXT PRIMARY KEY,
+      seenAt TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `)
+
   // 创建用户偏好设置表（长期记忆功能）
   await dbRun(`
     CREATE TABLE IF NOT EXISTS user_preferences (
@@ -189,6 +197,39 @@ export async function initDatabase() {
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
+
+  // 用户反馈表（站内问题反馈/功能建议，管理员可查看）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      type TEXT NOT NULL DEFAULT 'problem',
+      subject TEXT NOT NULL,
+      content TEXT NOT NULL,
+      contact TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT,
+      replyContent TEXT,
+      replyAt TEXT,
+      imageUrls TEXT,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    )
+  `)
+  try {
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_feedback_status ON feedback(status)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_feedback_createdAt ON feedback(createdAt)')
+  } catch (_) {}
+  try {
+    await dbRun('ALTER TABLE feedback ADD COLUMN replyContent TEXT')
+  } catch (_) {}
+  try {
+    await dbRun('ALTER TABLE feedback ADD COLUMN replyAt TEXT')
+  } catch (_) {}
+  try {
+    await dbRun('ALTER TABLE feedback ADD COLUMN imageUrls TEXT')
+  } catch (_) {}
 
   // 创建版本更新日志表
   await dbRun(`
@@ -201,6 +242,48 @@ export async function initDatabase() {
       createdAt TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `)
+
+  // 站内信（版本更新、反馈回复、系统通知等）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS in_app_messages (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      type TEXT NOT NULL DEFAULT 'system',
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      linkUrl TEXT,
+      readAt TEXT,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      extra TEXT,
+      FOREIGN KEY (userId) REFERENCES users(id)
+    )
+  `)
+  try {
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_in_app_messages_userId ON in_app_messages(userId)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_in_app_messages_createdAt ON in_app_messages(createdAt)')
+  } catch (_) {}
+
+  // 补录：将已有反馈回复写入站内信（避免重复）
+  try {
+    const feedbacks = await dbAll(
+      "SELECT id, userId, subject, replyContent, replyAt FROM feedback WHERE replyContent IS NOT NULL AND replyContent != ''"
+    ) as { id: string; userId: string | null; subject: string; replyContent: string; replyAt: string | null }[]
+    for (const row of feedbacks) {
+      if (!row.userId) continue
+      const needle = `%"feedbackId":"${row.id}"%`
+      const existing = await dbGet('SELECT id FROM in_app_messages WHERE type = ? AND extra LIKE ?', ['feedback_reply', needle])
+      if (existing) continue
+      const msgId = crypto.randomUUID()
+      const title = `反馈回复：${(row.subject || '').slice(0, 50)}`
+      const extra = JSON.stringify({ feedbackId: row.id })
+      const createdAt = row.replyAt || new Date().toISOString()
+      await dbRun(
+        `INSERT INTO in_app_messages (id, userId, type, title, content, linkUrl, createdAt, extra)
+         VALUES (?, ?, 'feedback_reply', ?, ?, '/messages', ?, ?)`,
+        [msgId, row.userId, title, row.replyContent, createdAt, extra]
+      )
+    }
+  } catch (_) {}
 
   // 创建产品分类表
   await dbRun(`
@@ -387,7 +470,13 @@ export async function initDatabase() {
     const sampleUsers = [
       ['user-1', 'Admin User', 'admin@example.com', adminPassword, 'admin', 'active'],
       ['user-2', '运营专员', 'operator@example.com', userPassword, 'operator', 'active'],
-      ['user-3', '主播测试', 'anchor@example.com', userPassword, 'anchor', 'active'],
+      ['user-3', '主播测试', 'anchor@example.com', userPassword, 'operator', 'active'],
+      ['user-4', '运营测试1', 'operator1@test.com', userPassword, 'operator', 'active'],
+      ['user-5', '运营测试2', 'operator2@test.com', userPassword, 'operator', 'active'],
+      ['user-6', '运营测试3', 'operator3@test.com', userPassword, 'operator', 'active'],
+      ['user-7', '运营测试4', 'operator4@test.com', userPassword, 'operator', 'active'],
+      ['user-8', '运营测试5', 'operator5@test.com', userPassword, 'operator', 'active'],
+      ['user-9', '虚拟管理员', 'viewer@example.com', userPassword, 'viewer', 'active'],
     ]
 
     for (const user of sampleUsers) {

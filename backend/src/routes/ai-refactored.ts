@@ -1678,37 +1678,55 @@ ${anomalyLines}
 
 /**
  * 从文本中提取 JSON 对象（含 tasks 数组）。
- * 支持多种格式：{"tasks":[...]}, {tasks:[...]}, [{"title":...}], 等。
- * 增强解析能力，适配 Coze 可能返回的各种格式。
+ * 支持：纯 JSON、Markdown ```json ... ``` 包裹、多种键名格式。
  */
 function extractTasksJsonFromText(text: string): string | null {
+  // 先尝试去掉 Markdown 代码块（Coze 有时会返回 ```json\n{...}\n```），避免第一次解析失败
+  let work = text
+  const codeBlockMatch = work.match(/```(?:json)?\s*([\s\S]*?)```/)
+  if (codeBlockMatch && codeBlockMatch[1]) {
+    const inner = codeBlockMatch[1].trim()
+    if (inner.startsWith('{') || inner.startsWith('[')) work = inner
+  }
+
   // 策略 1：查找 {"tasks": [...]} 或 {"tasks":[...]}
-  let start = text.indexOf('{"tasks"')
-  if (start < 0) start = text.indexOf('{"tasks":')
-  if (start < 0) start = text.indexOf('{tasks:')
-  if (start < 0) start = text.indexOf('{ tasks:')
-  if (start < 0) start = text.indexOf('{ "tasks"')
-  
+  let start = work.indexOf('{"tasks"')
+  if (start < 0) start = work.indexOf('{"tasks":')
+  if (start < 0) start = work.indexOf('{tasks:')
+  if (start < 0) start = work.indexOf('{ tasks:')
+  if (start < 0) start = work.indexOf('{ "tasks"')
+
   // 策略 2：查找包含 "tasks" 字段的对象
   if (start < 0) {
-    const idx = text.indexOf('"tasks"')
-    if (idx >= 0) start = text.lastIndexOf('{', idx)
+    const idx = work.indexOf('"tasks"')
+    if (idx >= 0) start = work.lastIndexOf('{', idx)
   }
-  
-  // 策略 3：如果找不到 tasks，尝试匹配直接的数组 [{"title":...}]
+
+  // 策略 3：直接数组 [{"title":...}]
   if (start < 0) {
-    const arrayStart = text.indexOf('[{')
-    if (arrayStart >= 0 && (text.indexOf('"title"') > arrayStart || text.indexOf('"task"') > arrayStart)) {
-      // 可能是直接返回数组，包装为 {"tasks": [...]}
-      const extracted = extractBalancedBracket(text, arrayStart, '[', ']')
+    const arrayStart = work.indexOf('[{')
+    if (arrayStart >= 0 && (work.indexOf('"title"') > arrayStart || work.indexOf('"task"') > arrayStart)) {
+      const extracted = extractBalancedBracket(work, arrayStart, '[', ']')
       if (extracted) return `{"tasks":${extracted}}`
     }
     return null
   }
-  
-  // 括号平衡提取
-  const extracted = extractBalancedBracket(text, start, '{', '}')
+
+  const extracted = extractBalancedBracket(work, start, '{', '}')
   return extracted
+}
+
+/** 修复 Coze 常出的 JSON 小问题（尾部逗号、key 与 value 未用冒号分隔等），便于一次解析失败后重试 */
+function sanitizeTasksJson(jsonStr: string): string {
+  let s = jsonStr
+    .replace(/,(\s*[}\]])/g, '$1')
+    .replace(/\r\n/g, '\n')
+    .trim()
+  // Coze 有时把 "title" 与值连在一起写成 "titleXXX"，补回冒号与引号： "titleXXX","description" -> "title":"XXX","description"
+  s = s.replace(/"title([^"]+)",\s*"(description|priority)"/g, (_m, val, key) => `"title":"${val.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}","${key}"`)
+  // 同理 "priority" 与值合并： "prioritynormal" 或 "priorityurgent" -> "priority":"normal" / "priority":"urgent"
+  s = s.replace(/"priority(urgent|normal)"(\s*[,}\]])/g, '"priority":"$1"$2')
+  return s
 }
 
 /**
@@ -1880,7 +1898,7 @@ async function generateIntelligentTodosWithLLM(params: {
 
 【范围】聚焦直播运营：内容、话术、节奏、转化、时段、商品、互动。产出 6～10 条可落地待办。
 
-【输出】仅返回一个 JSON：{"tasks":[{"title":"","description":"","priority":"urgent|normal"},...]}，无 markdown、无前缀。请直接在回复中流式输出该 JSON。`
+【输出】仅返回一个 JSON：{"tasks":[{"title":"标题","description":"描述","priority":"urgent或normal"},...]}。每条必须严格用英文双引号与冒号，例如 "title":"优化直播场次" 不能写成 "title优化直播场次"。无 markdown、无前缀，直接在回复中流式输出。`
 
   // 【store_data】/【store_attributes】/【raw_daily_table】为消息内数据块，Bot 在回复中直接输出 JSON 即可（见《Coze对接说明》）
   const days = 30
@@ -1949,13 +1967,14 @@ ${historicalBlock}${rawDataBlock}
       await new Promise(resolve => setTimeout(resolve, 1500)) // 重试前等待 1.5 秒
     }
     // 待办与话术相同，走 Coze 流式接口；callLLMOnce 内部聚合全部 stream chunk 后返回完整文本，再解析 JSON
+    const todoStreamTimeoutMs = Number(process.env.COZE_TODO_TIMEOUT_MS) || 300000 // 默认 5 分钟，Coze 推理或工具较慢时可设更大
     raw = await callLLMOnce({
     systemPrompt,
     userMessage,
       temperature: existingTaskTitles.length > 0 ? 0.75 : 0.6,
       maxTokens: 3000,
     taskType: 'todo',
-      timeoutMs: 180000, // 3 分钟；tool 路径已废弃，正文须在 answer/delta 中输出
+      timeoutMs: todoStreamTimeoutMs,
       config: llmConfig,
   })
     if (raw && raw.trim()) break // 有内容则成功，跳出重试循环
@@ -1985,22 +2004,28 @@ ${historicalBlock}${rawDataBlock}
     appendGenerateTasksLog(`[待办生成] LLM 未返回合法 JSON。返回前80字: ${text.slice(0, 80).replace(/\n/g, ' ')}`)
     return { tasks: [], llmEmptyReason: reason }
   }
-  try {
-    const parsed = JSON.parse(jsonStr) as {
+  const parsePayload = (str: string) => {
+    return JSON.parse(str) as {
       tasks?: Array<{
         title?: string
         description?: string
         priority?: string
-        /** Agent API 文档格式：与 title 二选一 */
         task?: string
         expected_outcome?: string
         action_steps?: string[]
-        /** 其他可能的字段 */
         name?: string
         content?: string
         level?: string
         importance?: string
       }>
+    }
+  }
+  try {
+    let parsed: ReturnType<typeof parsePayload>
+    try {
+      parsed = parsePayload(jsonStr)
+    } catch {
+      parsed = parsePayload(sanitizeTasksJson(jsonStr))
     }
     const list = parsed?.tasks
     if (!Array.isArray(list) || list.length === 0) {
@@ -2013,7 +2038,6 @@ ${historicalBlock}${rawDataBlock}
     const tasks = list
       .filter((t) => {
         if (!t) return false
-        // 支持多种标题字段：title, task, name, content
         const titleRaw = (t.title ?? t.task ?? t.name ?? t.content ?? t.description ?? '').trim()
         if (!titleRaw) return false
         const title = titleRaw.slice(0, 50)
@@ -2023,10 +2047,7 @@ ${historicalBlock}${rawDataBlock}
         return true
       })
       .map((t) => {
-        // 标题：优先 title > task > name > content（最多 100 字符）
         const titleStr = String(t.title ?? t.task ?? t.name ?? t.content ?? '智能建议任务').trim().slice(0, 100)
-        
-        // 描述：合并多个可能的描述字段（最多 2000 字符，保留完整内容）
         const descParts: string[] = []
         if (t.description && String(t.description).trim()) descParts.push(String(t.description).trim())
         if (t.expected_outcome && String(t.expected_outcome).trim()) descParts.push(String(t.expected_outcome).trim())
@@ -2034,21 +2055,15 @@ ${historicalBlock}${rawDataBlock}
         if (Array.isArray(t.action_steps) && t.action_steps.length > 0) {
           descParts.push(t.action_steps.map((s) => String(s).trim()).filter(Boolean).join('；'))
         }
-        const description = descParts.length > 0 ? descParts.join('\n').trim().slice(0, 2000) : ''
-        
-        // 优先级：支持 urgent/high/critical, normal/low/medium
+        let description = descParts.length > 0 ? descParts.join('\n').trim().slice(0, 2000) : ''
+        description = stripToolsSectionFromDescription(description)
         const priorityRaw = (t.priority ?? t.level ?? t.importance ?? '').toString().toLowerCase()
-        const priority = 
-          priorityRaw === 'urgent' || priorityRaw === 'high' || priorityRaw === 'critical' 
-          ? 'urgent' 
-          : 'normal'
-        
-        // 自动识别岗位和工具
+        const priority =
+          priorityRaw === 'urgent' || priorityRaw === 'high' || priorityRaw === 'critical' ? 'urgent' : 'normal'
         const tags = autoTagTaskRoleAndTool(titleStr, description)
-        
-        return { 
-          title: titleStr, 
-          description, 
+        return {
+          title: titleStr,
+          description,
           priority,
           assignedRole: tags.assignedRole,
           aiFeature: tags.aiFeature
@@ -2056,11 +2071,26 @@ ${historicalBlock}${rawDataBlock}
       })
     return { tasks }
   } catch (e) {
-    const reason = `Coze 返回的 JSON 解析失败: ${(e as Error)?.message ?? ''}`
+    const errMsg = (e as Error)?.message ?? ''
+    const reason = `Coze 返回的 JSON 解析失败: ${errMsg}`
     console.warn('[待办生成]', reason, '，将走规则兜底')
-    appendGenerateTasksLog(`[待办生成] LLM JSON 解析失败: ${(e as Error)?.message ?? ''}`)
+    appendGenerateTasksLog(`[待办生成] LLM JSON 解析失败: ${errMsg}`)
+    if (jsonStr.length > 0 && errMsg.includes('position')) {
+      const pos = parseInt(String(errMsg.match(/position (\d+)/)?.[1] ?? '0'), 10)
+      const snippet = jsonStr.slice(Math.max(0, pos - 40), pos + 60).replace(/\n/g, ' ')
+      console.warn('[待办生成] 出错位置附近片段:', snippet)
+    }
     return { tasks: [], llmEmptyReason: reason }
   }
+}
+
+/** 从描述中移除【工具】段落，仅保留目标/步骤/预期等正文；工具类信息由快速跳转体现 */
+function stripToolsSectionFromDescription(desc: string): string {
+  if (!desc || !desc.includes('【工具】')) return desc
+  return desc
+    .replace(/\n*【工具】[^\n]*(?:\n(?!【)[^\n]*)*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 /** 判断 LLM 生成的任务列表中是否已覆盖节日类 */

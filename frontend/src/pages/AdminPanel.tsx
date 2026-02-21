@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Users, Settings, Shield, Plus, X, Edit, Key, CheckCircle } from 'lucide-react'
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../services/users'
-import { User } from '../services/users'
+import { User, type UserRole } from '../services/users'
 import { getScriptLLMConfig, saveScriptLLMConfig, DEFAULT_SCRIPT_LLM_URL, DOUBAO_LLM_BASE_URL } from '../services/ai'
 import Sidebar from '../components/Sidebar'
 import { useToast } from '../contexts/ToastContext'
@@ -17,12 +17,18 @@ export default function AdminPanel() {
   const deleteUser = useDeleteUser()
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    name: string
+    email: string
+    password: string
+    role: User['role']
+    status: 'active' | 'inactive'
+  }>({
     name: '',
     email: '',
     password: '',
-    role: 'user' as 'user' | 'admin',
-    status: 'active' as 'active' | 'inactive',
+    role: 'user',
+    status: 'active',
   })
   // LLM 配置（仅管理员可保存；供智能待办、话术生成、异常分析等使用，终端用户在「LLM 调用方式」中选择）
   const [llmUrl, setLlmUrl] = useState(DEFAULT_SCRIPT_LLM_URL)
@@ -41,7 +47,7 @@ export default function AdminPanel() {
     try {
       await createUser.mutateAsync(formData)
       setShowCreateModal(false)
-      setFormData({ name: '', email: '', password: '', role: 'user', status: 'active' })
+      setFormData({ name: '', email: '', password: '', role: 'user' as UserRole, status: 'active' })
     } catch (error) {
       toast.error(t('admin.createUserFailed'))
     }
@@ -71,7 +77,7 @@ export default function AdminPanel() {
         password: formData.password || undefined, // 如果密码为空则不更新
       })
       setEditingUser(null)
-      setFormData({ name: '', email: '', password: '', role: 'user', status: 'active' })
+      setFormData({ name: '', email: '', password: '', role: 'user' as UserRole, status: 'active' })
     } catch (error) {
       toast.error('更新用户失败')
     }
@@ -115,15 +121,20 @@ export default function AdminPanel() {
     }
     setLlmSaving(true)
     try {
-      await saveScriptLLMConfig(url, key, model, llmAllowedUserIds)
+      const toSend = llmAllowedUserIds.length === users.length ? undefined : llmAllowedUserIds
+      await saveScriptLLMConfig(url, key, model, toSend)
       setLlmConfigured(true)
       setLlmApiKey('')
-      toast.success('LLM 配置已保存，选定用户可在「LLM 调用方式」中选择使用')
+      toast.success(
+        toSend === undefined
+          ? t('admin.llmConfigSavedAllUsers', { fallback: 'LLM 配置已保存，对所有用户生效。' })
+          : t('admin.llmConfigSavedSelected', { fallback: 'LLM 配置已保存，仅选定用户可使用。' })
+      )
     } catch (e: any) {
       toast.error(e?.response?.data?.error || '保存失败')
-    } finally {
-      setLlmSaving(false)
-    }
+  } finally {
+    setLlmSaving(false)
+  }
   }
 
   const toggleLlmUser = (userId: string) => {
@@ -169,7 +180,7 @@ export default function AdminPanel() {
         {/* 主要内容 */}
         <main className="flex-1 overflow-y-auto p-6">
           <div className="space-y-6">
-            {/* LLM 配置：供智能待办、话术、异常分析等使用；终端用户在「LLM 调用方式」中选择 */}
+            {/* LLM 配置：可限定仅选定用户可使用（智能待办、话术、异常分析等） */}
             <div className="card">
               <div className="flex items-center gap-2 mb-4">
                 <Key className="w-5 h-5 text-indigo-600" />
@@ -177,6 +188,9 @@ export default function AdminPanel() {
                   <h2 className="text-lg font-semibold text-gray-900">{t('admin.llmConfig')}</h2>
                   <p className="text-sm text-gray-500">
                     {t('admin.llmConfigDesc')}
+                  </p>
+                  <p className="text-sm text-indigo-600 mt-1 font-medium">
+                    {t('admin.llmUsersPermissionHint', { fallback: '下方勾选可使用 LLM 的用户；全选表示对所有用户生效。' })}
                   </p>
                 </div>
               </div>
@@ -304,10 +318,22 @@ export default function AdminPanel() {
                         className={`px-2 py-1 text-xs rounded ${
                           user.role === 'admin'
                             ? 'bg-purple-100 text-purple-700'
+                            : user.role === 'manager'
+                            ? 'bg-indigo-100 text-indigo-700'
+                            : user.role === 'operator'
+                            ? 'bg-green-100 text-green-700'
                             : 'bg-blue-100 text-blue-700'
                         }`}
                       >
-                        {user.role === 'admin' ? t('sidebar.roleAdmin') : t('sidebar.roleUser')}
+                        {user.role === 'admin'
+                            ? t('sidebar.roleAdmin')
+                            : user.role === 'manager'
+                            ? t('sidebar.roleManager')
+                            : user.role === 'operator'
+                            ? t('sidebar.roleOperator')
+                            : user.role === 'viewer'
+                            ? t('sidebar.roleViewer')
+                            : t('sidebar.roleUser')}
                       </span>
                     </td>
                     <td className="py-3 px-4">
@@ -353,7 +379,7 @@ export default function AdminPanel() {
       {/* 创建/编辑用户模态框 */}
       {(showCreateModal || editingUser) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">
               {editingUser ? t('admin.editUser') : t('admin.createUserTitle')}
             </h3>
@@ -398,11 +424,14 @@ export default function AdminPanel() {
                 </label>
                 <select
                   value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value as 'user' | 'admin' })}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value as UserRole })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="user">普通用户</option>
-                  <option value="admin">管理员</option>
+                  <option value="user">{t('sidebar.roleUser')}</option>
+                  <option value="operator">{t('sidebar.roleOperator')}</option>
+                  <option value="manager">{t('sidebar.roleManager')}</option>
+                  <option value="viewer">{t('sidebar.roleViewer')}</option>
+                  <option value="admin">{t('sidebar.roleAdmin')}</option>
                 </select>
               </div>
               <div>
@@ -424,7 +453,7 @@ export default function AdminPanel() {
                 onClick={() => {
                   setShowCreateModal(false)
                   setEditingUser(null)
-                  setFormData({ name: '', email: '', password: '', role: 'user', status: 'active' })
+                  setFormData({ name: '', email: '', password: '', role: 'user' as UserRole, status: 'active' })
                 }}
                 className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
               >

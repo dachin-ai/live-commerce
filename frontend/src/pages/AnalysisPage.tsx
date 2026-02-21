@@ -15,6 +15,7 @@ import {
   DATA_ITEM_IMPORTANCE_ORDER,
   parseSavedDataItems,
 } from '../utils/dashboardDataItems'
+import { getComparisonPeriodLabel } from '../utils/comparisonPeriod'
 import {
   DollarSign,
   Clock,
@@ -75,7 +76,7 @@ export default function AnalysisPage() {
           ? { year: selectedYear }
           : undefined
 
-  const { data: stats, isLoading } = useLiveStats(selectedStore?.id, timePeriod, statsOptions)
+  const { data: stats, isLoading, isError: statsError } = useLiveStats(selectedStore?.id, timePeriod, statsOptions)
   const { data: currentUser } = useCurrentUser()
   const { data: preferencesData } = usePreferences()
   const updatePreferencesMutation = useUpdatePreferences()
@@ -204,6 +205,9 @@ export default function AnalysisPage() {
         title: t('stats.interactions'),
         value: formatNumber(Math.max(0, stats.totalInteractions || 0)),
         subtitle: t('dashboard.commentsLikesShares'),
+        change: (stats.previousPeriod.totalInteractions ?? 0) > 0
+          ? pct(stats.totalInteractions || 0, stats.previousPeriod.totalInteractions ?? 0)
+          : undefined,
         icon: MessageSquare,
       },
       orders: {
@@ -278,41 +282,49 @@ export default function AnalysisPage() {
       likes: {
         title: t('stats.likes'),
         value: formatNumber(Math.max(0, stats.likes ?? 0)),
+        change: (stats.previousPeriod.likes ?? 0) > 0 ? pct(stats.likes ?? 0, stats.previousPeriod.likes ?? 0) : undefined,
         icon: Heart,
       },
       comments: {
         title: t('stats.comments'),
         value: formatNumber(Math.max(0, stats.comments ?? 0)),
+        change: (stats.previousPeriod.comments ?? 0) > 0 ? pct(stats.comments ?? 0, stats.previousPeriod.comments ?? 0) : undefined,
         icon: MessageCircle,
       },
       shares: {
         title: t('stats.shares'),
         value: formatNumber(Math.max(0, stats.shares ?? 0)),
+        change: (stats.previousPeriod.shares ?? 0) > 0 ? pct(stats.shares ?? 0, stats.previousPeriod.shares ?? 0) : undefined,
         icon: Share2,
       },
       follows: {
         title: t('stats.follows'),
         value: formatNumber(Math.max(0, stats.follows ?? 0)),
+        change: (stats.previousPeriod.follows ?? 0) > 0 ? pct(stats.follows ?? 0, stats.previousPeriod.follows ?? 0) : undefined,
         icon: UserPlus,
       },
       productViews: {
         title: t('stats.productViews'),
         value: formatNumber(Math.max(0, stats.productViews ?? 0)),
+        change: (stats.previousPeriod.productViews ?? 0) > 0 ? pct(stats.productViews ?? 0, stats.previousPeriod.productViews ?? 0) : undefined,
         icon: Eye,
       },
       productClicks: {
         title: t('stats.productClicks'),
         value: formatNumber(Math.max(0, stats.productClicks ?? 0)),
+        change: (stats.previousPeriod.productClicks ?? 0) > 0 ? pct(stats.productClicks ?? 0, stats.previousPeriod.productClicks ?? 0) : undefined,
         icon: MousePointer,
       },
       clickThroughRate: {
         title: t('stats.clickThroughRate'),
         value: formatPercentage(Math.max(0, Math.min(100, stats.clickThroughRate ?? 0))),
+        change: (stats.previousPeriod.clickThroughRate ?? 0) > 0 ? pct(stats.clickThroughRate ?? 0, stats.previousPeriod.clickThroughRate ?? 0) : undefined,
         icon: Percent,
       },
       interactionRate: {
         title: t('stats.interactionRate'),
         value: formatPercentage(Math.max(0, Math.min(100, stats.interactionRate ?? 0))),
+        change: (stats.previousPeriod.interactionRate ?? 0) > 0 ? pct(stats.interactionRate ?? 0, stats.previousPeriod.interactionRate ?? 0) : undefined,
         icon: ThumbsUp,
       },
     }
@@ -380,6 +392,13 @@ export default function AnalysisPage() {
         : timePeriod === 'custom' && customDateFrom && customDateTo
           ? `${customDateFrom} ~ ${customDateTo}`
           : timePeriodOptions.find((o) => o.value === timePeriod)?.label ?? t('timePeriod.week')
+
+  const comparisonPeriodLabel = getComparisonPeriodLabel(timePeriod, {
+    customDateFrom,
+    customDateTo,
+    selectedMonth,
+    selectedYear,
+  })
 
   const handleDataItemToggle = (item: DataItemType) => {
     setSelectedDataItems(prev => {
@@ -591,6 +610,10 @@ export default function AnalysisPage() {
               {/* 数据统计卡片 */}
               {isLoading ? (
                 <div className="card text-center py-12 text-gray-500">{t('common.loading')}</div>
+              ) : statsError ? (
+                <div className="card text-center py-12 text-amber-600 bg-amber-50 rounded-xl border border-amber-200">
+                  统计数据加载失败，请检查网络或稍后重试
+                </div>
               ) : stats ? (
                 <>
                   <div className="card">
@@ -600,12 +623,20 @@ export default function AnalysisPage() {
                           <BarChart3 className="w-5 h-5" />
                           {t('analysis.coreMetrics')}
                         </h2>
-                        <span
-                          className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
-                          title={t('dashboard.periodTotal')}
-                        >
-                          {t('dashboard.dataPeriodLabel')}: {dataPeriodLabel}
-                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                            title={t('dashboard.periodTotal')}
+                          >
+                            {t('dashboard.dataPeriodLabel')}: {dataPeriodLabel}
+                          </span>
+                          <span
+                            className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200"
+                            title={t('dashboard.comparisonPeriodHint', { fallback: '环比为当前周期与上一等长周期对比' })}
+                          >
+                            {t('dashboard.comparisonPeriodLabel', { fallback: '环比' })}：{t('dashboard.vsPreviousPeriod', { fallback: '较' })}{comparisonPeriodLabel}
+                          </span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 text-xs">
                         <label className="text-gray-600 font-medium">{t('dashboard.displayAs')}: </label>

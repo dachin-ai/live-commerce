@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useQueryClient } from '@tanstack/react-query'
-import { useLiveStats } from '../services/stats'
+import { useLiveStats, type LiveStats } from '../services/stats'
 import { useCurrentUser } from '../services/auth'
 import { useStore } from '../contexts/StoreContext'
 import StatCard from '../components/StatCard'
@@ -51,6 +51,7 @@ import {
   DATA_ITEM_IMPORTANCE_ORDER,
   parseSavedDataItems,
 } from '../utils/dashboardDataItems'
+import { getComparisonPeriodLabel } from '../utils/comparisonPeriod'
 
 // 时间周期类型（含可选具体月份/年份）
 type TimePeriod = 'today' | 'week' | 'month' | 'quarter' | 'year' | 'monthPick' | 'yearPick' | 'custom'
@@ -187,6 +188,7 @@ export default function Dashboard() {
   // 根据选中的数据项目过滤统计卡片
   const filteredStats = useMemo(() => {
     if (!stats) return []
+    const s = stats as LiveStats
     const toDisplay = (v: number) =>
       displayCurrency === 'store' ? v : convertAmount(v, storeCurrencyCode, displayCurrency)
     const formatCurrency = (value: number) =>
@@ -200,37 +202,41 @@ export default function Dashboard() {
       const safeValue = isNaN(value) || !isFinite(value) ? 0 : Math.max(-1000, Math.min(1000, value))
       return `${safeValue.toFixed(2)}%`
     }
-    const rounds = Math.max(0, Math.min(1000000, stats.rounds || 0))
-    const ordersCount = Math.max(0, Math.min(10000000, stats.completedOrders || stats.totalOrders || 0))
+    const rounds = Math.max(0, Math.min(1000000, s.rounds || 0))
+    const ordersCount = Math.max(0, Math.min(10000000, s.completedOrders || s.totalOrders || 0))
 
     const statsMap: Record<DataItemType, any> = {
       gmv: {
         title: t('stats.gmv'),
-        value: formatCurrency(Math.max(0, stats.totalGMV || 0)),
+        value: formatCurrency(Math.max(0, s.totalGMV || 0)),
         subtitle: t('dashboard.sessionsCount', { count: rounds }),
-        change: pct(stats.totalGMV || 0, stats.previousPeriod.totalGMV),
-        changeYoY: yoy && pct(stats.totalGMV || 0, yoy.totalGMV),
+        change: pct(s.totalGMV || 0, s.previousPeriod.totalGMV),
+        changeYoY: yoy && pct(s.totalGMV || 0, yoy.totalGMV),
         icon: DollarSign,
       },
       duration: {
         title: t('stats.duration'),
-        value: formatDuration(Math.max(0, stats.totalDuration || 0)),
+        value: formatDuration(Math.max(0, s.totalDuration || 0)),
         subtitle: t('dashboard.sessionsCount', { count: rounds }),
-        change: pct(stats.totalDuration || 0, stats.previousPeriod.totalDuration),
-        changeYoY: yoy && pct(stats.totalDuration || 0, yoy.totalDuration),
+        change: pct(s.totalDuration || 0, s.previousPeriod.totalDuration),
+        changeYoY: yoy && pct(s.totalDuration || 0, yoy.totalDuration),
         icon: Clock,
       },
       viewers: {
         title: t('stats.viewers'),
-        value: formatNumber(Math.max(0, stats.totalViewers || 0)),
-        change: (stats.previousPeriod.totalViewers ?? 0) > 0 ? pct(stats.totalViewers || 0, stats.previousPeriod.totalViewers ?? 0) : undefined,
-        changeYoY: yoy && (yoy.totalViewers ?? 0) > 0 ? pct(stats.totalViewers || 0, yoy.totalViewers ?? 0) : undefined,
+        value: formatNumber(Math.max(0, s.totalViewers || 0)),
+        change: (s.previousPeriod.totalViewers ?? 0) > 0 ? pct(s.totalViewers || 0, s.previousPeriod.totalViewers ?? 0) : undefined,
+        changeYoY: yoy && (yoy.totalViewers ?? 0) > 0 ? pct(s.totalViewers || 0, yoy.totalViewers ?? 0) : undefined,
         icon: Users,
       },
       interactions: {
         title: t('stats.interactions'),
-        value: formatNumber(Math.max(0, stats.totalInteractions || 0)),
+        value: formatNumber(Math.max(0, s.totalInteractions || 0)),
         subtitle: t('dashboard.commentsLikesShares'),
+        change: (s.previousPeriod.totalInteractions ?? 0) > 0
+          ? pct(s.totalInteractions || 0, s.previousPeriod.totalInteractions ?? 0)
+          : undefined,
+        changeYoY: yoy && (yoy.totalInteractions ?? 0) > 0 ? pct(s.totalInteractions || 0, yoy.totalInteractions ?? 0) : undefined,
         icon: MessageSquare,
       },
       orders: {
@@ -318,41 +324,49 @@ export default function Dashboard() {
       likes: {
         title: t('stats.likes'),
         value: formatNumber(Math.max(0, stats.likes ?? 0)),
+        change: (stats.previousPeriod.likes ?? 0) > 0 ? pct(stats.likes ?? 0, stats.previousPeriod.likes ?? 0) : undefined,
         icon: Heart,
       },
       comments: {
         title: t('stats.comments'),
         value: formatNumber(Math.max(0, stats.comments ?? 0)),
+        change: (stats.previousPeriod.comments ?? 0) > 0 ? pct(stats.comments ?? 0, stats.previousPeriod.comments ?? 0) : undefined,
         icon: MessageCircle,
       },
       shares: {
         title: t('stats.shares'),
         value: formatNumber(Math.max(0, stats.shares ?? 0)),
+        change: (stats.previousPeriod.shares ?? 0) > 0 ? pct(stats.shares ?? 0, stats.previousPeriod.shares ?? 0) : undefined,
         icon: Share2,
       },
       follows: {
         title: t('stats.follows'),
         value: formatNumber(Math.max(0, stats.follows ?? 0)),
+        change: (stats.previousPeriod.follows ?? 0) > 0 ? pct(stats.follows ?? 0, stats.previousPeriod.follows ?? 0) : undefined,
         icon: UserPlus,
       },
       productViews: {
         title: t('stats.productViews'),
         value: formatNumber(Math.max(0, stats.productViews ?? 0)),
+        change: (stats.previousPeriod.productViews ?? 0) > 0 ? pct(stats.productViews ?? 0, stats.previousPeriod.productViews ?? 0) : undefined,
         icon: Eye,
       },
       productClicks: {
         title: t('stats.productClicks'),
         value: formatNumber(Math.max(0, stats.productClicks ?? 0)),
+        change: (stats.previousPeriod.productClicks ?? 0) > 0 ? pct(stats.productClicks ?? 0, stats.previousPeriod.productClicks ?? 0) : undefined,
         icon: MousePointer,
       },
       clickThroughRate: {
         title: t('stats.clickThroughRate'),
         value: formatPercentage(Math.max(0, Math.min(100, stats.clickThroughRate ?? 0))),
+        change: (stats.previousPeriod.clickThroughRate ?? 0) > 0 ? pct(stats.clickThroughRate ?? 0, stats.previousPeriod.clickThroughRate ?? 0) : undefined,
         icon: Percent,
       },
       interactionRate: {
         title: t('stats.interactionRate'),
         value: formatPercentage(Math.max(0, Math.min(100, stats.interactionRate ?? 0))),
+        change: (stats.previousPeriod.interactionRate ?? 0) > 0 ? pct(stats.interactionRate ?? 0, stats.previousPeriod.interactionRate ?? 0) : undefined,
         icon: ThumbsUp,
       },
     }
@@ -410,6 +424,14 @@ export default function Dashboard() {
         : timePeriod === 'custom' && customDateFrom && customDateTo
           ? `${customDateFrom} ~ ${customDateTo}`
           : timePeriodOptions.find((o) => o.value === timePeriod)?.label ?? t('timePeriod.week')
+
+  // 环比/同比对比周期说明（与后端 previousPeriod 对应）
+  const comparisonPeriodLabel = getComparisonPeriodLabel(timePeriod, {
+    customDateFrom,
+    customDateTo,
+    selectedMonth,
+    selectedYear,
+  })
 
   const handleDataItemToggle = (item: DataItemType) => {
     setSelectedDataItems(prev => {
@@ -658,12 +680,20 @@ export default function Dashboard() {
                           )}
                           <div>
                             <h2 className="text-lg font-bold text-gray-900">{t('dashboard.liveDataStats')}</h2>
-                            <span
-                              className="inline-flex items-center mt-1.5 px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
-                              title={t('dashboard.periodTotal')}
-                            >
-                              {t('dashboard.dataPeriodLabel')}: {dataPeriodLabel}
-                            </span>
+                            <div className="flex flex-wrap items-center gap-2 mt-1.5">
+                              <span
+                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                                title={t('dashboard.periodTotal')}
+                              >
+                                {t('dashboard.dataPeriodLabel')}: {dataPeriodLabel}
+                              </span>
+                              <span
+                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200"
+                                title={t('dashboard.comparisonPeriodHint', { fallback: '环比为当前周期与上一等长周期对比' })}
+                              >
+                                {t('dashboard.comparisonPeriodLabel', { fallback: '环比' })}：{t('dashboard.vsPreviousPeriod', { fallback: '较' })}{comparisonPeriodLabel}
+                              </span>
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">

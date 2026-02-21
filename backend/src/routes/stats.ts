@@ -374,6 +374,15 @@ router.get('/live', async (req, res) => {
             roundsPerDay: 0,
             avgWatchDurationMinutes: 0,
             gpm: 0,
+            totalInteractions: 0,
+            likes: 0,
+            comments: 0,
+            shares: 0,
+            follows: 0,
+            productViews: 0,
+            productClicks: 0,
+            clickThroughRate: 0,
+            interactionRate: 0,
           }
         }
         const g = Number(row.totalGMV) || 0
@@ -396,6 +405,15 @@ router.get('/live', async (req, res) => {
           roundsPerDay: Number(row.roundsPerDay) || 0,
           avgWatchDurationMinutes: v > 0 ? (dur * 60) / v : 0,
           gpm: v > 0 ? (g / v) * 1000 : 0,
+          totalInteractions: Number(row.totalInteractions) || 0,
+          likes: Number(row.likes) || 0,
+          comments: Number(row.comments) || 0,
+          shares: Number(row.shares) || 0,
+          follows: Number(row.follows) || 0,
+          productViews: Number(row.productViews) || 0,
+          productClicks: Number(row.productClicks) || 0,
+          clickThroughRate: Number(row.clickThroughRate) || 0,
+          interactionRate: Number(row.interactionRate) || 0,
         }
       }
       const previousPeriod = buildPeriod(prevAgg)

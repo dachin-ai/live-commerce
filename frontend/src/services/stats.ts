@@ -36,6 +36,15 @@ export interface LiveStats {
     roundsPerDay: number
     avgWatchDurationMinutes?: number
     gpm?: number
+    totalInteractions?: number
+    likes?: number
+    comments?: number
+    shares?: number
+    follows?: number
+    productViews?: number
+    productClicks?: number
+    clickThroughRate?: number
+    interactionRate?: number
   }
   /** 去年同期（同比基准） */
   yearOverYearPeriod?: {
@@ -54,6 +63,7 @@ export interface LiveStats {
     roundsPerDay: number
     avgWatchDurationMinutes?: number
     gpm?: number
+    totalInteractions?: number
   }
   /** 按日期的销售趋势，用于图表 */
   trend?: { date: string; value: number }[]

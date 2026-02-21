@@ -100,122 +100,30 @@ export default function ForgotPassword() {
     )
   }
 
-  if (step === 'code') {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-          <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
-              <Mail className="w-8 h-8 text-green-600" />
-            </div>
-            <h1 className="text-xl font-bold text-gray-900 mb-2">输入验证码</h1>
-            <p className="text-gray-600 text-sm">
-              验证码已发送至 <strong>{email}</strong>，请查收并填写下方验证码。开发环境下也可使用下方显示的验证码。
-            </p>
-          </div>
-
-          {sentCode && (
-            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
-              开发环境验证码：<strong className="text-lg">{sentCode}</strong>
-            </div>
-          )}
-
-          <form onSubmit={handleResetWithCode} className="space-y-4">
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">验证码</label>
-              <input
-                type="text"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="6 位数字"
-                maxLength={6}
-                autoComplete="one-time-code"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">新密码</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="至少 6 位"
-                  minLength={6}
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">确认新密码</label>
-              <input
-                type="password"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="再次输入"
-              />
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
-            >
-              {loading ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  提交中...
-                </>
-              ) : (
-                '确认重置密码'
-              )}
-            </button>
-          </form>
-
-          <p className="mt-4 text-center text-sm text-gray-600">
-            <button
-              type="button"
-              onClick={() => setStep('email')}
-              className="text-blue-600 hover:underline"
-            >
-              更换邮箱
-            </button>
-            {' · '}
-            <Link to="/login" className="text-blue-600 hover:underline">
-              返回登录
-            </Link>
-          </p>
-        </div>
-      </div>
-    )
-  }
+  const codeSent = step === 'code'
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4 overflow-y-auto">
+      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 my-4">
+        <div className="text-center mb-6">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-amber-100 rounded-full mb-4">
             <Mail className="w-8 h-8 text-amber-600" />
           </div>
           <h1 className="text-2xl font-bold text-gray-900 mb-2">找回密码</h1>
-          <p className="text-gray-600">输入注册邮箱，我们将发送验证码</p>
+          <p className="text-gray-600 text-sm">
+            {codeSent
+              ? `验证码已发送至 ${email}，请在下表填写验证码并设置新密码。`
+              : '输入注册邮箱，我们将发送验证码至该邮箱。若未收到请检查垃圾箱或联系管理员。'}
+          </p>
         </div>
 
-        <form onSubmit={handleSendCode} className="space-y-6">
-          {error && (
+        {/* 邮箱 + 发送验证码（始终显示，发送成功后邮箱只读可改） */}
+        <form onSubmit={handleSendCode} className="space-y-4">
+          {error && !codeSent && (
             <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
               {error}
             </div>
           )}
-
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">邮箱</label>
             <div className="relative">
@@ -224,35 +132,124 @@ export default function ForgotPassword() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                readOnly={codeSent}
+                className={`w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 ${codeSent ? 'border-gray-200 bg-gray-50' : 'border-gray-300'}`}
                 placeholder="注册时使用的邮箱"
                 required
               />
             </div>
           </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
-          >
-            {loading ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                发送中...
-              </>
-            ) : (
-              '发送验证码'
-            )}
-          </button>
+          {!codeSent && (
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+            >
+              {loading ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  发送中...
+                </>
+              ) : (
+                '发送验证码'
+              )}
+            </button>
+          )}
         </form>
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          <Link to="/login" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
-            <ArrowLeft className="w-4 h-4" />
-            返回登录
-          </Link>
-        </p>
+        {/* 发送成功后：同页展开验证码 + 新密码 */}
+        {codeSent && (
+          <>
+            {sentCode && (
+              <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                开发环境验证码：<strong className="text-lg">{sentCode}</strong>
+              </div>
+            )}
+            <form onSubmit={handleResetWithCode} className="mt-4 space-y-4">
+              {error && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+              {/* 验证码输入区：单独高亮，避免用户找不到 */}
+              <div className="p-4 rounded-xl bg-blue-50 border-2 border-blue-200">
+                <p className="text-sm font-medium text-blue-900 mb-2">请在此输入邮件中的 6 位验证码</p>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  className="w-full px-4 py-3 text-lg font-mono tracking-[0.3em] border-2 border-blue-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="000000"
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  autoFocus
+                  aria-label="邮箱验证码"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">新密码</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full pl-10 pr-4 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    placeholder="至少 6 位"
+                    minLength={6}
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">确认新密码</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full px-3 py-2.5 border-2 border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  placeholder="再次输入"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    提交中...
+                  </>
+                ) : (
+                  '确认重置密码'
+                )}
+              </button>
+            </form>
+            <p className="mt-4 text-center text-sm text-gray-600">
+              <button
+                type="button"
+                onClick={() => setStep('email')}
+                className="text-blue-600 hover:underline"
+              >
+                更换邮箱
+              </button>
+              {' · '}
+              <Link to="/login" className="text-blue-600 hover:underline">
+                返回登录
+              </Link>
+            </p>
+          </>
+        )}
+
+        {!codeSent && (
+          <p className="mt-6 text-center text-sm text-gray-600">
+            <Link to="/login" className="inline-flex items-center gap-1 text-blue-600 hover:underline">
+              <ArrowLeft className="w-4 h-4" />
+              返回登录
+            </Link>
+          </p>
+        )}
       </div>
     </div>
   )

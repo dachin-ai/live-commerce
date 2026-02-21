@@ -135,7 +135,7 @@ function resolveVisualAction(
   return base
 }
 
-const VISUAL_SEGMENT_RULES: Record<ScriptType | 'default', VisualSegmentRule[]> = {
+const VISUAL_SEGMENT_RULES: Partial<Record<ScriptType, VisualSegmentRule[]>> & { default: VisualSegmentRule[] } = {
   'full-sales': [
     { id: 'intro', label: '标题与说明', color: '#6b7280', startMarker: '【完整销售流程话术', visualAction: '口播开头时，画面可展示本场主题或店铺名。' },
     { id: 'step1', label: '圈人群+塑品', color: '#2563eb', startMarker: '第一步：圈人群 + 塑品', visualAction: '口播到这一段时，把手卡写上「谁需要」或痛点关键词（可写「{targetAudience}」），举给镜头看或切场景。' },
@@ -147,23 +147,23 @@ const VISUAL_SEGMENT_RULES: Record<ScriptType | 'default', VisualSegmentRule[]> 
     { id: 'tips', label: '使用建议', color: '#64748b', startMarker: '💡 使用建议' },
     { id: 'compliance', label: '合规提示', color: '#b45309', startMarker: '---\n⚠️' },
   ],
-  promotion: [
-    { id: 'section', label: '促销话术', color: '#ea580c', startMarker: '【促销活动话术', visualAction: '口播时把价格和「{promoCopy}」打在字幕或手卡上。' },
-    { id: 'part', label: '部分/段落', color: '#059669', startMarker: '━━ 第', allowFeatureDemos: true, visualAction: '可把手卡写上该段关键词（卖点「{features}」或活动「{promoCopy}」）念到哪段举哪张。' },
-    { id: 'compliance', label: '合规提示', color: '#b45309', startMarker: '---\n⚠️' },
+  'segment-audience': [
+    { id: 'section', label: '圈人群', color: '#2563eb', startMarker: '【圈人群部分话术', visualAction: '口播时聚焦目标人群痛点，可上「{targetAudience}」关键词字幕。' },
   ],
-  closing: [
-    { id: 'section', label: '逼单话术', color: '#dc2626', startMarker: '【逼单技巧话术', visualAction: '口播时突出「{promoCopy}」和限时感，可上倒计时或「手慢无」字幕。' },
-    { id: 'part', label: '部分/段落', color: '#7c3aed', startMarker: '━━ 第', allowFeatureDemos: true, visualAction: '有「{promoCopy}」务必在画面或手卡上展示。' },
-    { id: 'compliance', label: '合规提示', color: '#b45309', startMarker: '---\n⚠️' },
+  'segment-product': [
+    { id: 'section', label: '塑品', color: '#059669', startMarker: '【塑品部分话术', allowFeatureDemos: true, visualAction: '口播时突出卖点「{features}」，可配合{productName}近景展示。' },
   ],
-  scenario: [
-    { id: 'section', label: '场景化塑品', color: '#059669', startMarker: '【场景化塑品话术', allowFeatureDemos: true, visualAction: '口播时配合{productName}使用场景或效果图；卖点「{features}」可做成手卡或字幕。' },
-    { id: 'compliance', label: '合规提示', color: '#b45309', startMarker: '---\n⚠️' },
+  'segment-concerns': [
+    { id: 'section', label: '打消顾虑', color: '#0891b2', startMarker: '【打消顾虑部分话术', visualAction: '口播时可上「常见问题」字幕，逐项回答顾虑。' },
   ],
-  interaction: [
-    { id: 'section', label: '人群互动', color: '#2563eb', startMarker: '【人群互动话术', visualAction: '口播时画面可展示{productName}或互动引导语（如「扣1」「点赞」）。' },
-    { id: 'compliance', label: '合规提示', color: '#b45309', startMarker: '---\n⚠️' },
+  'segment-benefits': [
+    { id: 'section', label: '利益点', color: '#ea580c', startMarker: '【利益点部分话术', visualAction: '口播时把价格与活动「{promoCopy}」同步展示在手卡或字幕。' },
+  ],
+  'segment-after-sales': [
+    { id: 'section', label: '售后', color: '#7c3aed', startMarker: '【售后部分话术', visualAction: '口播时突出退换、发货、客服支持等保障信息。' },
+  ],
+  'segment-closing': [
+    { id: 'section', label: '逼单', color: '#dc2626', startMarker: '【逼单部分话术', visualAction: '口播时强化倒计时与限量感，并再次强调福利。' },
   ],
   default: [
     { id: 'header', label: '标题/说明', color: '#6b7280', startMarker: '【', visualAction: '口播开头时展示标题或「{productName}」核心信息。' },

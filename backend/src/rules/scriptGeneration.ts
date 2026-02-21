@@ -4,51 +4,18 @@
  */
 
 // 话术类型定义
-export type ScriptType = 'interaction' | 'scenario' | 'promotion' | 'closing' | 'full-sales'
+export type ScriptType =
+  | 'full-sales'
+  | 'segment-audience'
+  | 'segment-product'
+  | 'segment-concerns'
+  | 'segment-benefits'
+  | 'segment-after-sales'
+  | 'segment-closing'
 export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH'
 
 // 话术类型元数据
 export const SCRIPT_TYPE_META = {
-  interaction: {
-    id: 'interaction',
-    nameCN: '人群互动话术',
-    nameEN: 'Interaction Script',
-    nameTH: 'การมีปฏิสัมพันธ์กับผู้ชม',
-    goal: '提升直播间互动率',
-    scenario: '暖场、活跃气氛、回答评论',
-    duration: '20-40秒',
-    elements: ['吸引提问', '请求互动', '建立联系', '行动召唤'],
-  },
-  scenario: {
-    id: 'scenario',
-    nameCN: '场景化塑品话术',
-    nameEN: 'Scenario Script',
-    nameTH: 'การสร้างสถานการณ์',
-    goal: '建立产品使用场景',
-    scenario: '产品介绍、展示价值',
-    duration: '30-60秒',
-    elements: ['场景代入', '痛点描述', '产品即解决方案', '效果展示', '行动召唤'],
-  },
-  promotion: {
-    id: 'promotion',
-    nameCN: '促销活动话术',
-    nameEN: 'Promotion Script',
-    nameTH: 'โปรโมชันและเปรียบเทียบราคา',
-    goal: '促进转化、提升客单价',
-    scenario: '折扣、比价、套餐推荐',
-    duration: '20-40秒',
-    elements: ['成本与售价', '价格对比', '超值感', '紧迫感', '省钱强调', '行动召唤'],
-  },
-  closing: {
-    id: 'closing',
-    nameCN: '逼单技巧话术',
-    nameEN: 'Closing Script',
-    nameTH: 'เทคนิคการปิดการขาย',
-    goal: '促成下单、制造紧迫感',
-    scenario: '限时限量、促单成交',
-    duration: '15-30秒',
-    elements: ['紧迫感', '最终价值', '异议处理', '强烈CTA', 'FOMO', '简单选择'],
-  },
   'full-sales': {
     id: 'full-sales',
     nameCN: '完整销售流程话术',
@@ -58,6 +25,66 @@ export const SCRIPT_TYPE_META = {
     scenario: '单品深度推销、高价值商品',
     duration: '5-10分钟',
     elements: ['圈人群/塑品', '卖点提炼', '打消顾虑', '利益点', '售后保障', '逼单'],
+  },
+  'segment-audience': {
+    id: 'segment-audience',
+    nameCN: '圈人群部分',
+    nameEN: 'Audience Segment',
+    nameTH: 'ส่วนระบุกลุ่มผู้ชม',
+    goal: '快速圈定目标人群并建立代入',
+    scenario: '完整流程第1环节单独生成',
+    duration: '60-90秒',
+    elements: ['目标人群识别', '痛点共鸣', '场景代入', '承接到产品'],
+  },
+  'segment-product': {
+    id: 'segment-product',
+    nameCN: '塑品部分',
+    nameEN: 'Product Positioning Segment',
+    nameTH: 'ส่วนปั้นคุณค่าสินค้า',
+    goal: '清晰塑造产品价值与卖点',
+    scenario: '完整流程第2环节单独生成',
+    duration: '90-120秒',
+    elements: ['核心卖点', '使用场景', '差异化价值', '过渡到答疑'],
+  },
+  'segment-concerns': {
+    id: 'segment-concerns',
+    nameCN: '打消顾虑部分',
+    nameEN: 'Concern Handling Segment',
+    nameTH: 'ส่วนคลายความกังวล',
+    goal: '解决观众疑虑，降低决策阻力',
+    scenario: '完整流程第3环节单独生成',
+    duration: '60-90秒',
+    elements: ['高频疑问', '风险消除', '信任背书', '承接到利益点'],
+  },
+  'segment-benefits': {
+    id: 'segment-benefits',
+    nameCN: '利益点部分',
+    nameEN: 'Benefits Segment',
+    nameTH: 'ส่วนผลประโยชน์และข้อเสนอ',
+    goal: '强化价格与福利价值，拉升下单意愿',
+    scenario: '完整流程第4环节单独生成',
+    duration: '90-120秒',
+    elements: ['价格价值', '促销福利', '对比感知', '承接到售后'],
+  },
+  'segment-after-sales': {
+    id: 'segment-after-sales',
+    nameCN: '售后部分',
+    nameEN: 'After-sales Segment',
+    nameTH: 'ส่วนบริการหลังการขาย',
+    goal: '明确售后保障，增强购买安全感',
+    scenario: '完整流程第5环节单独生成',
+    duration: '60-90秒',
+    elements: ['退换政策', '发货时效', '客服支持', '承接到逼单'],
+  },
+  'segment-closing': {
+    id: 'segment-closing',
+    nameCN: '逼单部分',
+    nameEN: 'Closing Segment',
+    nameTH: 'ส่วนปิดการขาย',
+    goal: '制造紧迫感并完成成交转化',
+    scenario: '完整流程第6环节单独生成',
+    duration: '60-90秒',
+    elements: ['限时限量', '最终价值', '强行动召唤', '倒计时催单'],
   },
 } as const
 
@@ -135,16 +162,18 @@ export const SCRIPT_GENERATION_RULES = {
   // 话术类型推荐（基于类目，未来可扩展）
   recommendScriptTypes: (category?: string): ScriptType[] => {
     const categoryMap: Record<string, ScriptType[]> = {
-      食品: ['scenario', 'promotion', 'closing'],
-      饮料: ['scenario', 'interaction', 'promotion'],
-      美妆: ['scenario', 'promotion', 'interaction'],
-      服装: ['scenario', 'promotion', 'closing'],
-      电子产品: ['scenario', 'promotion'],
-      家居: ['scenario', 'promotion'],
-      礼品: ['scenario', 'promotion'],
-      节日用品: ['scenario', 'promotion', 'interaction'],
+      食品: ['segment-product', 'segment-benefits', 'segment-closing'],
+      饮料: ['segment-product', 'segment-audience', 'segment-benefits'],
+      美妆: ['segment-product', 'segment-benefits', 'segment-audience'],
+      服装: ['segment-product', 'segment-benefits', 'segment-closing'],
+      电子产品: ['segment-product', 'segment-benefits'],
+      家居: ['segment-product', 'segment-benefits'],
+      礼品: ['segment-product', 'segment-benefits'],
+      节日用品: ['segment-product', 'segment-benefits', 'segment-audience'],
     }
-    return category && categoryMap[category] ? categoryMap[category] : ['interaction', 'scenario', 'promotion', 'closing']
+    return category && categoryMap[category]
+      ? categoryMap[category]
+      : ['full-sales', 'segment-audience', 'segment-product', 'segment-benefits', 'segment-closing']
   },
 
   // 黄金30秒建议（用于前端提示）

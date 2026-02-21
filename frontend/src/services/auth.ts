@@ -5,7 +5,7 @@ export interface User {
   id: string
   name: string
   email: string
-  role: 'user' | 'admin' | 'operator' | 'manager'
+  role: 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
   status: string
   createdAt: string
   lastLoginAt?: string
@@ -26,6 +26,10 @@ export interface RegisterData {
 export interface AuthResponse {
   token: string
   user: User
+  /** 账号首次登录（仅首次会为 true，用于展示欢迎语） */
+  firstLoginEver?: boolean
+  /** 当前 IP 首次登录（仅新 IP 首次会为 true，用于展示教程） */
+  newIpFirstLogin?: boolean
 }
 
 // 登录
@@ -106,12 +110,12 @@ export const isAuthenticated = (): boolean => {
   return !!localStorage.getItem('token')
 }
 
-// 获取当前用户角色（与后端 users.role 一致，含 operator/manager）
-export const getCurrentUserRole = (): 'user' | 'admin' | 'operator' | 'manager' | null => {
+// 获取当前用户角色（与后端 users.role 一致，含 operator/manager/viewer）
+export const getCurrentUserRole = (): 'user' | 'admin' | 'operator' | 'manager' | 'viewer' | null => {
   const r = localStorage.getItem('userRole')
   if (!r) return null
-  if (['user', 'admin', 'operator', 'manager'].includes(r)) return r as 'user' | 'admin' | 'operator' | 'manager'
-  return r as 'user' | 'admin' | 'operator' | 'manager'
+  if (['user', 'admin', 'operator', 'manager', 'viewer'].includes(r)) return r as 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
+  return r as 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
 }
 
 // 获取当前用户ID

@@ -14,7 +14,7 @@
   }
   
   .stat-card {
-    @apply card hover:shadow-md transition-shadow;
+    @apply card hover:shadow-md transition-shadow min-h-[7.25rem];
   }
   .stat-card--compact {
     @apply p-3;

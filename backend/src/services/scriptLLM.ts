@@ -122,19 +122,19 @@ function ensureCozeStreamRunUrl(url: string): string {
 
 /** 话术生成时请求 Coze 的最大输出 token；部分 Coze 发布站点可能忽略此参数 */
 const COZE_SCRIPT_MAX_TOKENS = Math.min(16000, Math.max(2048, Number(process.env.COZE_SCRIPT_MAX_TOKENS) || 8192))
-/** Coze 发布站点（*.coze.site）常用旧版 body：content.query.prompt + project_id；设为 1 或 true 时使用旧格式，否则用 Agent 格式 content+session_id */
+/** 强制旧版 body（content.query.prompt + project_id），仅用于兼容历史站点；默认关闭 */
 const COZE_LEGACY_BODY = process.env.COZE_LEGACY_BODY === '1' || process.env.COZE_LEGACY_BODY === 'true'
-/** 电商数据分析专家 Agent 等统一 Agent 接口：始终使用 { content, session_id }，与《电商数据分析专家Agent-API使用指南》一致 */
+/** 强制 Agent body：{ content, session_id }，用于兼容仍按 Agent 协议收参的服务 */
 const AGENT_API_BODY = process.env.AGENT_API_BODY === '1' || process.env.AGENT_API_BODY === 'true'
 const COZE_DEFAULT_PROJECT_ID = 7596987147106893834
 
 function buildCozeStreamRunBody(message: string, options?: { maxTokens?: number }, requestUrl?: string): Record<string, unknown> {
-  // 电商数据分析专家 Agent 对接协议（Coze 对接协议 v1.0）：入参为 content.query.prompt[0].content.text，即 legacy 体
-  // *.coze.site 默认用 legacy，仅显式 AGENT_API_BODY=1 时用 { content, session_id }（部分自建 Agent 需此格式）
+  // 发布站点 (*.coze.site) 官方示例为 legacy 体；自建/其他可用 raw_prompt。环境变量可强制指定。
   if (AGENT_API_BODY) {
     return { content: message, session_id: crypto.randomUUID() }
   }
-  const useLegacy = COZE_LEGACY_BODY || (requestUrl && requestUrl.includes('coze.site'))
+  const useLegacy =
+    COZE_LEGACY_BODY || (requestUrl != null && String(requestUrl).includes('coze.site'))
   if (useLegacy) {
     const projectId = process.env.COZE_PROJECT_ID
     const projectIdNum = projectId ? Number(projectId) : COZE_DEFAULT_PROJECT_ID
@@ -151,7 +151,13 @@ function buildCozeStreamRunBody(message: string, options?: { maxTokens?: number 
       project_id: projectIdNum || COZE_DEFAULT_PROJECT_ID,
     }
   }
-  return { content: message, session_id: crypto.randomUUID() }
+  const body: Record<string, unknown> = {
+    query: message,
+    data: { type: 'raw_prompt' },
+  }
+  void options
+  void requestUrl
+  return body
 }
 
 /** 根据 base URL 拼出 chat/completions 地址（兼容 OpenAI /v1 与火山方舟 /v3） */
@@ -162,16 +168,20 @@ function buildChatCompletionsUrl(base: string): string {
   return b + (b.includes('/v1') ? '' : '/v1') + '/chat/completions'
 }
 
-/** 判断是否为工具调用类事件（不当作正文输出）；与 Coze SSE 说明一致：tool_request / tool_response 不产出正文 */
-function isCozeToolCallEvent(data: Record<string, unknown>): boolean {
+/** 从 Coze SSE 行 payload 中提取文本内容（仅 answer/delta 等流式正文；待办模式下也解析 tool_response 中的正文）。 */
+function extractCozeContent(data: Record<string, unknown>, taskType: 'script' | 'todo' = 'script'): string | undefined {
   const type = data.type ?? (data.message && typeof data.message === 'object' ? (data.message as Record<string, unknown>).type : undefined)
-  return type === 'function_call' || type === 'tool_call' || type === 'tool_request' || type === 'tool_response'
-}
-
-/** 从 Coze SSE 行 payload 中提取文本内容（兼容多种返回格式）；工具调用事件不返回内容。 */
-function extractCozeContent(data: Record<string, unknown>): string | undefined {
-  // 处理工具调用和响应：只取 answer 正文，不把 function_call/tool_call 当话术输出
-  if (isCozeToolCallEvent(data)) return undefined
+  // 待办：部分 Coze 待办 Bot 将 JSON 放在 tool_response 中，需提取
+  if (taskType === 'todo' && (type === 'tool_response' || type === 'tool_request')) {
+    const contentObj = data.content as Record<string, unknown> | undefined
+    if (contentObj && typeof contentObj === 'object') {
+      const c = (contentObj.content ?? contentObj.output ?? contentObj.result ?? contentObj.text ?? contentObj.answer) as string | undefined
+      if (typeof c === 'string' && c.trim()) return c
+    }
+    const c = (data.content ?? data.output ?? data.result ?? data.text) as string | undefined
+    if (typeof c === 'string' && c.trim()) return c
+  }
+  if (type === 'function_call' || type === 'tool_call' || type === 'tool_request' || type === 'tool_response') return undefined
   const msg = data.message as Record<string, unknown> | undefined
   const msgType = msg && typeof msg === 'object' ? msg.type : undefined
   if (msgType === 'function_call' || msgType === 'tool_call') return undefined
@@ -244,42 +254,6 @@ function extractCozeContent(data: Record<string, unknown>): string | undefined {
   return extractAnyContent(data)
 }
 
-/** @deprecated tool 路径已废弃，本系统不再从 tool_response 产出正文。保留函数仅作兼容/诊断参考。 */
-function extractScriptFromToolResponse(data: Record<string, unknown>): string | undefined {
-  if (data.type !== 'tool_response') return undefined
-  const tr = (data.content && typeof data.content === 'object' ? (data.content as Record<string, unknown>).tool_response : undefined) ?? data.tool_response
-  if (tr === undefined) return undefined
-  // content.tool_response 可能为字符串（直接工具输出）
-  if (typeof tr === 'string' && tr.trim()) return tr.trim()
-  if (typeof tr !== 'object' || tr === null) return undefined
-  const raw = tr as Record<string, unknown>
-  // 兼容多种字段：Coze 常见 result，部分 Agent 用 content / output / body
-  const resultStr =
-    (typeof raw.result === 'string' && raw.result)
-    || (typeof raw.content === 'string' && raw.content)
-    || (typeof raw.output === 'string' && raw.output)
-    || (typeof raw.body === 'string' && raw.body)
-    || (typeof raw.data === 'string' && raw.data)
-    || undefined
-  if (!resultStr) return undefined
-  let parsed: Record<string, unknown>
-  try {
-    parsed = JSON.parse(resultStr) as Record<string, unknown>
-  } catch {
-    return resultStr
-  }
-  const dataObj = parsed.data as Record<string, unknown> | undefined
-  const script = parsed.script ?? parsed.content ?? parsed.text ?? parsed.answer ?? (dataObj && typeof dataObj === 'object' ? (dataObj.content ?? dataObj.script ?? dataObj.text) : undefined)
-  if (typeof script === 'string' && script) return script
-  if (script && typeof script === 'object' && !Array.isArray(script)) {
-    const inner = (script as Record<string, unknown>).content ?? (script as Record<string, unknown>).text
-    if (typeof inner === 'string' && inner) return inner
-  }
-  // 待办生成：Coze 通过工具返回 {"tasks": [...]} 时，原样返回 JSON 供上游解析
-  if (Array.isArray(parsed.tasks) && parsed.tasks.length > 0) return resultStr
-  return undefined
-}
-
 /** 递归从对象中提取第一个 content/text/answer 字符串（兼容任意嵌套） */
 function extractAnyContent(obj: unknown): string | undefined {
   if (obj === null || obj === undefined) return undefined
@@ -314,11 +288,9 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Coze 流式输出：使用 POST /stream_run 接口，解析 SSE 格式数据，实时 yield 正文，并处理工具调用与响应。
+ * Coze 流式输出：使用 POST /stream_run，解析 SSE，仅从 type=answer / message.delta 等提取正文并 yield。
  * - 使用 POST /stream_run：ensureCozeStreamRunUrl 保证 URL 带 /stream_run，body 为 buildCozeStreamRunBody(message)。
- * - 解析 SSE：按行读取，识别 data: 开头的行，JSON.parse 后由 extractCozeContent 提取可展示文本。
- * - 话术/待办均为流式输出：话术流式推前端；待办由 callLLMOnce 聚合全部 chunk 后一次性解析 JSON。
- * - 工具调用和响应：function_call/tool_call/tool_response 事件不产出正文，仅 type=answer / message.delta 等的内容参与输出。
+ * - 解析 SSE：按行读取 data: 行，JSON.parse 后由 extractCozeContent 提取文本；话术流式推前端，待办由 callLLMOnce 聚合后解析 JSON。
  * skipStats：由 callLLMOnce 收集时设为 true，由调用方统一记录统计，避免超时后后台流再记 success。
  */
 async function* streamCozeAgent(
@@ -329,7 +301,7 @@ async function* streamCozeAgent(
   taskType: 'script' | 'todo' = 'script',
   skipStats = false,
   toolCallOnly = false,
-  /** 流式读取超时（毫秒）；不传则用 COZE_STREAM_TIMEOUT_MS。待办且 Bot 走 tool_request→tool_response 时需更长时间 */
+  /** 流式读取超时（毫秒）；不传则用 COZE_STREAM_TIMEOUT_MS */
   streamTimeoutMs?: number
 ): AsyncGenerator<string, void, unknown> {
   const requestStartMs = Date.now()
@@ -346,7 +318,7 @@ async function* streamCozeAgent(
           ? `${systemPrompt}\n\n【用户请求】\n${userMessage}`
           : userMessage
 
-  const bodyKind = AGENT_API_BODY ? 'agent' : (COZE_LEGACY_BODY || url.includes('coze.site') ? 'legacy' : 'agent')
+  const bodyKind = AGENT_API_BODY ? 'agent' : (COZE_LEGACY_BODY ? 'legacy' : 'raw_prompt')
   cozeDiagnosticLog('request', { messageLen: message.length, url: url.replace(/\/stream_run.*$/, '/stream_run'), taskType, bodyKind, hasAuth: !!(apiKey && String(apiKey).trim()) })
 
   const headers: Record<string, string> = {
@@ -362,10 +334,18 @@ async function* streamCozeAgent(
   const bodyOptions = isScript ? { maxTokens: COZE_SCRIPT_MAX_TOKENS } : undefined
   for (let attempt = 0; attempt <= COZE_MAX_RETRIES; attempt++) {
     try {
+      const requestBody = buildCozeStreamRunBody(message, bodyOptions, url)
+      console.log('实际发送的请求:', JSON.stringify(requestBody, null, 2))
+      cozeDiagnosticLog('request_body', {
+        url: url.replace(/\/stream_run.*$/, '/stream_run'),
+        taskType,
+        bodyKind,
+        requestBody,
+      })
       res = await fetch(url, {
         method: 'POST',
         headers,
-        body: JSON.stringify(buildCozeStreamRunBody(message, bodyOptions, url)),
+        body: JSON.stringify(requestBody),
       })
       debugLog(`Coze response status=${res.status} url=${url} attempt=${attempt + 1}`)
       if (res.ok) break
@@ -423,10 +403,8 @@ async function* streamCozeAgent(
     while (true) {
       if (streamAbort.signal.aborted) {
         const receivedTypes = emptyDiagnosticPayloads.length > 0 ? emptyDiagnosticPayloads.map((p) => p.type) : []
-        const hadToolRequest = receivedTypes.includes('tool_request')
-        const hadToolResponse = receivedTypes.includes('tool_response')
-        console.warn(`[scriptLLM] [Coze] 流式超时（${effectiveStreamTimeout}ms），已结束`, hadToolRequest && !hadToolResponse ? '；收到 tool_request 但未收到 tool_response，请检查 Coze 侧工具是否执行成功' : '')
-        cozeDiagnosticLog('stream_timeout', { effectiveStreamTimeoutMs: effectiveStreamTimeout, receivedTypes, hadToolRequest, hadToolResponse })
+        console.warn(`[scriptLLM] [Coze] 流式超时（${effectiveStreamTimeout}ms），已结束`)
+        cozeDiagnosticLog('stream_timeout', { effectiveStreamTimeoutMs: effectiveStreamTimeout, receivedTypes })
         if (!skipStats) cozeRecord('timeout', Date.now() - streamStartMs)
         break
       }
@@ -466,18 +444,7 @@ async function* streamCozeAgent(
             const t = typeof data.type === 'string' ? data.type : (data as Record<string, unknown>).event ?? '?'
             emptyDiagnosticPayloads.push({ type: String(t), preview: payload.slice(0, 280) })
           }
-          // tool 路径已废弃：本系统不再从 tool_response 产出正文，仅记录诊断。正文须由 Coze 在 answer/delta 中直接输出（见《Coze对接说明》）。
-          if (data.type === 'tool_response') {
-            const tr = (data.content && typeof data.content === 'object' ? (data.content as Record<string, unknown>).tool_response : undefined) ?? data.tool_response
-            const trKeys = tr && typeof tr === 'object' && tr !== null ? Object.keys(tr as object) : []
-            cozeDiagnosticLog('tool_response_deprecated', {
-              hint: '正文须在 answer/delta 中输出，本系统已不再解析 tool_response',
-              tool_response_keys: trKeys,
-              preview: payload.slice(0, 360),
-            })
-            continue
-          }
-          const content = extractCozeContent(data)
+          const content = extractCozeContent(data, taskType)
           if (content) {
             yieldedChunks += 1
             yieldedLen += content.length
@@ -533,14 +500,7 @@ async function* streamCozeAgent(
           }
         }
         const sampleTypes = emptyDiagnosticPayloads.map((p) => p.type)
-        const hasToolRequest = sampleTypes.includes('tool_request')
-        let hint: string | undefined
-        if (hasToolRequest) {
-          hint = '检测到 tool_request；tool 路径已废弃，请将 Coze Bot 改为在 answer/delta 中直接输出正文，否则本系统无法得到结果'
-          if (bodyKind === 'legacy') hint += '。当前为 legacy 体（content.query.prompt），符合《Coze 对接协议》入参要求'
-        } else if (messageEndContentKeys) {
-          hint = '若仅有 answer/thinking 且均为 null，请在 Coze Bot 中配置「直接回复」或确保工具返回后 Bot 输出正文'
-        }
+        const hint = messageEndContentKeys ? '若仅有 answer/thinking 且均为 null，请在 Coze Bot 中配置在 answer 中流式输出正文' : undefined
         cozeDiagnosticLog('empty_stream_payloads', {
           sampleTypes,
           samples: emptyDiagnosticPayloads,
@@ -548,11 +508,22 @@ async function* streamCozeAgent(
           ...(hint ? { hint } : {}),
         })
       } else {
+        const hasAuth = !!(apiKey && String(apiKey).trim())
+        let hint: string
+        if (totalBytesReceived === 0) {
+          hint = 'Coze 返回了 0 字节（空 body）。请检查：URL 是否支持 stream_run、Coze 发布站点是否对该 API Key 有调用限制（如仅创建者可用）。'
+          if (hasAuth) hint += ' 当前请求已带鉴权；若登录为非管理员账号，请确认管理后台「LLM 配置」中已为该账号开通使用权限（允许用户列表），并用同一 API Key 在 Postman 直接请求 stream_run 验证是否返回正文。'
+          else hint += ' 管理后台 LLM 配置中请填写 API Key 并保存。'
+        } else {
+          hint = 'Coze 未返回任何可解析的 data 行，请检查 SSE 格式'
+        }
         cozeDiagnosticLog('empty_stream_no_payloads', {
-          hint: totalBytesReceived === 0 ? 'Coze 返回了 0 字节（空 body），请检查 Agent 是否要求鉴权、URL 是否支持 stream_run、或管理后台 LLM 配置中是否填写了 API Key' : 'Coze 未返回任何可解析的 data 行，请检查 SSE 格式',
+          hint,
           status: responseStatus,
           contentType: responseContentType,
           totalBytesReceived,
+          hasAuth,
+          urlHint: url.replace(/\/stream_run.*$/, '/stream_run'),
           rawPreview: rawPreview.slice(0, 600),
           bufferTail: buffer.slice(0, 300),
         })

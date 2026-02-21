@@ -19,16 +19,19 @@ router.get('/', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   }
 })
 
-// 获取单个用户
-router.get('/:id', async (req, res) => {
+// 获取单个用户（仅管理员/经理，且不返回密码）
+router.get('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const user = await dbGet('SELECT * FROM users WHERE id = ?', [id])
-    
+    const user = await dbGet(
+      'SELECT id, name, email, role, status, createdAt, lastLoginAt FROM users WHERE id = ?',
+      [id]
+    )
+
     if (!user) {
       return res.status(404).json({ error: '用户不存在' })
     }
-    
+
     res.json(user)
   } catch (error) {
     console.error('获取用户失败:', error)
@@ -39,7 +42,9 @@ router.get('/:id', async (req, res) => {
 // 创建用户 - 仅管理员
 router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { name, email, password, role = 'user', status = 'active' } = req.body
+    const { name, email, password, role: rawRole = 'user', status = 'active' } = req.body
+    const allowedRoles = ['user', 'admin', 'operator', 'manager', 'viewer'] as const
+    const role = allowedRoles.includes(rawRole) ? rawRole : 'user'
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: '姓名、邮箱和密码不能为空' })
@@ -82,7 +87,9 @@ router.post('/', authenticate, requireAdmin, async (req: AuthRequest, res) => {
 router.put('/:id', authenticate, requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { name, email, role, status, password } = req.body
+    const { name, email, role: rawRole, status, password } = req.body
+    const allowedRoles = ['user', 'admin', 'operator', 'manager', 'viewer'] as const
+    const role = rawRole !== undefined ? (allowedRoles.includes(rawRole) ? rawRole : undefined) : undefined
 
     const user = await dbGet('SELECT * FROM users WHERE id = ?', [id])
     if (!user) {

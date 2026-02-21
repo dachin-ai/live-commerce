@@ -10,19 +10,19 @@ router.get('/', authenticate, async (req: AuthRequest, res) => {
   try {
     const { search } = req.query
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
-
+    const role = req.user!.role
+    const canSeeAllStores = role === 'admin' || role === 'viewer'
     let query = 'SELECT s.*, u.name as userName FROM stores s LEFT JOIN users u ON s.userId = u.id'
     const params: any[] = []
 
-    // 普通用户只能看到自己的商店
-    if (!isAdmin) {
+    // 普通用户/运营只能看到自己的商店；管理员与虚拟管理员可看全部店铺
+    if (!canSeeAllStores) {
       query += ' WHERE s.userId = ?'
       params.push(userId)
     }
 
     if (search && typeof search === 'string') {
-      query += isAdmin ? ' WHERE' : ' AND'
+      query += canSeeAllStores ? ' WHERE' : ' AND'
       query += ' (s.name LIKE ? OR s.nameTh LIKE ? OR s.description LIKE ?)'
       const searchPattern = `%${search}%`
       params.push(searchPattern, searchPattern, searchPattern)
@@ -55,13 +55,13 @@ router.get('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const canSeeAllStores = req.user!.role === 'admin' || req.user!.role === 'viewer'
 
     let query = 'SELECT s.*, u.name as userName FROM stores s LEFT JOIN users u ON s.userId = u.id WHERE s.id = ?'
     const params: any[] = [id]
 
-    // 普通用户只能查看自己的商店
-    if (!isAdmin) {
+    // 普通用户/运营只能查看自己的商店；管理员与虚拟管理员可看全部
+    if (!canSeeAllStores) {
       query += ' AND s.userId = ?'
       params.push(userId)
     }
@@ -105,10 +105,10 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     }
 
     const currentUserId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
-    
-    // 普通用户只能为自己创建商店，管理员可以指定userId
-    const storeUserId = isAdmin && userId ? userId : currentUserId
+    const role = req.user!.role
+    const canAssignStore = role === 'admin'
+    // 普通用户/运营/虚拟管理员只能为自己创建商店；仅管理员可指定 userId
+    const storeUserId = canAssignStore && userId ? userId : currentUserId
 
     const id = `store-${crypto.randomUUID()}`
     const createdAt = new Date().toISOString()

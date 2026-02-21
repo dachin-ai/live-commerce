@@ -350,42 +350,6 @@ interface CozeScriptTypeConfig {
 }
 
 const COZE_SCRIPT_TYPE_MAPPING: Record<ScriptType, CozeScriptTypeConfig> = {
-  interaction: {
-    script_type_name: '人群互动话术',
-    script_type: 'interaction',
-    script_type_description: '通过提问和互动提升直播间参与度',
-    script_type_key_elements: '1) 吸引人的提问 2) 请求观众反应 3) 回答常见问题 4) 创造参与感',
-    typical_length: '20-60秒',
-    cta_requirement: '必须包含明确的互动引导',
-    use_promotion_info: false,
-  },
-  scenario: {
-    script_type_name: '场景化塑品话术',
-    script_type: 'scenario',
-    script_type_description: '创建生活场景，展示产品价值',
-    script_type_key_elements: '1) 创建贴近生活的场景 2) 展示日常问题 3) 产品作为解决方案 4) Before & After效果',
-    typical_length: '30-90秒',
-    cta_requirement: '重点是场景化表达，行动召唤可选',
-    use_promotion_info: false,
-  },
-  promotion: {
-    script_type_name: '促销活动话术',
-    script_type: 'promotion',
-    script_type_description: '展示价格优势，创造购买紧迫感',
-    script_type_key_elements: '1) 展示成本价vs售价 2) 与市场/竞品对比 3) 展示超值 4) 限时限量',
-    typical_length: '20-60秒',
-    cta_requirement: '必须包含明确的行动召唤和紧迫感',
-    use_promotion_info: true,
-  },
-  closing: {
-    script_type_name: '逼单技巧话术',
-    script_type: 'closing',
-    script_type_description: '促成最终下单，处理异议',
-    script_type_key_elements: '1) 创造紧迫感 2) 突出最终价值 3) 处理异议 4) 强力CTA 5) 制造FOMO',
-    typical_length: '15-45秒',
-    cta_requirement: '必须包含强有力的行动召唤和紧迫感',
-    use_promotion_info: true,
-  },
   'full-sales': {
     script_type_name: '完整销售流程话术',
     script_type: 'full_process',
@@ -393,6 +357,60 @@ const COZE_SCRIPT_TYPE_MAPPING: Record<ScriptType, CozeScriptTypeConfig> = {
     script_type_key_elements: '1) 圈人群 2) 塑品 3) 打消顾虑 4) 利益点 5) 售后 6) 逼单',
     typical_length: '5-10分钟',
     cta_requirement: '每个环节都要有明确的引导，最后环节必须包含强力CTA',
+    use_promotion_info: true,
+  },
+  'segment-audience': {
+    script_type_name: '圈人群部分话术',
+    script_type: 'segment_audience',
+    script_type_description: '聚焦识别目标人群并建立痛点共鸣',
+    script_type_key_elements: '1) 目标人群识别 2) 痛点共鸣 3) 场景代入 4) 承接到产品',
+    typical_length: '60-90秒',
+    cta_requirement: '可含轻量互动引导，重点是完成圈人群与承接',
+    use_promotion_info: false,
+  },
+  'segment-product': {
+    script_type_name: '塑品部分话术',
+    script_type: 'segment_product',
+    script_type_description: '聚焦产品价值塑造与卖点展开',
+    script_type_key_elements: '1) 核心卖点 2) 使用场景 3) 差异化价值 4) 过渡到答疑',
+    typical_length: '90-120秒',
+    cta_requirement: '行动召唤可选，重点是塑造价值',
+    use_promotion_info: false,
+  },
+  'segment-concerns': {
+    script_type_name: '打消顾虑部分话术',
+    script_type: 'segment_concerns',
+    script_type_description: '聚焦回答疑虑并降低决策阻力',
+    script_type_key_elements: '1) 高频疑问 2) 风险消除 3) 信任背书 4) 过渡到利益点',
+    typical_length: '60-90秒',
+    cta_requirement: '可含轻量引导，重点是答疑解虑',
+    use_promotion_info: false,
+  },
+  'segment-benefits': {
+    script_type_name: '利益点部分话术',
+    script_type: 'segment_benefits',
+    script_type_description: '聚焦价格价值与福利展示',
+    script_type_key_elements: '1) 价格价值 2) 促销福利 3) 对比感知 4) 过渡到售后',
+    typical_length: '90-120秒',
+    cta_requirement: '建议包含明确行动引导',
+    use_promotion_info: true,
+  },
+  'segment-after-sales': {
+    script_type_name: '售后部分话术',
+    script_type: 'segment_after_sales',
+    script_type_description: '聚焦售后政策与保障承诺',
+    script_type_key_elements: '1) 退换政策 2) 发货时效 3) 客服支持 4) 承接逼单',
+    typical_length: '60-90秒',
+    cta_requirement: '以建立信任为主，CTA 可选',
+    use_promotion_info: false,
+  },
+  'segment-closing': {
+    script_type_name: '逼单部分话术',
+    script_type: 'segment_closing',
+    script_type_description: '聚焦紧迫感与最终成交动作',
+    script_type_key_elements: '1) 限时限量 2) 最终价值 3) 强行动召唤 4) 倒计时催单',
+    typical_length: '60-90秒',
+    cta_requirement: '必须包含强行动召唤与紧迫感',
     use_promotion_info: true,
   },
 }
@@ -470,7 +488,7 @@ export function buildScriptToolCallMessage(
     (explicitCountryCode && COUNTRY_CODE_TO_NAME[explicitCountryCode])
       ? COUNTRY_CODE_TO_NAME[explicitCountryCode]
       : getStoreCountry(storeContext, userInput.language)
-  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['interaction']
+  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['full-sales']
   const parts: string[] = [
     `请根据以下信息生成一款${userInput.productName}的${scriptTypeConfig.script_type_name}。`,
     `产品名称：${userInput.productName}`,
@@ -520,7 +538,7 @@ export function buildCozeScriptPrompts(
   const systemPrompt = '你是TikTok直播电商话术专家。'
 
   // User Prompt: 产品信息、话术类型、要求
-  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['interaction']
+  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['full-sales']
   
   // 与话术入参约定对齐：product_name, price, features, target_audience, sku_info
   const productSection = `## 产品信息（入参）

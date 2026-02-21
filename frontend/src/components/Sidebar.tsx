@@ -1,10 +1,14 @@
 import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Store, Mail, FileText, BarChart3, MessageSquare, Bell, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu } from 'lucide-react'
+import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu } from 'lucide-react'
 import { useCurrentUser, useLogout, getCurrentUserRole } from '../services/auth'
 import { useLanguage } from '../contexts/LanguageContext'
 import type { Locale } from '../contexts/LanguageContext'
 import { useTranslation } from 'react-i18next'
+import TutorialModal from './TutorialModal'
+import FeedbackModal from './FeedbackModal'
+import SupportAuthorModal from './SupportAuthorModal'
+import { useUnreadCount } from '../services/messages'
 
 interface SidebarProps {
   /** 可选：不传则使用全局 LanguageContext（多语言持久化） */
@@ -24,13 +28,19 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
   const { data: currentUser } = useCurrentUser()
   const logout = useLogout()
   const [showUserMenu, setShowUserMenu] = useState(false)
+  const [showTutorialModal, setShowTutorialModal] = useState(false)
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [showSupportAuthorModal, setShowSupportAuthorModal] = useState(false)
   const [internalExpanded, setInternalExpanded] = useState(true)
   const userRole = getCurrentUserRole()
-  const isAdmin = userRole === 'admin' || currentUser?.role === 'admin'
-  
+  const { data: unreadCount = 0 } = useUnreadCount()
+  const isAdmin = userRole === 'admin' || userRole === 'manager' || currentUser?.role === 'admin' || currentUser?.role === 'manager'
+
   const getRoleLabel = (role?: string) => {
-    if (role === 'admin' || role === 'manager') return t('sidebar.roleAdmin')
+    if (role === 'admin') return t('sidebar.roleAdmin')
+    if (role === 'manager') return t('sidebar.roleManager')
     if (role === 'operator') return t('sidebar.roleOperator')
+    if (role === 'viewer') return t('sidebar.roleViewer')
     return t('sidebar.roleUser')
   }
 
@@ -101,13 +111,19 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                     {t('sidebar.profile')}
                   </button>
                   <button
-                    type="button"
-                    disabled
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 cursor-not-allowed rounded"
-                    title={t('sidebar.messages')}
+                    onClick={() => {
+                      setShowUserMenu(false)
+                      navigate('/messages')
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     <Mail className="w-4 h-4" />
                     {t('sidebar.messages')}
+                    {unreadCount > 0 && (
+                      <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                   </button>
                   {isAdmin && (
                     <button
@@ -160,13 +176,19 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                     {t('sidebar.profile')}
                   </button>
                   <button
-                    type="button"
-                    disabled
-                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-400 cursor-not-allowed rounded"
-                    title={t('sidebar.messages')}
+                    onClick={() => {
+                      setShowUserMenu(false)
+                      navigate('/messages')
+                    }}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                   >
                     <Mail className="w-4 h-4" />
                     {t('sidebar.messages')}
+                    {unreadCount > 0 && (
+                      <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
                   </button>
                   {isAdmin && (
                     <button
@@ -271,26 +293,24 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
               <Sparkles className="w-5 h-5" />
               <span>{t('sidebar.tools')}</span>
             </button>
-            <button
-              onClick={() => navigate('/llm')}
+            <Link
+              to="/messages"
               className={`w-full flex items-center gap-3 p-2 rounded-lg ${
-                location.pathname === '/llm'
+                location.pathname === '/messages'
                   ? 'bg-blue-100 text-blue-700'
                   : 'text-gray-700 hover:bg-gray-200'
               }`}
             >
-              <Cpu className="w-5 h-5" />
-              <span>{t('sidebar.llmModes')}</span>
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="w-full flex items-center gap-3 p-2 text-gray-700 hover:bg-gray-200 rounded-lg"
-            >
-              <FileText className="w-5 h-5" />
-              <span>{t('sidebar.versionLog')}</span>
-            </button>
+              <Mail className="w-5 h-5" />
+              <span>{t('sidebar.messages')}</span>
+              {unreadCount > 0 && (
+                <span className="ml-auto min-w-[18px] h-[18px] px-1 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
+            </Link>
             
-            {/* 管理员专属功能 */}
+            {/* 管理员专属功能：工作流、LLM 调用方式、用户管理、权限配置 */}
             {isAdmin && (
               <div className="pt-2 mt-2 border-t border-gray-200">
                 <p className="text-xs font-medium text-gray-500 mb-2 px-2">{t('sidebar.adminSection')}</p>
@@ -302,24 +322,54 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                       : 'text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-              <GitBranch className="w-5 h-5" />
-              <span>{t('sidebar.workflow')}</span>
-            </Link>
-                <button
-                  onClick={() => navigate('/admin')}
+                  <GitBranch className="w-5 h-5" />
+                  <span>{t('sidebar.workflow')}</span>
+                </Link>
+                <Link
+                  to="/llm"
+                  className={`w-full flex items-center gap-3 p-2 rounded-lg ${
+                    location.pathname === '/llm'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <Cpu className="w-5 h-5" />
+                  <span>{t('sidebar.llmModes')}</span>
+                </Link>
+                <Link
+                  to="/admin"
                   className={`w-full flex items-center gap-3 p-2 rounded-lg ${
                     location.pathname === '/admin'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-700 hover:bg-gray-200'
                   }`}
                 >
-              <Users className="w-5 h-5" />
-              <span>{t('sidebar.userManagement')}</span>
-            </button>
-                <button className="w-full flex items-center gap-3 p-2 text-gray-700 hover:bg-gray-200 rounded-lg">
+                  <Users className="w-5 h-5" />
+                  <span>{t('sidebar.userManagement')}</span>
+                </Link>
+                <Link
+                  to="/admin"
+                  className={`w-full flex items-center gap-3 p-2 rounded-lg ${
+                    location.pathname === '/admin'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'text-gray-700 hover:bg-gray-200'
+                  }`}
+                  title={t('sidebar.permissionConfigHint', { fallback: '权限由用户管理中的角色控制' })}
+                >
                   <Settings className="w-5 h-5" />
                   <span>{t('sidebar.permissionConfig')}</span>
-                </button>
+                </Link>
+                <Link
+                  to="/feedback"
+                  className={`w-full flex items-center gap-3 p-2 rounded-lg ${
+                    location.pathname === '/feedback'
+                      ? 'bg-purple-100 text-purple-700'
+                      : 'text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span>{t('sidebar.feedbackManage')}</span>
+                </Link>
               </div>
             )}
           </div>
@@ -368,37 +418,32 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                 {t('sidebar.tools')}
               </span>
             </button>
-            <button
-              onClick={() => navigate('/llm')}
+            <Link
+              to="/messages"
               className={`group relative p-3 rounded-lg transition-colors ${
-                location.pathname === '/llm'
+                location.pathname === '/messages'
                   ? 'bg-blue-100 text-blue-600'
                   : 'hover:bg-gray-200 text-gray-600'
               }`}
-              title={t('sidebar.llmModes')}
+              title={t('sidebar.messages')}
             >
-              <Cpu className="w-5 h-5" />
+              <Mail className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 min-w-[14px] h-[14px] px-0.5 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
               <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                {t('sidebar.llmModes')}
+                {t('sidebar.messages')}
               </span>
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="group relative p-3 hover:bg-gray-200 rounded-lg transition-colors"
-              title={t('sidebar.versionLog')}
-            >
-              <FileText className="w-5 h-5 text-gray-600" />
-              <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                {t('sidebar.versionLog')}
-              </span>
-            </button>
+            </Link>
             
-            {/* 管理员图标（收起状态） */}
+            {/* 管理员图标（收起状态）：工作流、LLM、用户管理、权限配置 */}
             {isAdmin && (
               <>
                 <div className="w-8 h-px bg-gray-300 my-1" />
-                <button
-                  onClick={() => navigate('/workflow')}
+                <Link
+                  to="/workflow"
                   className={`group relative p-3 rounded-lg transition-colors ${
                     location.pathname === '/workflow'
                       ? 'bg-purple-100 text-purple-600'
@@ -410,9 +455,23 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     {t('sidebar.workflow')}
                   </span>
-                </button>
-                <button
-                  onClick={() => navigate('/admin')}
+                </Link>
+                <Link
+                  to="/llm"
+                  className={`group relative p-3 rounded-lg transition-colors ${
+                    location.pathname === '/llm'
+                      ? 'bg-purple-100 text-purple-600'
+                      : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title={t('sidebar.llmModes')}
+                >
+                  <Cpu className="w-5 h-5" />
+                  <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                    {t('sidebar.llmModes')}
+                  </span>
+                </Link>
+                <Link
+                  to="/admin"
                   className={`group relative p-3 rounded-lg transition-colors ${
                     location.pathname === '/admin'
                       ? 'bg-purple-100 text-purple-600'
@@ -424,59 +483,120 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     {t('sidebar.userManagement')}
                   </span>
-                </button>
-                <button
-                  className="group relative p-3 hover:bg-gray-200 rounded-lg transition-colors"
-                  title={t('sidebar.permissionConfig')}
+                </Link>
+                <Link
+                  to="/admin"
+                  className={`group relative p-3 rounded-lg transition-colors ${
+                    location.pathname === '/admin'
+                      ? 'bg-purple-100 text-purple-600'
+                      : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title={t('sidebar.permissionConfigHint', { fallback: '权限由用户管理中的角色控制' })}
                 >
-                  <Settings className="w-5 h-5 text-gray-600" />
+                  <Settings className="w-5 h-5" />
                   <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     {t('sidebar.permissionConfig')}
                   </span>
-                </button>
+                </Link>
+                <Link
+                  to="/feedback"
+                  className={`group relative p-3 rounded-lg transition-colors ${
+                    location.pathname === '/feedback'
+                      ? 'bg-purple-100 text-purple-600'
+                      : 'hover:bg-gray-200 text-gray-600'
+                  }`}
+                  title={t('sidebar.feedbackManage')}
+                >
+                  <MessageSquare className="w-5 h-5" />
+                  <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                    {t('sidebar.feedbackManage')}
+                  </span>
+                </Link>
               </>
             )}
           </div>
         )}
       </div>
 
-      {/* 底部导航 */}
+      {/* 底部：问题反馈、教程入口、支持作者 */}
       <div className="border-t border-gray-200 shrink-0">
         {isExpanded ? (
           <div className="p-4">
             <div className="flex items-center justify-around">
-              <button className="p-2 hover:bg-gray-200 rounded-full" title="消息">
+              <button
+                type="button"
+                onClick={() => setShowFeedbackModal(true)}
+                className="p-2 hover:bg-gray-200 rounded-full"
+                title={t('sidebar.feedback')}
+              >
                 <MessageSquare className="w-5 h-5 text-gray-600" />
               </button>
-              <button className="p-2 hover:bg-gray-200 rounded-full" title="通知">
-                <Bell className="w-5 h-5 text-gray-600" />
+              <button
+                type="button"
+                onClick={() => setShowTutorialModal(true)}
+                className="p-2 hover:bg-gray-200 rounded-full"
+                title={t('sidebar.tutorial')}
+              >
+                <BookOpen className="w-5 h-5 text-gray-600" />
               </button>
               <button
-                onClick={() => setShowUserMenu(!showUserMenu)}
+                type="button"
+                onClick={() => setShowSupportAuthorModal(true)}
                 className="p-2 hover:bg-gray-200 rounded-full"
-                title="设置"
+                title={t('sidebar.supportAuthor')}
               >
-                <User className="w-5 h-5 text-gray-600" />
+                <Heart className="w-5 h-5 text-gray-600" />
               </button>
             </div>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-1 py-2">
-            <button className="group relative p-2 hover:bg-gray-200 rounded-lg transition-colors" title="消息">
+            <button
+              type="button"
+              onClick={() => setShowFeedbackModal(true)}
+              className="group relative p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title={t('sidebar.feedback')}
+            >
               <MessageSquare className="w-5 h-5 text-gray-600" />
               <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                消息
+                {t('sidebar.feedback')}
               </span>
             </button>
-            <button className="group relative p-2 hover:bg-gray-200 rounded-lg transition-colors" title="通知">
-              <Bell className="w-5 h-5 text-gray-600" />
+            <button
+              type="button"
+              onClick={() => setShowTutorialModal(true)}
+              className="group relative p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title={t('sidebar.tutorial')}
+            >
+              <BookOpen className="w-5 h-5 text-gray-600" />
               <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                通知
+                {t('sidebar.tutorial')}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowSupportAuthorModal(true)}
+              className="group relative p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title={t('sidebar.supportAuthor')}
+            >
+              <Heart className="w-5 h-5 text-gray-600" />
+              <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
+                {t('sidebar.supportAuthor')}
               </span>
             </button>
           </div>
         )}
       </div>
+
+      {showTutorialModal && (
+        <TutorialModal onClose={() => setShowTutorialModal(false)} />
+      )}
+      {showFeedbackModal && (
+        <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
+      )}
+      {showSupportAuthorModal && (
+        <SupportAuthorModal onClose={() => setShowSupportAuthorModal(false)} />
+      )}
     </div>
   )
 }

@@ -77,7 +77,18 @@ function loadScriptFormDraft(): Partial<{
     for (const key of allowed) {
       if (parsed[key] != null && typeof parsed[key] === 'string') out[key] = parsed[key] as string
     }
-    if (parsed.scriptType && !['interaction', 'scenario', 'promotion', 'closing', 'full-sales'].includes(parsed.scriptType as string)) delete out.scriptType
+    if (
+      parsed.scriptType &&
+      ![
+        'full-sales',
+        'segment-audience',
+        'segment-product',
+        'segment-concerns',
+        'segment-benefits',
+        'segment-after-sales',
+        'segment-closing',
+      ].includes(parsed.scriptType as string)
+    ) delete out.scriptType
     return out as Partial<ReturnType<typeof loadScriptFormDraft>>
   } catch {
     return {}
@@ -200,7 +211,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     features: '',
     targetAudience: '',
     country: '',
-    scriptType: 'interaction',
+    scriptType: 'full-sales',
     language: 'zh-CN',
     promoCopy: '',
   })
@@ -304,6 +315,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     label: string
     description?: string
     color: string
+    inDevelopment?: boolean
     action: () => Promise<void>
   }> = [
     {
@@ -312,6 +324,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.report'),
       description: t('tools.reportDesc'),
       color: 'bg-green-100 text-green-600',
+      inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
           toast.warning('请先选择店铺')
@@ -336,6 +349,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.marketAnalysis'),
       description: t('tools.marketAnalysisDesc'),
       color: 'bg-purple-100 text-purple-600',
+      inDevelopment: true,
       action: async () => {
         setLoading('market-analysis')
         try {
@@ -356,6 +370,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.recommendations'),
       description: t('tools.recommendationsDesc'),
       color: 'bg-orange-100 text-orange-600',
+      inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
           toast.warning('请先选择店铺')
@@ -380,6 +395,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.stats'),
       description: t('tools.statsDesc'),
       color: 'bg-cyan-100 text-cyan-600',
+      inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
           toast.warning('请先选择店铺')
@@ -428,6 +444,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.screenRecording'),
       description: t('tools.screenRecordingDesc'),
       color: 'bg-amber-100 text-amber-600',
+      inDevelopment: true,
       action: async () => { /* 录屏分析为独立页，仅展示素材库，无需执行 */ },
     },
     {
@@ -436,6 +453,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.compare'),
       description: t('tools.compareDesc'),
       color: 'bg-pink-100 text-pink-600',
+      inDevelopment: true,
       action: async () => {
         if (stores.length < 2) {
           toast.warning('至少需要2个商店才能进行对比')
@@ -569,7 +587,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         <Icon className="w-6 h-6" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-semibold text-gray-900">{action.label}</h2>
+                        <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                          {action.label}
+                          {action.inDevelopment && (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                              {t('common.inDevelopment')}
+                            </span>
+                          )}
+                        </h2>
                         <p className="text-sm text-gray-600 mt-0.5">{action.description}</p>
                       </div>
                     </div>
@@ -641,7 +666,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       <Icon className="w-6 h-6" />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-gray-900">{action.label}</h2>
+                      <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                        {action.label}
+                        {action.inDevelopment && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                            {t('common.inDevelopment')}
+                          </span>
+                        )}
+                      </h2>
                       <p className="text-sm text-gray-600 mt-0.5">
                         {isScriptTool ? t('tools.scriptHint') : t('tools.scriptHintOther')}
                       </p>
@@ -732,15 +764,21 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                             onChange={(e) => setScriptForm((f) => ({ ...f, scriptType: e.target.value as ScriptType }))}
                             className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
                           >
-                            <option value="interaction">{t('tools.scriptTypeInteraction')}</option>
-                            <option value="scenario">{t('tools.scriptTypeScenario')}</option>
-                            <option value="promotion">{t('tools.scriptTypePromotion')}</option>
-                            <option value="closing">{t('tools.scriptTypeClosing')}</option>
                             <option value="full-sales">{t('tools.scriptTypeFullSales')}</option>
+                            <option value="segment-audience">{t('tools.scriptTypeSegmentAudience')}</option>
+                            <option value="segment-product">{t('tools.scriptTypeSegmentProduct')}</option>
+                            <option value="segment-concerns">{t('tools.scriptTypeSegmentConcerns')}</option>
+                            <option value="segment-benefits">{t('tools.scriptTypeSegmentBenefits')}</option>
+                            <option value="segment-after-sales">{t('tools.scriptTypeSegmentAfterSales')}</option>
+                            <option value="segment-closing">{t('tools.scriptTypeSegmentClosing')}</option>
                           </select>
                         </div>
                       </div>
-                      {(scriptForm.scriptType === 'closing' || scriptForm.scriptType === 'promotion' || scriptForm.scriptType === 'full-sales') && (
+                      {(
+                        scriptForm.scriptType === 'full-sales' ||
+                        scriptForm.scriptType === 'segment-benefits' ||
+                        scriptForm.scriptType === 'segment-closing'
+                      ) && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.promoOptional')}</label>
                           <textarea
@@ -792,7 +830,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                               country: scriptForm.country.trim(),
                               scriptType: scriptForm.scriptType,
                               language: scriptLanguageFromLocale(locale),
-                              promoCopy: (scriptForm.scriptType === 'closing' || scriptForm.scriptType === 'promotion' || scriptForm.scriptType === 'full-sales') ? (scriptForm.promoCopy.trim() || undefined) : undefined,
+                              promoCopy: (
+                                scriptForm.scriptType === 'full-sales' ||
+                                scriptForm.scriptType === 'segment-benefits' ||
+                                scriptForm.scriptType === 'segment-closing'
+                              ) ? (scriptForm.promoCopy.trim() || undefined) : undefined,
                               storeId: selectedStore.id,
                             },
                             {
@@ -938,7 +980,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       <Icon className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <span className="block text-sm font-medium text-gray-800">{action.label}</span>
+                      <span className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-gray-800">{action.label}</span>
+                        {action.inDevelopment && (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                            {t('common.inDevelopment')}
+                          </span>
+                        )}
+                      </span>
                       {action.description && (
                         <span className="block text-xs text-gray-500 mt-0.5">{action.description}</span>
                       )}

@@ -1,6 +1,13 @@
 import api from './api'
 
-export type ScriptType = 'interaction' | 'scenario' | 'promotion' | 'closing' | 'full-sales'
+export type ScriptType =
+  | 'full-sales'
+  | 'segment-audience'
+  | 'segment-product'
+  | 'segment-concerns'
+  | 'segment-benefits'
+  | 'segment-after-sales'
+  | 'segment-closing'
 export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH'
 
 export interface GenerateScriptParams {

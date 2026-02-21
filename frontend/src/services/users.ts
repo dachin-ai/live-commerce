@@ -1,11 +1,13 @@
 import api from './api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
+export type UserRole = 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
+
 export interface User {
   id: string
   name: string
   email: string
-  role: 'admin' | 'user'
+  role: UserRole
   status?: 'active' | 'inactive'
   createdAt: string
   lastLoginAt?: string
@@ -15,7 +17,7 @@ export interface CreateUserData {
   name: string
   email: string
   password: string
-  role?: 'user' | 'admin'
+  role?: UserRole
   status?: 'active' | 'inactive'
 }
 

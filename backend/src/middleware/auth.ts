@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string
     email: string
-    role: 'user' | 'admin' | 'operator' | 'manager'
+    role: 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
   }
 }
 
@@ -50,7 +50,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 }
 
 // 权限检查中间件
-export function requireRole(...roles: ('user' | 'admin' | 'operator' | 'manager')[]) {
+export function requireRole(...roles: ('user' | 'admin' | 'operator' | 'manager' | 'viewer')[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: '未登录' })
@@ -64,7 +64,7 @@ export function requireRole(...roles: ('user' | 'admin' | 'operator' | 'manager'
   }
 }
 
-// 管理员权限检查
+// 管理员/经理权限检查（与《角色与权限矩阵》一致：管理 = admin + manager）
 export function requireAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  return requireRole('admin')(req, res, next)
+  return requireRole('admin', 'manager')(req, res, next)
 }

@@ -10,6 +10,8 @@ import ResetPassword from './pages/ResetPassword'
 import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
 import LLMPage from './pages/LLMPage'
+import FeedbackManagement from './pages/FeedbackManagement'
+import MessageCenter from './pages/MessageCenter'
 import ProtectedRoute from './components/ProtectedRoute'
 import { getCurrentUserRole } from './services/auth'
 import { StoreProvider } from './contexts/StoreContext'
@@ -38,7 +40,7 @@ function App() {
             path="/workflow"
             element={
               <ProtectedRoute>
-                {getCurrentUserRole() === 'admin' ? (
+                {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
                   <StoreProvider>
                     <WorkflowPage />
                   </StoreProvider>
@@ -92,7 +94,11 @@ function App() {
           path="/llm"
           element={
             <ProtectedRoute>
-              <LLMPage />
+              {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
+                <LLMPage />
+              ) : (
+                <Navigate to="/" replace />
+              )}
             </ProtectedRoute>
           }
         />
@@ -110,11 +116,31 @@ function App() {
           path="/admin"
           element={
             <ProtectedRoute>
-              {getCurrentUserRole() === 'admin' ? (
+              {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
                 <AdminPanel />
               ) : (
                 <Navigate to="/" replace />
               )}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/feedback"
+          element={
+            <ProtectedRoute>
+              {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
+                <FeedbackManagement />
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/messages"
+          element={
+            <ProtectedRoute>
+              <MessageCenter />
             </ProtectedRoute>
           }
         />

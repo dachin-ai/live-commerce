@@ -1,6 +1,7 @@
 import express from 'express'
 import { dbRun, dbGet } from '../db'
 import { authenticate, AuthRequest } from '../middleware/auth'
+import { sendPasswordResetCode, isEmailConfigured } from '../services/email'
 import crypto from 'crypto'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
@@ -10,10 +11,14 @@ const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 const JWT_EXPIRES_IN = '7d'
 
-// 用户注册
+// 用户注册（内测期暂停，控制 token 使用）
 router.post('/register', async (req, res) => {
+  res.status(403).json({ error: '系统内测期，暂不支持注册' })
+  return
   try {
-    const { name, email, password, role = 'user' } = req.body
+    const { name, email, password, role: bodyRole } = req.body
+    // 注册时不允许自行设置为 admin/manager/viewer，仅允许 user 或 operator（由管理员在用户管理中创建）
+    const role = ['admin', 'manager', 'viewer'].includes(bodyRole) ? 'user' : (bodyRole || 'user')
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: '姓名、邮箱和密码不能为空' })
@@ -74,7 +79,25 @@ router.post('/login', async (req, res) => {
       return res.status(401).json({ error: '邮箱或密码错误' })
     }
 
-    // 生成JWT token
+    // 账号是否首次登录（在更新 lastLoginAt 之前判断）
+    const firstLoginEver = !user.lastLoginAt
+
+    // 当前 IP 是否首次登录（用于「新 IP 首次登录」展示教程）
+    const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || (req as any).ip || (req as any).socket?.remoteAddress || ''
+    const ipHash = clientIp ? crypto.createHash('sha256').update(clientIp).digest('hex') : ''
+    let newIpFirstLogin = false
+    if (ipHash) {
+      const seen = await dbGet('SELECT 1 FROM tutorial_seen_ips WHERE ipHash = ?', [ipHash])
+      newIpFirstLogin = !seen
+      if (newIpFirstLogin) {
+        await dbRun('INSERT OR IGNORE INTO tutorial_seen_ips (ipHash, seenAt) VALUES (?, ?)', [
+          ipHash,
+          new Date().toISOString(),
+        ])
+      }
+    }
+
+    // 生成JWT token（有效期 7 天，一周后需重新登录）
     const token = jwt.sign(
       { userId: user.id, email: user.email, role: user.role },
       JWT_SECRET,
@@ -100,6 +123,8 @@ router.post('/login', async (req, res) => {
         email: user.email,
         role: user.role,
       },
+      firstLoginEver,
+      newIpFirstLogin,
     })
   } catch (error) {
     console.error('登录失败:', error)
@@ -121,7 +146,7 @@ router.post('/logout', async (req, res) => {
   }
 })
 
-// 忘记密码：发送邮箱验证码（开发环境返回 code 便于测试，生产环境需接入邮件服务）
+// 忘记密码：发送邮箱验证码（已配置 SMTP 时发邮件；未配置时仅开发环境在响应中返回 code 便于测试）
 router.post('/forgot-password', async (req, res) => {
   try {
     const { email } = req.body
@@ -134,16 +159,23 @@ router.post('/forgot-password', async (req, res) => {
       return res.status(200).json({ message: '若该邮箱已注册，将收到验证码' })
     }
     const code = String(Math.floor(100000 + Math.random() * 900000))
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+    const expiresMinutes = 10
+    const expiresAt = new Date(Date.now() + expiresMinutes * 60 * 1000).toISOString()
     await dbRun('DELETE FROM password_reset_codes WHERE email = ?', [rawEmail])
     await dbRun(
       'INSERT INTO password_reset_codes (email, code, expiresAt, createdAt) VALUES (?, ?, ?, ?)',
       [rawEmail, code, expiresAt, new Date().toISOString()]
     )
+
+    const emailConfigured = isEmailConfigured()
+    const sent = await sendPasswordResetCode({ to: rawEmail, code, expiresMinutes })
+    if (!emailConfigured) console.warn('[忘记密码] 未配置 SMTP，未发邮件')
+    else if (!sent) console.warn('[忘记密码] SMTP 已配置但发送失败，请查看上方 [邮件] 错误')
     const isDev = process.env.NODE_ENV !== 'production'
+    const includeCodeInResponse = !sent && isDev
     res.status(200).json({
-      message: '若该邮箱已注册，验证码已发送至邮箱',
-      ...(isDev && { code }),
+      message: sent ? '验证码已发送至您的邮箱，请查收' : isDev ? '未配置邮件服务，请使用下方验证码（仅开发环境）' : '若该邮箱已注册，将收到验证码',
+      ...(includeCodeInResponse && { code }),
     })
   } catch (error) {
     console.error('忘记密码请求失败:', error)

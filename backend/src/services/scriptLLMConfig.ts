@@ -140,15 +140,17 @@ export async function setLLMModesInDB(options: { todo?: LLMModeValue; script?: L
 
 /** 同步获取当前生效的配置：优先环境变量，其次数据库缓存；*.coze.site 时 API Key 可用 AGENT_API_KEY 兜底（Coze 发布站点鉴权） */
 export function getScriptLLMConfigSync(): ScriptLLMConfig | null {
+  let result: ScriptLLMConfig | null = null
   if (ENV_URL && (ENV_KEY || (ENV_URL.includes('coze.site') && ENV_AGENT_KEY))) {
-    return { url: ENV_URL, apiKey: ENV_KEY || ENV_AGENT_KEY, model: ENV_MODEL || undefined }
-  }
-  if (cached) {
+    result = { url: ENV_URL, apiKey: ENV_KEY || ENV_AGENT_KEY, model: ENV_MODEL || undefined }
+  } else if (cached) {
     const url = cached.url || ''
     const apiKey = (cached.apiKey && cached.apiKey.trim()) || (url.includes('coze.site') ? ENV_AGENT_KEY : '')
-    return { ...cached, apiKey: apiKey || cached.apiKey }
+    result = { ...cached, apiKey: apiKey || cached.apiKey }
+  } else {
+    result = cached
   }
-  return cached
+  return result
 }
 
 /** 诊断：当前配置来源，供前端展示「为何 LLM 0 条」 */

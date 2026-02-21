@@ -1,7 +1,7 @@
 import express from 'express'
 import path from 'path'
 import fs from 'fs'
-import { authenticate, AuthRequest } from '../middleware/auth'
+import { authenticate, requireAdmin, AuthRequest } from '../middleware/auth'
 import * as scheduler from '../workflow_engine/scheduler'
 import * as state from '../workflow_engine/state_manager'
 import * as outputCollector from '../workflow_engine/output_collector'
@@ -9,15 +9,7 @@ import { initStateDatabase } from '../workflow_engine/state_manager'
 
 const router = express.Router()
 router.use(authenticate)
-
-/** 仅管理员可访问工作流 */
-function requireAdmin(req: AuthRequest, res: express.Response, next: express.NextFunction) {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ error: '仅管理员可访问工作流' })
-  }
-  next()
-}
-router.use(requireAdmin)
+router.use(requireAdmin) // 管理员或经理可访问工作流（与《角色与权限矩阵》一致）
 
 /** POST /api/workflow/trigger - trigger one round (optional: roundId, roundLabel, resumeFromRoleIndex) */
 router.post('/trigger', async (req: AuthRequest, res) => {

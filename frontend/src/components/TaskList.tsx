@@ -56,11 +56,21 @@ function getTaskDisplayTitle(task: Task, locale: string): string {
   const i18n = parseTaskI18n(task.title_i18n)
   return i18n[key] || task.title
 }
+/** 展示时去掉【工具】段落，工具信息仅通过快速跳转体现 */
+function stripToolsSection(desc: string): string {
+  if (!desc || !desc.includes('【工具】')) return desc
+  return desc
+    .replace(/\n*【工具】[^\n]*(?:\n(?!【)[^\n]*)*/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
+}
+
 function getTaskDisplayDescription(task: Task, locale: string): string | undefined {
   const key = locale || 'zh-CN'
   const i18n = parseTaskI18n(task.description_i18n)
   const desc = i18n[key] ?? task.description
-  return desc || undefined
+  const raw = desc || undefined
+  return raw ? stripToolsSection(raw) : undefined
 }
 
 function getQuickJumpTools(task: Task): string[] {

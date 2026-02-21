@@ -9,6 +9,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "db:update-seed": "tsx src/db-migrate.ts",
+    "db:seed-test-users": "tsx scripts/seed-test-users.ts",
     "db:reset": "node -e \"const fs = require('fs'); if (fs.existsSync('data.db')) { fs.unlinkSync('data.db'); console.log('✅ 数据库已删除'); } else { console.log('ℹ️  数据库不存在'); }\"",
     "db:clean-stats": "tsx scripts/clean-stats-duplicates.ts",
     "db:clean-monthly-orphan": "tsx scripts/clean-monthly-orphan-stats.ts",
@@ -28,6 +29,7 @@
     "google-translate-api-x": "^10.7.2",
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^8.0.1",
     "sqlite3": "^5.1.7",
     "xlsx": "^0.18.5"
   },
@@ -39,6 +41,7 @@
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.4",
+    "@types/nodemailer": "^7.0.9",
     "@types/sqlite3": "^3.1.11",
     "@types/xlsx": "^0.0.36",
     "patch-package": "^8.0.1",

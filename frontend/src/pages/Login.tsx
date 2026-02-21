@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useLogin } from '../services/auth'
 import { LogIn, Mail, Lock } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
@@ -38,7 +38,9 @@ export default function Login() {
     }
 
     try {
-      await login.mutateAsync({ email, password })
+      const res = await login.mutateAsync({ email, password })
+      if (res.firstLoginEver) sessionStorage.setItem('showWelcome', '1')
+      if (res.newIpFirstLogin) sessionStorage.setItem('showTutorial', '1')
       navigate('/', { replace: true })
     } catch (err: any) {
       const msg =
@@ -99,8 +101,7 @@ export default function Login() {
                 required
               />
             </div>
-            <div className="flex items-center justify-between mt-2">
-              <p className="text-xs text-gray-500">默认账号：admin@example.com / 123456</p>
+            <div className="flex justify-end mt-2">
               <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">
                 忘记密码？
               </Link>
@@ -127,21 +128,8 @@ export default function Login() {
         </form>
 
         <p className="mt-4 text-center text-sm text-gray-600">
-          还没有账号？{' '}
-          <Link to="/register" className="text-blue-600 hover:underline font-medium">
-            立即注册
-          </Link>
+          系统内测期，暂不支持注册
         </p>
-
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-xs text-center text-gray-500">
-            测试账号（仅区分运营与管理员）：
-            <br />
-            管理员：admin@example.com / 123456
-            <br />
-            运营：operator@example.com / 123456
-          </p>
-        </div>
       </div>
     </div>
   )
