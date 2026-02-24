@@ -426,12 +426,12 @@ export default function TaskList() {
                           }`}>
                             {getTaskDisplayTitle(task, currentLocale)}
                           </p>
-                          {'storeName' in task && task.storeName && (
+                          {task.storeName != null && String(task.storeName) && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
-                              {task.storeName}
+                              {String(task.storeName)}
                             </span>
                           )}
-                          {'assignedRole' in task && task.assignedRole && (
+                          {task.assignedRole != null && String(task.assignedRole) && (
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full shrink-0 ${
                               task.assignedRole === 'anchor' ? 'bg-purple-100 text-purple-700' :
                               task.assignedRole === 'operator' ? 'bg-green-100 text-green-700' :

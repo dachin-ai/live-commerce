@@ -17,6 +17,10 @@ export interface Task {
   aiFeature?: string | null
   /** 来源：llm_intelligent=LLM 智能，event/stage/anomaly/threshold=系统规则 */
   source?: string | null
+  /** 列表接口 JOIN 返回的店铺名称（仅列表有） */
+  storeName?: string | null
+  /** 列表接口返回的分配角色（仅列表有） */
+  assignedRole?: string | null
 }
 
 export const useTasks = (storeId?: string) => {

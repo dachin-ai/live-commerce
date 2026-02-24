@@ -48,7 +48,6 @@ import {
   type StoreComparisonResult,
   type StatsResult,
   type MarketResearchResult,
-  type StoreEfficiencyComparisonResult,
 } from '../services/ai'
 import { useMaterials, useCreateMaterial, useDeleteMaterial } from '../services/materials'
 import { useStores } from '../services/stores'
@@ -148,7 +147,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const [resultFullScreen, setResultFullScreen] = useState(false)
 
   type ToolResultData =
-    | ({ type: 'script' } & Record<string, unknown>)
+    | ({ type: 'script'; data: Record<string, unknown> })
     | ({ type: 'report'; data: ReportResult & { insights?: string[] } })
     | ({ type: 'analysis'; data: MarketAnalysisResult & { trends: Array<{ product: string; trend: string; change: string }> } })
     | ({ type: 'recommendations'; data: RecommendationsResult & { map?: unknown } })
@@ -166,7 +165,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       const parsed = JSON.parse(raw) as Record<string, StoredToolResult>
       const filtered: Record<string, StoredToolResult> = {}
       for (const [k, v] of Object.entries(parsed)) {
-        if (v?.data?.streaming) continue // 跳过流式生成中的结果
+        const d = v?.data as Record<string, unknown> | undefined
+        if (d?.streaming) continue // 跳过流式生成中的结果
         filtered[k] = v
       }
       return filtered
@@ -177,6 +177,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   
   const [resultsByTool, setResultsByTool] = useState<Record<string, StoredToolResult>>(loadToolsResults)
   const result = (propToolId ? (resultsByTool[propToolId] ?? null) : null) as ToolResultData | null
+  /** script 结果 data 为松散结构，用 Record 避免 TS 报错 */
+  const scriptData = result?.type === 'script' ? (result.data as Record<string, unknown>) : null
 
   const setResultForTool = (toolId: string, value: ToolResultData | null) => {
     if (value === null) {
@@ -192,8 +194,9 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       })
     } else {
       setResultsByTool((prev) => {
-        const next = { ...prev, [toolId]: value }
-        if (!(value.data as { streaming?: boolean } | undefined)?.streaming) {
+        const next = { ...prev, [toolId]: value as StoredToolResult }
+        const d = value.data as Record<string, unknown> | undefined
+        if (!d?.streaming) {
           try {
             localStorage.setItem(TOOLS_RESULTS_STORAGE_KEY, JSON.stringify(next))
           } catch {
@@ -284,9 +287,9 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   }, [propToolId])
 
   // 界面语言非中文且话术内容含中文时，自动请求翻译并展示（key 含 locale，切换语言会重新请求对应语言）
-  const scriptContent = result?.type === 'script' && typeof result?.data?.content === 'string' ? result.data.content : ''
-  const scriptNeedsTranslation = scriptContent && (locale === 'en-US' || locale === 'th-TH') && /[\u4e00-\u9fff]/.test(scriptContent) && !result?.data?.streaming
-  const scriptTranslationKey = scriptNeedsTranslation ? `${result?.data?.id ?? `${scriptContent.length}-${scriptContent.slice(0, 80)}`}-${locale}` : ''
+  const scriptContent = scriptData && typeof scriptData.content === 'string' ? scriptData.content : ''
+  const scriptNeedsTranslation = scriptContent && (locale === 'en-US' || locale === 'th-TH') && /[\u4e00-\u9fff]/.test(scriptContent) && !scriptData?.streaming
+  const scriptTranslationKey = scriptNeedsTranslation ? `${scriptData?.id ?? `${scriptContent.length}-${scriptContent.slice(0, 80)}`}-${locale}` : ''
   const scriptTranslationInFlight = useRef<string | null>(null)
   useEffect(() => {
     if (!scriptNeedsTranslation || !scriptTranslationKey) {
@@ -489,9 +492,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
           ])
           setResultForTool('compare', {
             type: 'compare',
-            data: { comparison, efficiency } as StoreComparisonResult & {
-              efficiency: StoreEfficiencyComparisonResult
-            },
+            data: { comparison, efficiency } as unknown as (StoreComparisonResult & { efficiency?: { comparison?: Array<Record<string, unknown>>; recommendations?: string[] }; insights?: string[] }),
           })
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
@@ -1086,7 +1087,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
           <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
             <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-blue-900">
-                {result.type === 'script' && (result.data?.storeId ? t('tools.resultTitleScriptWithStore', { storeName: selectedStore?.name || t('tools.currentStore') }) : t('tools.resultTitleScript'))}
+                {result.type === 'script' && (scriptData?.storeId ? t('tools.resultTitleScriptWithStore', { storeName: selectedStore?.name || t('tools.currentStore') }) : t('tools.resultTitleScript'))}
                 {result.type === 'report' && t('tools.resultTitleReport')}
                 {result.type === 'analysis' && t('tools.resultTitleAnalysis')}
                 {result.type === 'stats' && t('tools.resultTitleStats')}
@@ -1096,18 +1097,18 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                 {result.type === 'assistant' && t('tools.resultTitleAssistant')}
               </h3>
               <div className="flex items-center gap-1">
-                {result.type === 'script' && (typeof result.data?.content === 'string' || result.data?.streaming) && (
+                {result.type === 'script' && (typeof scriptData?.content === 'string' || Boolean(scriptData?.streaming)) && (
                   <>
                     <button
                       type="button"
                       onClick={async () => {
                         try {
-                          const text = result.data?.streaming
+                          const text = scriptData?.streaming
                             ? streamingContent
                             : scriptNeedsTranslation && scriptTranslatedContent
                               ? scriptTranslatedContent
-                              : result.data?.content
-                          await navigator.clipboard.writeText(text || '')
+                              : scriptData?.content
+                          await navigator.clipboard.writeText(String(text ?? ''))
                           toast.success(t('tools.copyToClipboard'))
                         } catch {
                           toast.error(t('tools.copyFailed'))
@@ -1147,7 +1148,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
             </div>
             <p className="text-xs text-gray-500 mb-2 border-b border-blue-100 pb-2 flex items-center justify-between">
               <span>
-              {result.type === 'script' && (result.data?.storeId || selectedStore)
+              {result.type === 'script' && (scriptData?.storeId || selectedStore)
                 ? t('tools.scriptDisclaimerWithStore')
                 : t('tools.scriptDisclaimerDefault')}
               </span>
@@ -1162,29 +1163,30 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
             >
               {result.type === 'script' && (
                 <div className="space-y-2">
-                  {result.data?.storeId && selectedStore && !result.data?.streaming && (
+                  {Boolean(scriptData?.storeId && selectedStore && !scriptData?.streaming) && (
                     <div className="flex items-center gap-2 px-2 py-1.5 bg-teal-50 rounded text-sm text-teal-800 border border-teal-200">
                       <Store className="w-4 h-4 shrink-0" />
-                      <span>{t('tools.basedOnStore')}<strong>{selectedStore.name}</strong></span>
+                      <span>{t('tools.basedOnStore')}<strong>{String(selectedStore?.name ?? '')}</strong></span>
                     </div>
                   )}
-                  {result.data?.relevanceWarning && (
+                  {Boolean(scriptData?.relevanceWarning) && (
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
                       <p className="font-medium">⚠️ {t('tools.templateFallbackTitle')}</p>
-                      <p className="mt-1">{result.data.relevanceWarning}</p>
+                      <p className="mt-1">{String(scriptData?.relevanceWarning ?? '')}</p>
                     </div>
                   )}
-                  {result.data?.dataSource === 'template' && result.data?.fallbackReason && (
+                  {scriptData?.dataSource === 'template' && Boolean(scriptData?.fallbackReason) && (
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm mb-2">
                       <p className="font-medium">⚠️ {t('tools.templateFallbackHint')}</p>
+                      <p className="mt-1 text-sm">{String(scriptData?.fallbackReason ?? '')}</p>
                     </div>
                   )}
-                  {result.data?.translationSkipped && (
+                  {Boolean(scriptData?.translationSkipped) && (
                     <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                      <p className="font-medium">🌐 {result.data?.translationSkippedMessage ?? t('tools.scriptTranslationSkipped')}</p>
+                      <p className="font-medium">🌐 {String(scriptData?.translationSkippedMessage ?? t('tools.scriptTranslationSkipped'))}</p>
                     </div>
                   )}
-                  {scriptNeedsTranslation && !result.data?.streaming && !scriptTranslationLoading && !scriptTranslatedContent && (
+                  {scriptNeedsTranslation && !scriptData?.streaming && !scriptTranslationLoading && !scriptTranslatedContent && (
                     <div className="px-2 py-1.5 flex items-center gap-2">
                       <button
                         type="button"
@@ -1214,7 +1216,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       </button>
                     </div>
                   )}
-                  {result.data?.error ? (
+                  {scriptData?.error ? (
                     <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
                       <p className="font-semibold mb-2">{t('tools.cannotGenerateScript')}</p>
                       {getCurrentUserRole() === 'admin' ? (
@@ -1243,12 +1245,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         role="status"
                         aria-live="polite"
                       >
-                        {result.data?.streaming
+                        {scriptData?.streaming
                           ? (streamingContent || t('tools.streamPlaceholder'))
                           : scriptNeedsTranslation
-                            ? (scriptTranslatedContent ?? result.data?.content)
-                            : result.data?.content}
-                        {result.data?.streaming && streamingContent ? (
+                            ? (scriptTranslatedContent ?? String(scriptData?.content ?? ''))
+                            : String(scriptData?.content ?? '')}
+                        {scriptData?.streaming && streamingContent ? (
                           <span className="inline-block w-2 h-4 ml-0.5 bg-indigo-500 animate-pulse" aria-hidden />
                         ) : null}
                       </pre>
@@ -1277,8 +1279,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                     <ul className="list-disc list-inside ml-2 space-y-1">
                       <li>总GMV: ¥{result.data.keyMetrics?.totalGMV?.toLocaleString()}</li>
                       <li>总订单数: {result.data.keyMetrics?.totalOrders?.toLocaleString()}</li>
-                      <li>成交订单: {result.data.keyMetrics?.completedOrders}</li>
-                      <li>平均转化率: {result.data.keyMetrics?.averageConversionRate}%</li>
+                      <li>成交订单: {String(result.data.keyMetrics?.completedOrders ?? '')}</li>
+                      <li>平均转化率: {String(result.data.keyMetrics?.averageConversionRate ?? '')}%</li>
                     </ul>
                   </div>
                   <div className="mt-2">
@@ -1341,19 +1343,29 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                   <div>
                     <p className="font-medium text-gray-800 mb-2">综合对比</p>
                     <ul className="list-disc list-inside ml-2">
-                      {(result.data.comparison?.insights ?? result.data.insights ?? []).map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
+                      {((() => {
+                        const d = result.data as unknown as Record<string, unknown>
+                        const comp = d?.comparison as { insights?: string[] } | undefined
+                        const ins = (d?.insights ?? []) as string[]
+                        return (comp?.insights ?? ins).map((item: string, i: number) => (
+                          <li key={i}>{item}</li>
+                        ))
+                      })())}
                     </ul>
-                    {(!result.data.comparison?.insights?.length && !result.data.insights?.length) && (
+                    {((() => {
+                      const d = result.data as unknown as Record<string, unknown>
+                      const comp = d?.comparison as { insights?: string[] } | undefined
+                      const ins = (d?.insights ?? []) as string[]
+                      return !(comp?.insights?.length) && !ins.length
+                    })()) && (
                       <p className="text-sm text-gray-500">暂无综合对比数据（功能待接入）</p>
                     )}
                   </div>
                   <div className="border-t border-gray-200 pt-4">
                     <p className="font-medium text-gray-800 mb-2">时效对比</p>
-                    {(result.data.efficiency?.comparison?.length ?? 0) > 0 ? (
+                    {((result.data as { efficiency?: { comparison?: unknown[]; recommendations?: string[] } }).efficiency?.comparison?.length ?? 0) > 0 ? (
                       <>
-                        {result.data.efficiency.comparison?.map((store, i) => {
+                        {(result.data as { efficiency?: { comparison?: unknown[] } }).efficiency?.comparison?.map((store, i) => {
                           const s = store as {
                             storeName?: string
                             name?: string
@@ -1380,11 +1392,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                             </div>
                           )
                         })}
-                        {(result.data.efficiency.recommendations?.length ?? 0) > 0 && (
+                        {((result.data as { efficiency?: { recommendations?: string[] } }).efficiency?.recommendations?.length ?? 0) > 0 && (
                           <div className="mt-2">
                             <strong>建议：</strong>
                             <ul className="list-disc list-inside ml-2">
-                              {result.data.efficiency.recommendations?.map((item, i) => (
+                              {(result.data as { efficiency?: { recommendations?: string[] } }).efficiency?.recommendations?.map((item, i) => (
                                 <li key={i}>{item}</li>
                               ))}
                             </ul>
@@ -1593,7 +1605,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               )}
             </div>
             {/* 全屏查看话术 */}
-            {result?.type === 'script' && typeof result.data?.content === 'string' && resultFullScreen && (
+            {result?.type === 'script' && typeof scriptData?.content === 'string' && resultFullScreen && (
               <div
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
                 onClick={() => setResultFullScreen(false)}
@@ -1609,7 +1621,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         type="button"
                         onClick={async () => {
                           try {
-                            const copyText = scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : result.data.content
+                            const copyText = scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)
                             await navigator.clipboard.writeText(copyText)
                             toast.success(t('tools.copyToClipboard'))
                           } catch {
@@ -1633,7 +1645,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                   </div>
                   <div className="flex-1 overflow-y-auto p-4">
                     <pre className="whitespace-pre-wrap leading-relaxed text-[15px] font-sans text-gray-800">
-                      {scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : result.data.content}
+                      {scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)}
                     </pre>
                   </div>
                 </div>
