@@ -42,11 +42,12 @@ export default function Login() {
       if (res.firstLoginEver) sessionStorage.setItem('showWelcome', '1')
       if (res.newIpFirstLogin) sessionStorage.setItem('showTutorial', '1')
       navigate('/', { replace: true })
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string; code?: string }
       const msg =
-        err?.response?.data?.error ||
-        err?.message ||
-        (err.code === 'ECONNABORTED' ? '请求超时，请确认后端已启动' : '登录失败，请检查邮箱和密码')
+        error.response?.data?.error ||
+        error.message ||
+        (error.code === 'ECONNABORTED' ? '请求超时，请确认后端已启动' : '登录失败，请检查邮箱和密码')
       setError(msg)
     }
   }

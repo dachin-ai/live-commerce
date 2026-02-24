@@ -7,11 +7,18 @@ import { getScriptLLMConfig, saveScriptLLMConfig, DEFAULT_SCRIPT_LLM_URL, DOUBAO
 import Sidebar from '../components/Sidebar'
 import { useToast } from '../contexts/ToastContext'
 
+type UsersQueryError = {
+  response?: {
+    status?: number
+    data?: { error?: string }
+  }
+}
+
 export default function AdminPanel() {
   const { t } = useTranslation()
   const toast = useToast()
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
-  const { data: users = [], isLoading } = useUsers()
+  const { data: users = [], isLoading, isError, error } = useUsers()
   const createUser = useCreateUser()
   const updateUser = useUpdateUser()
   const deleteUser = useDeleteUser()
@@ -88,8 +95,9 @@ export default function AdminPanel() {
     try {
       await deleteUser.mutateAsync(id)
       toast.success('用户已删除')
-    } catch (error: any) {
-      const errorMsg = error?.response?.data?.error || error?.message || '删除用户失败'
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } }; message?: string }
+      const errorMsg = err.response?.data?.error || err.message || '删除用户失败'
       toast.error(errorMsg)
     }
   }
@@ -130,11 +138,12 @@ export default function AdminPanel() {
           ? t('admin.llmConfigSavedAllUsers', { fallback: 'LLM 配置已保存，对所有用户生效。' })
           : t('admin.llmConfigSavedSelected', { fallback: 'LLM 配置已保存，仅选定用户可使用。' })
       )
-    } catch (e: any) {
-      toast.error(e?.response?.data?.error || '保存失败')
-  } finally {
-    setLlmSaving(false)
-  }
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      toast.error(err.response?.data?.error || '保存失败')
+    } finally {
+      setLlmSaving(false)
+    }
   }
 
   const toggleLlmUser = (userId: string) => {
@@ -295,6 +304,17 @@ export default function AdminPanel() {
 
         {isLoading ? (
           <div className="text-center py-8 text-gray-500">{t('common.loading')}</div>
+        ) : isError ? (
+          <div className="text-center py-8 px-4">
+            <p className="text-red-600 font-medium">
+              {(error as UsersQueryError | null)?.response?.status === 403
+                ? t('admin.error403', { fallback: '无权限，仅管理员或经理可访问用户管理。请确认当前登录账号角色。' })
+                : t('admin.errorLoadUsers', { fallback: '加载用户列表失败，请稍后重试。' })}
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              {(error as UsersQueryError | null)?.response?.data?.error && String(((error as UsersQueryError | null)?.response?.data?.error))}
+            </p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">

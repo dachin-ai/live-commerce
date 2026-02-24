@@ -13,7 +13,7 @@ router.use(authenticate)
 router.get('/', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
     const { storeId } = req.query // 支持按店铺过滤
 
     // 修改查询以包含店铺名称
@@ -63,7 +63,7 @@ function parseI18n(raw: any): Record<string, string> {
 router.post('/translate-for-locale', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
     const { storeId, locale } = req.body
     const targetLocale = typeof locale === 'string' ? locale.trim() || 'en-US' : 'en-US'
     console.log(`[翻译待办] userId=${userId}, isAdmin=${isAdmin}, storeId=${storeId || 'all'}, locale=${targetLocale}`)
@@ -159,7 +159,7 @@ router.put('/:id', async (req: AuthRequest, res) => {
     const { id } = req.params
     const { title, description, priority, status, storeId } = req.body
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
 
     let query = 'SELECT * FROM tasks WHERE id = ?'
     const params: any[] = [id]
@@ -204,7 +204,7 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
 
     let query = 'SELECT * FROM tasks WHERE id = ?'
     const params: any[] = [id]
@@ -233,7 +233,7 @@ router.post('/batch/complete', async (req: AuthRequest, res) => {
   try {
     const { taskIds } = req.body // 任务ID数组
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
 
     if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
       return res.status(400).json({ error: '任务ID列表不能为空' })
@@ -285,7 +285,7 @@ router.post('/batch/delete', async (req: AuthRequest, res) => {
   try {
     const { taskIds } = req.body // 任务ID数组
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
 
     if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
       return res.status(400).json({ error: '任务ID列表不能为空' })

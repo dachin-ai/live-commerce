@@ -30,8 +30,9 @@ export default function ForgotPassword() {
       const res = await requestPasswordReset(email.trim())
       setStep('code')
       if (res.code) setSentCode(res.code)
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || '请求失败')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      setError(error.response?.data?.error || error.message || '请求失败')
     } finally {
       setLoading(false)
     }
@@ -56,8 +57,9 @@ export default function ForgotPassword() {
     try {
       await resetPasswordWithCode(email.trim(), code.trim(), password)
       setSuccess(true)
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || '重置失败')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      setError(error.response?.data?.error || error.message || '重置失败')
     } finally {
       setLoading(false)
     }

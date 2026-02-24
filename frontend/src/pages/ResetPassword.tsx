@@ -36,8 +36,9 @@ export default function ResetPassword() {
     try {
       await resetPasswordWithToken(token, password)
       setSuccess(true)
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err?.message || '重置失败')
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      setError(error.response?.data?.error || error.message || '重置失败')
     } finally {
       setLoading(false)
     }

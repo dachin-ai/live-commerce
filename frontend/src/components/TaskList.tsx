@@ -137,12 +137,21 @@ export default function TaskList() {
       } else {
         toast.info(t('tasks.alreadyTranslated'))
       }
-    } catch (e: any) {
-      const isTimeout = e?.code === 'ECONNABORTED' || /timeout/i.test(String(e?.message))
-      const errorMsg = isTimeout
-        ? t('tasks.translateTimeout')
-        : (e?.response?.data?.error || e?.message || t('tasks.translateFailed'))
-      toast.error(errorMsg)
+    } catch (e) {
+      let isTimeout = false
+      let errorMessage: string | undefined
+      if (e && typeof e === 'object') {
+        const errorWithCode = e as { code?: unknown; message?: unknown; response?: { data?: { error?: string } } }
+        if (typeof errorWithCode.code === 'string' && errorWithCode.code === 'ECONNABORTED') {
+          isTimeout = true
+        }
+        if (typeof errorWithCode.message === 'string' && /timeout/i.test(errorWithCode.message)) {
+          isTimeout = true
+        }
+        errorMessage = errorWithCode.response?.data?.error || (typeof errorWithCode.message === 'string' ? errorWithCode.message : undefined)
+      }
+      const fallbackMessage = isTimeout ? t('tasks.translateTimeout') : t('tasks.translateFailed')
+      toast.error(errorMessage || fallbackMessage)
     } finally {
       translatingRef.current = false
       setTranslating(false)
@@ -229,10 +238,19 @@ export default function TaskList() {
       } else {
         toast.success(`成功生成 ${total} 个任务（LLM ${llmCount} 条，规则 ${ruleCount} 条）`)
       }
-    } catch (error: any) {
+    } catch (error) {
       console.error('生成任务失败:', error)
-      const errorMsg = error?.response?.data?.error || error?.message || '生成任务失败，请检查网络连接或登录状态'
-      toast.error(errorMsg)
+      let errorMsg: string | undefined
+      if (error && typeof error === 'object') {
+        if ('response' in error) {
+          const response = (error as { response?: { data?: { error?: string } } }).response
+          errorMsg = response?.data?.error
+        }
+        if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+          errorMsg = (error as { message?: string }).message
+        }
+      }
+      toast.error(errorMsg || '生成任务失败，请检查网络连接或登录状态')
     } finally {
       setRefreshing(false)
     }
@@ -408,33 +426,33 @@ export default function TaskList() {
                           }`}>
                             {getTaskDisplayTitle(task, currentLocale)}
                           </p>
-                          {(task as any).storeName && (
+                          {'storeName' in task && task.storeName && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
-                              {(task as any).storeName}
+                              {task.storeName}
                             </span>
                           )}
-                          {(task as any).assignedRole && (
+                          {'assignedRole' in task && task.assignedRole && (
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full shrink-0 ${
-                              (task as any).assignedRole === 'anchor' ? 'bg-purple-100 text-purple-700' :
-                              (task as any).assignedRole === 'operator' ? 'bg-green-100 text-green-700' :
+                              task.assignedRole === 'anchor' ? 'bg-purple-100 text-purple-700' :
+                              task.assignedRole === 'operator' ? 'bg-green-100 text-green-700' :
                               'bg-yellow-100 text-yellow-700'
                             }`}>
-                              {(task as any).assignedRole === 'anchor' ? `👤 ${t('tasks.assignedRoleAnchor')}` :
-                               (task as any).assignedRole === 'operator' ? `📊 ${t('tasks.assignedRoleOperator')}` : `🤝 ${t('tasks.assignedRoleBoth')}`}
+                              {task.assignedRole === 'anchor' ? `👤 ${t('tasks.assignedRoleAnchor')}` :
+                               task.assignedRole === 'operator' ? `📊 ${t('tasks.assignedRoleOperator')}` : `🤝 ${t('tasks.assignedRoleBoth')}`}
                             </span>
                           )}
-                          {(task as any).aiFeature && (
+                          {'aiFeature' in task && task.aiFeature && (
                             <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-xs font-medium rounded-full shrink-0">
-                              {(task as any).aiFeature === 'script' ? `🎤 ${t('tasks.aiFeatureScript')}` :
-                               (task as any).aiFeature === 'product_recommend' ? `📦 ${t('tasks.aiFeatureProductRecommend')}` :
-                               (task as any).aiFeature === 'time_recommend' ? `⏰ ${t('tasks.aiFeatureTimeRecommend')}` :
-                               (task as any).aiFeature === 'engagement' ? `💬 ${t('tasks.aiFeatureEngagement')}` :
-                               (task as any).aiFeature === 'content' ? `📝 ${t('tasks.aiFeatureContent')}` :
-                               (task as any).aiFeature === 'stats' ? `📈 ${t('tasks.aiFeatureStats')}` :
-                               (task as any).aiFeature === 'report' ? `📋 ${t('tasks.aiFeatureReport')}` :
-                               (task as any).aiFeature === 'pricing' ? `💰 ${t('tasks.aiFeaturePricing')}` :
-                               (task as any).aiFeature === 'schedule' ? `📅 ${t('tasks.aiFeatureSchedule')}` :
-                               (task as any).aiFeature === 'marketing' ? `📣 ${t('tasks.aiFeatureMarketing')}` :
+                              {task.aiFeature === 'script' ? `🎤 ${t('tasks.aiFeatureScript')}` :
+                               task.aiFeature === 'product_recommend' ? `📦 ${t('tasks.aiFeatureProductRecommend')}` :
+                               task.aiFeature === 'time_recommend' ? `⏰ ${t('tasks.aiFeatureTimeRecommend')}` :
+                               task.aiFeature === 'engagement' ? `💬 ${t('tasks.aiFeatureEngagement')}` :
+                               task.aiFeature === 'content' ? `📝 ${t('tasks.aiFeatureContent')}` :
+                               task.aiFeature === 'stats' ? `📈 ${t('tasks.aiFeatureStats')}` :
+                               task.aiFeature === 'report' ? `📋 ${t('tasks.aiFeatureReport')}` :
+                               task.aiFeature === 'pricing' ? `💰 ${t('tasks.aiFeaturePricing')}` :
+                               task.aiFeature === 'schedule' ? `📅 ${t('tasks.aiFeatureSchedule')}` :
+                               task.aiFeature === 'marketing' ? `📣 ${t('tasks.aiFeatureMarketing')}` :
                                `🛠️ ${t('tasks.aiFeatureTools')}`}
                             </span>
                           )}

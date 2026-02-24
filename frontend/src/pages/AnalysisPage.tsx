@@ -7,7 +7,7 @@ import { usePreferences, useUpdatePreferences } from '../services/preferences'
 import { useToast } from '../contexts/ToastContext'
 import Sidebar from '../components/Sidebar'
 import StoreSelector from '../components/StoreSelector'
-import StatCard from '../components/StatCard'
+import StatCard, { type StatCardProps } from '../components/StatCard'
 import Chart from '../components/Chart'
 import { convertAmount, getDisplaySymbol, getDisplayOptions } from '../utils/currency'
 import {
@@ -180,7 +180,7 @@ export default function AnalysisPage() {
     if (!stats) return []
     const rounds = Math.max(0, Math.min(1000000, stats.rounds || 0))
     const ordersCount = Math.max(0, Math.min(10000000, stats.completedOrders || stats.totalOrders || 0))
-    const statsMap: Record<DataItemType, any> = {
+    const statsMap: Record<DataItemType, StatCardProps> = {
       gmv: {
         title: t('stats.gmv'),
         value: formatCurrency(Math.max(0, convertValue(stats.totalGMV || 0))),

@@ -85,9 +85,10 @@ export default function LLMPage() {
       queryClient.invalidateQueries({ queryKey: ['llm-modes'] })
       toast.success('智能体偏好已保存')
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error || err?.message || '保存失败'
-      toast.error(err?.response?.status === 403 ? '仅管理员可修改智能体偏好' : msg)
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string }; status?: number }; message?: string }
+      const msg = error.response?.data?.error || error.message || '保存失败'
+      toast.error(error.response?.status === 403 ? '仅管理员可修改智能体偏好' : msg)
     },
   })
 

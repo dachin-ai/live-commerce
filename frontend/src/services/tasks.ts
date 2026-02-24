@@ -87,8 +87,9 @@ export async function translateTasksForLocale(
       { timeout: TRANSLATE_FOR_LOCALE_TIMEOUT_MS }
     )
     return data as unknown as { translated: number; total: number; error?: 'QUOTA_EXCEEDED'; message?: string }
-  } catch (e: any) {
-    const isTimeout = e?.code === 'ECONNABORTED' || /timeout/i.test(String(e?.message))
+  } catch (e: unknown) {
+    const error = e as { code?: string; message?: string }
+    const isTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(String(error.message))
     if (isTimeout) {
       console.warn('[translateTasksForLocale] 请求超时，请稍后重试或减少待办数量')
     }

@@ -119,6 +119,13 @@ export async function initDatabase() {
       console.warn('添加tasks.description_i18n时出错:', err?.message)
     }
   }
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN assignedRole TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column')) {
+      console.warn('添加tasks.assignedRole时出错:', err?.message)
+    }
+  }
 
   // 创建用户表
   await dbRun(`

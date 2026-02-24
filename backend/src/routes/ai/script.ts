@@ -558,7 +558,7 @@ router.post('/stream', async (req: express.Request, res: express.Response) => {
         userMessage = buildScriptToolCallMessage(userInput, storeContext, promotionInfo ?? undefined, countryCode)
         systemPrompt = ''
         toolCallOnly = true
-        console.log('[script/stream] scriptMode=coze_agent 仅发短消息（未跑市调）')
+        console.log('[script/stream] scriptMode=coze_agent 仅发短消息（未跑市调）productName=%s countryCode=%s storeId=%s', userInput.productName, countryCode || storeContext.region || '—', storeId || '—')
       } else {
         research = runScriptResearch(userInput, storeContext)
         if (useCozePrompts) {

@@ -3394,10 +3394,23 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
       const createdAt = new Date().toISOString()
 
       const taskSource = task.source ?? 'llm_intelligent'
-      await dbRun(
-        'INSERT INTO tasks (id, title, description, priority, status, userId, storeId, createdAt, aiFeature, source, assignedRole) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [id, titleToUse, task.description, task.priority, 'pending', taskOwnerId, storeId || null, createdAt, task.aiFeature ?? null, taskSource, task.assignedRole ?? null]
-      )
+      const desc = task.description != null ? String(task.description) : ''
+      const pri = (task.priority && String(task.priority).trim()) || 'normal'
+      try {
+        await dbRun(
+          'INSERT INTO tasks (id, title, description, priority, status, userId, storeId, createdAt, aiFeature, source, assignedRole) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [id, titleToUse, desc, pri, 'pending', taskOwnerId, storeId || null, createdAt, task.aiFeature ?? null, taskSource, task.assignedRole ?? null]
+        )
+      } catch (insertErr: any) {
+        if (insertErr?.message?.includes('assignedRole') || insertErr?.message?.includes('no such column')) {
+          await dbRun(
+            'INSERT INTO tasks (id, title, description, priority, status, userId, storeId, createdAt, aiFeature, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [id, titleToUse, desc, pri, 'pending', taskOwnerId, storeId || null, createdAt, task.aiFeature ?? null, taskSource]
+          )
+        } else {
+          throw insertErr
+        }
+      }
       existingBaseTitles.add(baseTitle)
       if (prefix.length >= TITLE_PREFIX_LEN) existingPrefixes.add(prefix)
 
@@ -3474,16 +3487,20 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
       },
     })
   } catch (error) {
+    const err = error instanceof Error ? error : new Error(String(error))
+    const message = err.message || '生成任务失败'
     logRequest({
       event: 'generate-tasks',
       requestId,
       userId: req.user?.userId,
       storeId: req.body?.storeId,
       durationMs: Date.now() - startTime,
-      error: error instanceof Error ? error.message : '生成任务失败',
+      error: message,
     })
-    console.error('生成任务失败:', error)
-    res.status(500).json({ error: '生成任务失败' })
+    console.error('生成任务失败:', message)
+    if (err.stack) console.error(err.stack)
+    const isProd = process.env.NODE_ENV === 'production'
+    res.status(500).json({ error: isProd ? '生成任务失败' : message })
   }
 })
 

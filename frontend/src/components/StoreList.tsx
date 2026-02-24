@@ -23,10 +23,19 @@ export default function StoreList({ onUploadStore }: StoreListProps = {}) {
     try {
       await deleteStore.mutateAsync(id)
       toast.success('店铺已删除')
-    } catch (error: any) {
+    } catch (error) {
       console.error('删除店铺失败:', error)
-      const errorMsg = error?.response?.data?.error || error?.message || '删除店铺失败，请检查网络连接或登录状态'
-      toast.error(errorMsg)
+      let errorMsg: string | undefined
+      if (error && typeof error === 'object') {
+        if ('response' in error) {
+          const response = (error as { response?: { data?: { error?: string } } }).response
+          errorMsg = response?.data?.error
+        }
+        if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+          errorMsg = (error as { message?: string }).message
+        }
+      }
+      toast.error(errorMsg || '删除店铺失败，请检查网络连接或登录状态')
     }
   }
 

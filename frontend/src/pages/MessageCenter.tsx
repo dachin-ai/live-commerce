@@ -2,11 +2,25 @@ import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { ArrowLeft, Mail, FileText, MessageCircle, Bell, Sparkles, Bug, Rocket } from 'lucide-react'
-import { useVersionLogs } from '../services/version-logs'
-import { useMessages, useMarkMessageRead, useMarkAllMessagesRead, useUnreadCount } from '../services/messages'
+import { useVersionLogs, type VersionLog } from '../services/version-logs'
+import { useMessages, useMarkMessageRead, useMarkAllMessagesRead, useUnreadCount, type InAppMessage } from '../services/messages'
 import { useToast } from '../contexts/ToastContext'
 
 type Tab = 'all' | 'version' | 'feedback_reply' | 'system'
+
+type MessageListItemBase = {
+  id: string
+  type: 'version' | 'feedback_reply' | 'system'
+  title: string
+  content: string
+  createdAt: string
+  readAt: string | null
+  linkUrl: string | null
+  version?: string
+  versionType?: VersionLog['type']
+}
+
+type MessageListItemWithSort = MessageListItemBase & { _sort: number }
 
 export default function MessageCenter() {
   const { t } = useTranslation()
@@ -25,11 +39,18 @@ export default function MessageCenter() {
   const handleMarkAllRead = () => {
     markAllRead.mutate(undefined, {
       onSuccess: () => toast.success(t('messageCenter.markAllReadSuccess')),
-      onError: (err: any) => toast.error(err?.response?.data?.error || t('feedback.submitFailed')),
+      onError: (err) => {
+        let errorMessage: string | undefined
+        if (err && typeof err === 'object' && 'response' in err) {
+          const response = (err as { response?: { data?: { error?: string } } }).response
+          errorMessage = response?.data?.error
+        }
+        toast.error(errorMessage || t('feedback.submitFailed'))
+      },
     })
   }
 
-  const versionAsItems = useMemo(
+  const versionAsItems = useMemo<MessageListItemBase[]>(
     () =>
       versionLogs.map((log) => ({
         id: `version-${log.id}`,
@@ -45,7 +66,7 @@ export default function MessageCenter() {
     [versionLogs]
   )
 
-  const mergedList = useMemo(() => {
+  const mergedList = useMemo<MessageListItemBase[]>(() => {
     if (tab === 'version') return versionAsItems
     if (tab === 'feedback_reply' || tab === 'system') {
       return messages.map((m) => ({
@@ -58,9 +79,9 @@ export default function MessageCenter() {
         linkUrl: m.linkUrl,
       }))
     }
-    const list = [
-      ...versionAsItems.map((v) => ({ ...v, _sort: new Date(v.createdAt).getTime() })),
-      ...messages.map((m) => ({
+    const list: MessageListItemWithSort[] = [
+      ...versionAsItems.map<MessageListItemWithSort>((v) => ({ ...v, _sort: new Date(v.createdAt).getTime() })),
+      ...messages.map<MessageListItemWithSort>((m: InAppMessage) => ({
         id: m.id,
         type: m.type as 'feedback_reply' | 'system',
         title: m.title,
@@ -71,8 +92,18 @@ export default function MessageCenter() {
         _sort: new Date(m.createdAt).getTime(),
       })),
     ]
-    list.sort((a, b) => (b as any)._sort - (a as any)._sort)
-    return list.map(({ _sort, ...x }) => x)
+    list.sort((a, b) => b._sort - a._sort)
+    return list.map<MessageListItemBase>((item) => ({
+      id: item.id,
+      type: item.type,
+      title: item.title,
+      content: item.content,
+      createdAt: item.createdAt,
+      readAt: item.readAt,
+      linkUrl: item.linkUrl,
+      version: item.version,
+      versionType: item.versionType,
+    }))
   }, [tab, versionAsItems, messages])
 
   const isLoading = tab === 'all' ? versionLoading || messagesLoading : tab === 'version' ? versionLoading : messagesLoading
@@ -168,7 +199,7 @@ export default function MessageCenter() {
             </div>
           ) : (
             <ul className="divide-y divide-gray-100">
-              {mergedList.map((item: any) => {
+              {mergedList.map((item) => {
                 const Icon = getIcon(item.type, item.versionType)
                 const isUnread = item.readAt == null && item.type !== 'version'
                 return (

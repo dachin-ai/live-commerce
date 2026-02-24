@@ -48,8 +48,9 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
         const url = await uploadFeedbackImage(file)
         setImageUrls(prev => [...prev, url].slice(0, max))
       }
-    } catch (err: any) {
-      toast.error(err?.message || t('feedback.submitFailed'))
+    } catch (err: unknown) {
+      const error = err as { message?: string }
+      toast.error(error.message || t('feedback.submitFailed'))
     } finally {
       setUploading(false)
       e.target.value = ''
@@ -79,8 +80,9 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
       })
       toast.success(t('feedback.submitSuccess'))
       onClose()
-    } catch (err: any) {
-      toast.error(err?.response?.data?.error || t('feedback.submitFailed'))
+    } catch (err: unknown) {
+      const error = err as { response?: { data?: { error?: string } } }
+      toast.error(error.response?.data?.error || t('feedback.submitFailed'))
     } finally {
       setSubmitting(false)
     }

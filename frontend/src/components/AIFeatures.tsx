@@ -42,13 +42,20 @@ import {
   type GenerateTasksMetadata,
   type ScriptType,
   type ScriptLanguage,
+  type ReportResult,
+  type MarketAnalysisResult,
+  type RecommendationsResult,
+  type StoreComparisonResult,
+  type StatsResult,
+  type MarketResearchResult,
+  type StoreEfficiencyComparisonResult,
 } from '../services/ai'
 import { useMaterials, useCreateMaterial, useDeleteMaterial } from '../services/materials'
 import { useStores } from '../services/stores'
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useToast } from '../contexts/ToastContext'
-import { useTasks, useUpdateTask, useBatchCompleteTasks, useCompleteAllTasks } from '../services/tasks'
+import { useTasks, useUpdateTask, useBatchCompleteTasks, useCompleteAllTasks, type Task } from '../services/tasks'
 import { useQueryClient } from '@tanstack/react-query'
 
 const SCRIPT_FORM_STORAGE_KEY = 'lvbcsym_script_form_draft'
@@ -139,15 +146,25 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const [loading, setLoading] = useState<string | null>(null)
   const [resultExpanded, setResultExpanded] = useState(false)
   const [resultFullScreen, setResultFullScreen] = useState(false)
-  
-  // 从 localStorage 恢复上次的工具结果
-  const loadToolsResults = (): Record<string, { type: string; data: any }> => {
+
+  type ToolResultData =
+    | ({ type: 'script' } & Record<string, unknown>)
+    | ({ type: 'report'; data: ReportResult & { insights?: string[] } })
+    | ({ type: 'analysis'; data: MarketAnalysisResult & { trends: Array<{ product: string; trend: string; change: string }> } })
+    | ({ type: 'recommendations'; data: RecommendationsResult & { map?: unknown } })
+    | ({ type: 'stats'; data: StatsResult & { summary?: string; keyMetrics?: Record<string, unknown>; trends?: string[] } })
+    | ({ type: 'compare'; data: StoreComparisonResult & { efficiency?: { comparison?: Array<Record<string, unknown>>; recommendations?: string[] }; insights?: string[] } })
+    | ({ type: 'research'; data: MarketResearchResult & { summary?: string; trends?: string[]; opportunities?: string[] } })
+    | ({ type: 'assistant'; data: { message: string; tasks: Task[]; urgentCount: number; totalCount: number } })
+
+  type StoredToolResult = { type: string; data: unknown }
+
+  const loadToolsResults = (): Record<string, StoredToolResult> => {
     try {
       const raw = localStorage.getItem(TOOLS_RESULTS_STORAGE_KEY)
       if (!raw) return {}
-      const parsed = JSON.parse(raw) as Record<string, { type: string; data: any }>
-      // 过滤掉 streaming 状态的结果（避免恢复未完成的流式生成）
-      const filtered: Record<string, { type: string; data: any }> = {}
+      const parsed = JSON.parse(raw) as Record<string, StoredToolResult>
+      const filtered: Record<string, StoredToolResult> = {}
       for (const [k, v] of Object.entries(parsed)) {
         if (v?.data?.streaming) continue // 跳过流式生成中的结果
         filtered[k] = v
@@ -158,15 +175,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     }
   }
   
-  const [resultsByTool, setResultsByTool] = useState<Record<string, { type: string; data: any }>>(loadToolsResults)
-  const result = propToolId ? (resultsByTool[propToolId] ?? null) : null
-  
-  const setResultForTool = (toolId: string, value: { type: string; data: any } | null) => {
+  const [resultsByTool, setResultsByTool] = useState<Record<string, StoredToolResult>>(loadToolsResults)
+  const result = (propToolId ? (resultsByTool[propToolId] ?? null) : null) as ToolResultData | null
+
+  const setResultForTool = (toolId: string, value: ToolResultData | null) => {
     if (value === null) {
       setResultsByTool((prev) => {
         const next = { ...prev }
         delete next[toolId]
-        // 持久化到 localStorage
         try {
           localStorage.setItem(TOOLS_RESULTS_STORAGE_KEY, JSON.stringify(next))
         } catch {
@@ -177,8 +193,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     } else {
       setResultsByTool((prev) => {
         const next = { ...prev, [toolId]: value }
-        // 持久化到 localStorage（跳过 streaming 状态，避免保存未完成的流式生成）
-        if (!value.data?.streaming) {
+        if (!(value.data as { streaming?: boolean } | undefined)?.streaming) {
           try {
             localStorage.setItem(TOOLS_RESULTS_STORAGE_KEY, JSON.stringify(next))
           } catch {
@@ -291,16 +306,17 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       .then((translated) => {
         if (scriptTranslationInFlight.current === keyForThisRequest) setScriptTranslatedContent(translated)
       })
-      .catch((err) => {
+      .catch((err: unknown) => {
+        const error = err as { response?: { status?: number; data?: { error?: string } }; message?: string }
         if (scriptTranslationInFlight.current === keyForThisRequest) {
           setScriptTranslatedContent(null)
           setScriptTranslationCacheKey('')
         }
-        const status = err?.response?.status
+        const status = error.response?.status
         const msg =
           status === 404
             ? t('tools.translation404Hint', { fallback: 'Translation API not found (404). Please restart the backend server (e.g. npm run dev in backend folder).' })
-            : err?.response?.data?.error || err?.message || 'Translation failed'
+            : error.response?.data?.error || error.message || 'Translation failed'
         toast.error(typeof msg === 'string' && msg.length > 100 ? msg.slice(0, 100) + '…' : msg)
       })
       .finally(() => {
@@ -334,9 +350,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         try {
           const report = await generateReport({ storeId: selectedStore.id, period: 'week' })
           setResultForTool('report', { type: 'report', data: report })
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('生成报告失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '生成报告失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '生成报告失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -354,10 +371,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         setLoading('market-analysis')
         try {
           const analysis = await analyzeMarket({ category: '全品类', timeframe: '7days' })
-          setResultForTool('analysis', { type: 'analysis', data: analysis })
-        } catch (error: any) {
+          setResultForTool('analysis', { type: 'analysis', data: analysis as MarketAnalysisResult & { trends: Array<{ product: string; trend: string; change: string }> } })
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('市场分析失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '市场分析失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '市场分析失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -380,9 +398,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         try {
           const recommendations = await getRecommendations({ storeId: selectedStore.id, count: 5 })
           setResultForTool('recommendations', { type: 'recommendations', data: recommendations })
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('商品推荐失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '商品推荐失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '商品推荐失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -404,10 +423,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         setLoading('stats')
         try {
           const stats = await generateStats({ storeId: selectedStore.id, period: 'week' })
-          setResultForTool('stats', { type: 'stats', data: stats })
-        } catch (error: any) {
+          setResultForTool('stats', { type: 'stats', data: stats as StatsResult & { summary?: string; keyMetrics?: Record<string, unknown>; trends?: string[] } })
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('数据统计失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '数据统计失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '数据统计失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -428,10 +448,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         setLoading('speech')
         try {
           const script = await generateScript({ topic: '直播话术', duration: 30, storeId: selectedStore.id })
-          setResultForTool('script', { type: 'script', data: script })
-        } catch (error: any) {
+          setResultForTool('script', { type: 'script', data: { ...script, storeId: selectedStore.id } })
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('话术生成失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '话术生成失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '话术生成失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -468,11 +489,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
           ])
           setResultForTool('compare', {
             type: 'compare',
-            data: { comparison, efficiency },
+            data: { comparison, efficiency } as StoreComparisonResult & {
+              efficiency: StoreEfficiencyComparisonResult
+            },
           })
-        } catch (error: any) {
+        } catch (error: unknown) {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('店铺对比失败:', error)
-          const errorMsg = error?.response?.data?.error || error?.message || '店铺对比失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || '店铺对比失败，请检查网络连接或登录状态'
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -492,20 +516,19 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         }
         setLoading('assistant')
         try {
-        // AI助手直接显示待办事项列表，支持快速查看和操作
-        const pendingTasks = tasks.filter((t: any) => t.status === 'pending')
-        const urgentTasks = pendingTasks.filter((t: any) => t.priority === 'urgent')
-        
-        setResultForTool('assistant', { 
-            type: 'assistant', 
-            data: { 
+          const pendingTasks = tasks.filter((t) => t.status === 'pending')
+          const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
+
+          setResultForTool('assistant', {
+            type: 'assistant',
+            data: {
               message: `待办任务管理 (共 ${pendingTasks.length} 个)`,
               tasks: pendingTasks,
               urgentCount: urgentTasks.length,
               totalCount: pendingTasks.length,
-            } 
+            },
           })
-        toast.success('AI助手已激活，正在显示待办任务')
+          toast.success('AI助手已激活，正在显示待办任务')
         } finally {
           setLoading(null)
         }
@@ -535,9 +558,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       setShowUploadModal(false)
       setSelectedFile(null)
       toast.success('上传成功')
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } }; message?: string }
       console.error('上传失败:', error)
-      const errorMsg = error?.response?.data?.error || error?.message || '上传失败，请检查网络连接或登录状态'
+      const errorMsg = err.response?.data?.error || err.message || '上传失败，请检查网络连接或登录状态'
       toast.error(errorMsg)
     }
   }
@@ -546,9 +570,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     if (!confirm('确定要删除这个素材吗？')) return
     try {
       await deleteMaterial.mutateAsync(id)
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } }; message?: string }
       console.error('删除失败:', error)
-      const errorMsg = error?.response?.data?.error || error?.message || '删除失败，请检查网络连接或登录状态'
+      const errorMsg = err.response?.data?.error || err.message || '删除失败，请检查网络连接或登录状态'
       toast.error(errorMsg)
     }
   }
@@ -900,10 +925,19 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                               },
                             }
                           )
-                        } catch (error: any) {
+                        } catch (error) {
                           console.error('生成脚本失败:', error)
-                          const errorMsg = error?.response?.data?.error || error?.message || '生成脚本失败，请检查网络连接或登录状态'
-                          toast.error(errorMsg)
+                          let errorMsg: string | undefined
+                          if (error && typeof error === 'object') {
+                            if ('response' in error) {
+                              const response = (error as { response?: { data?: { error?: string } } }).response
+                              errorMsg = response?.data?.error
+                            }
+                            if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+                              errorMsg = (error as { message?: string }).message
+                            }
+                          }
+                          toast.error(errorMsg || '生成脚本失败，请检查网络连接或登录状态')
                         } finally {
                           if (!simulatingStreamRef.current) setLoading(null)
                         }
@@ -1156,20 +1190,23 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         type="button"
                         onClick={async () => {
                           setScriptTranslationLoading(true)
-                          try {
-                            const translated = await translateLongTextForDisplay(scriptContent, locale, 'zh-CN')
-                            setScriptTranslatedContent(translated)
-                            setScriptTranslationCacheKey(scriptTranslationKey)
-                          } catch (e: any) {
-                            const status = e?.response?.status
-                            const msg =
-                              status === 404
-                                ? t('tools.translation404Hint', { fallback: 'Translation API not found. Please restart the backend server.' })
-                                : e?.response?.data?.error || e?.message || t('tools.translationFailed', { fallback: 'Translation failed. Please try again.' })
-                            toast.error(typeof msg === 'string' && msg.length > 100 ? msg.slice(0, 100) + '…' : msg)
-                          } finally {
-                            setScriptTranslationLoading(false)
-                          }
+                        try {
+                          const translated = await translateLongTextForDisplay(scriptContent, locale, 'zh-CN')
+                          setScriptTranslatedContent(translated)
+                          setScriptTranslationCacheKey(scriptTranslationKey)
+                        } catch (e: unknown) {
+                          const error = e as { response?: { status?: number; data?: { error?: string } }; message?: string }
+                          const status = error.response?.status
+                          const msg =
+                            status === 404
+                              ? t('tools.translation404Hint', { fallback: 'Translation API not found. Please restart the backend server.' })
+                              : error.response?.data?.error ||
+                                error.message ||
+                                t('tools.translationFailed', { fallback: 'Translation failed. Please try again.' })
+                          toast.error(typeof msg === 'string' && msg.length > 100 ? msg.slice(0, 100) + '…' : msg)
+                        } finally {
+                          setScriptTranslationLoading(false)
+                        }
                         }}
                         className="text-sm px-3 py-1.5 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 font-medium"
                       >
@@ -1225,7 +1262,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                   <div className="mt-2">
                     <strong>洞察：</strong>
                     <ul className="list-disc list-inside ml-2">
-                      {result.data.insights.map((item: string, i: number) => (
+                      {result.data.insights?.map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
                     </ul>
@@ -1258,7 +1295,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                 <div>
                   <p className="mb-2">趋势分析：</p>
                   <ul className="list-disc list-inside ml-2">
-                    {result.data.trends.map((t: any, i: number) => (
+                    {result.data.trends.map((t, i) => (
                       <li key={i}>
                         {t.product}: {t.trend} ({t.change})
                       </li>
@@ -1289,11 +1326,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               )}
               {result.type === 'recommendations' && (
                 <div>
-                  {result.data.map((item: any, i: number) => (
+                  {(result.data.items ?? []).map((item, i) => (
                     <div key={i} className="mb-2 p-2 bg-white rounded">
-                      <strong>{item.name}</strong> - {item.category}
+                      <strong>{(item as { name?: string }).name}</strong>{' '}
+                      {(item as { category?: string }).category && <>- {(item as { category?: string }).category}</>}
                       <br />
-                      <span className="text-xs text-gray-600">{item.reason}</span>
+                      <span className="text-xs text-gray-600">{(item as { reason?: string }).reason}</span>
                     </div>
                   ))}
                 </div>
@@ -1303,7 +1341,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                   <div>
                     <p className="font-medium text-gray-800 mb-2">综合对比</p>
                     <ul className="list-disc list-inside ml-2">
-                      {(result.data.comparison?.insights ?? result.data.insights ?? []).map((item: string, i: number) => (
+                      {(result.data.comparison?.insights ?? result.data.insights ?? []).map((item, i) => (
                         <li key={i}>{item}</li>
                       ))}
                     </ul>
@@ -1313,27 +1351,40 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                   </div>
                   <div className="border-t border-gray-200 pt-4">
                     <p className="font-medium text-gray-800 mb-2">时效对比</p>
-                    {(result.data.efficiency?.comparison?.length > 0) ? (
+                    {(result.data.efficiency?.comparison?.length ?? 0) > 0 ? (
                       <>
-                        {result.data.efficiency.comparison.map((store: any, i: number) => (
-                          <div key={i} className="mb-3 p-2 bg-white rounded border border-gray-100">
-                            <strong>{store.storeName ?? store.name}</strong>
-                            {store.score != null && <span className="text-gray-600"> (评分: {store.score})</span>}
-                            {store.metrics && (
-                              <ul className="list-disc list-inside ml-2 mt-1 text-xs text-gray-600">
-                                {store.metrics.responseTime != null && <li>响应时间: {store.metrics.responseTime}</li>}
-                                {store.metrics.orderProcessingTime != null && <li>订单处理时间: {store.metrics.orderProcessingTime}</li>}
-                                {store.metrics.customerServiceTime != null && <li>客服时间: {store.metrics.customerServiceTime}</li>}
-                                {store.metrics.deliveryTime != null && <li>配送时间: {store.metrics.deliveryTime}</li>}
-                              </ul>
-                            )}
-                          </div>
-                        ))}
-                        {result.data.efficiency.recommendations?.length > 0 && (
+                        {result.data.efficiency.comparison?.map((store, i) => {
+                          const s = store as {
+                            storeName?: string
+                            name?: string
+                            score?: number
+                            metrics?: {
+                              responseTime?: string
+                              orderProcessingTime?: string
+                              customerServiceTime?: string
+                              deliveryTime?: string
+                            }
+                          }
+                          return (
+                            <div key={i} className="mb-3 p-2 bg-white rounded border border-gray-100">
+                              <strong>{s.storeName ?? s.name}</strong>
+                              {s.score != null && <span className="text-gray-600"> (评分: {s.score})</span>}
+                              {s.metrics && (
+                                <ul className="list-disc list-inside ml-2 mt-1 text-xs text-gray-600">
+                                  {s.metrics.responseTime != null && <li>响应时间: {s.metrics.responseTime}</li>}
+                                  {s.metrics.orderProcessingTime != null && <li>订单处理时间: {s.metrics.orderProcessingTime}</li>}
+                                  {s.metrics.customerServiceTime != null && <li>客服时间: {s.metrics.customerServiceTime}</li>}
+                                  {s.metrics.deliveryTime != null && <li>配送时间: {s.metrics.deliveryTime}</li>}
+                                </ul>
+                              )}
+                            </div>
+                          )
+                        })}
+                        {(result.data.efficiency.recommendations?.length ?? 0) > 0 && (
                           <div className="mt-2">
                             <strong>建议：</strong>
                             <ul className="list-disc list-inside ml-2">
-                              {result.data.efficiency.recommendations.map((item: string, i: number) => (
+                              {result.data.efficiency.recommendations?.map((item, i) => (
                                 <li key={i}>{item}</li>
                               ))}
                             </ul>
@@ -1363,8 +1414,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           await queryClient.invalidateQueries({ queryKey: ['tasks'] })
                           await refetchTasks()
                           const updatedTasks = await refetchTasks()
-                          const pendingTasks = (updatedTasks.data || []).filter((t: any) => t.status === 'pending')
-                          const urgentTasks = pendingTasks.filter((t: any) => t.priority === 'urgent')
+                          const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
+                          const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
                           setResultForTool('assistant', { 
                             type: 'assistant', 
                             data: { 
@@ -1387,9 +1438,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           } else {
                             toast.success(`成功生成 ${total} 个新任务！`)
                           }
-                        } catch (error: any) {
+                        } catch (error: unknown) {
+                          const err = error as { response?: { data?: { error?: string } }; message?: string }
                           console.error('生成任务失败:', error)
-                          const errorMsg = error?.response?.data?.error || error?.message || '生成任务失败'
+                          const errorMsg = err.response?.data?.error || err.message || '生成任务失败'
                           toast.error(errorMsg)
                         } finally {
                           setRefreshing(false)
@@ -1416,8 +1468,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           await completeAllTasks.mutateAsync(selectedStore.id)
                           await queryClient.invalidateQueries({ queryKey: ['tasks'] })
                           const updatedTasks = await refetchTasks()
-                          const pendingTasks = (updatedTasks.data || []).filter((t: any) => t.status === 'pending')
-                          const urgentTasks = pendingTasks.filter((t: any) => t.priority === 'urgent')
+                          const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
+                          const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
                           setResultForTool('assistant', { 
                             type: 'assistant', 
                             data: { 
@@ -1428,9 +1480,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                             } 
                           })
                           toast.success('所有任务已完成！')
-                        } catch (error: any) {
+                        } catch (error: unknown) {
+                          const err = error as { response?: { data?: { error?: string } }; message?: string }
                           console.error('一键完成失败:', error)
-                          const errorMsg = error?.response?.data?.error || error?.message || '一键完成失败'
+                          const errorMsg = err.response?.data?.error || err.message || '一键完成失败'
                           toast.error(errorMsg)
                         } finally {
                           setCompletingAll(false)
@@ -1463,7 +1516,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         <p className="text-xs text-gray-400 mt-1">点击"智能生成"创建任务</p>
                       </div>
                     ) : (
-                      result.data.tasks?.map((task: any) => (
+                      result.data.tasks?.map((task) => (
                         <div
                           key={task.id}
                           className={`flex items-start gap-3 p-3 rounded-lg border transition-all hover:shadow-sm ${
@@ -1499,9 +1552,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                                 await updateTask.mutateAsync({ id: task.id, status: 'completed' })
                                 await queryClient.invalidateQueries({ queryKey: ['tasks'] })
                                 const updatedTasks = await refetchTasks()
-                                // 更新AI助手显示的任务列表
-                                const pendingTasks = (updatedTasks.data || []).filter((t: any) => t.status === 'pending')
-                                const urgentTasks = pendingTasks.filter((t: any) => t.priority === 'urgent')
+                                const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
+                                const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
                                 setResultForTool('assistant', { 
                                   type: 'assistant', 
                                   data: { 

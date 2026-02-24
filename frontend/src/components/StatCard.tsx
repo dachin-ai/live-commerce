@@ -2,7 +2,7 @@ import { LucideIcon } from 'lucide-react'
 import { TrendingUp, TrendingDown } from 'lucide-react'
 import { useLayoutPreferences } from '../hooks/useLayoutPreferences'
 
-interface StatCardProps {
+export interface StatCardProps {
   title: string
   value: string | number
   subtitle?: string

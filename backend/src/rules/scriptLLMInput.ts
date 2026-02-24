@@ -149,6 +149,7 @@ export function buildScriptToolCallMessage(
     : (scriptTypeConfig.segmentHint ? `${scriptTypeConfig.segmentHint}。` : '只输出当前指定单环节话术。')
   const query = [
     '任务：直播带货话术生成（非政策分析）。',
+    '请严格仅根据下列参数生成话术，勿使用店铺名称、品类或其它未列出的信息。',
     stageRequirement,
     '禁止输出图表、Mermaid、仪表盘、表格、政策对比或分析报告。',
     `请基于以下参数生成：${brackets.join('')}`,

@@ -59,8 +59,9 @@ export default function FeedbackManagement() {
       setReplyText('')
       toast.success(t('feedbackManage.replySuccess'))
     },
-    onError: (err: any) => {
-      const msg = err?.response?.data?.error || err?.message || t('feedback.submitFailed')
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      const msg = error.response?.data?.error || error.message || t('feedback.submitFailed')
       toast.error(msg)
     },
   })
@@ -172,9 +173,14 @@ export default function FeedbackManagement() {
             <div className="flex flex-col items-center justify-center py-20 text-gray-600">
               <p className="font-medium mb-2">加载失败</p>
               <p className="text-sm text-gray-500 mb-4">
-                {(error as any)?.response?.status === 403
-                  ? '仅管理员/经理可查看反馈列表，请使用对应账号登录。'
-                  : (error as any)?.response?.data?.error || (error as Error)?.message || '请稍后重试'}
+                {(() => {
+                  const err = error as { response?: { status?: number; data?: { error?: string } } } | Error | null
+                  const response = (err as { response?: { status?: number; data?: { error?: string } } })?.response
+                  if (response?.status === 403) {
+                    return '仅管理员/经理可查看反馈列表，请使用对应账号登录。'
+                  }
+                  return response?.data?.error || (err as Error)?.message || '请稍后重试'
+                })()}
               </p>
               <button
                 type="button"

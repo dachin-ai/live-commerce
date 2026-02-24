@@ -64,19 +64,25 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
       const result = await importTikTokData(importTarget.id, selectedFile)
       setImportResult(result)
       toast.success(result?.message || '数据导入成功')
-      
       if (onSuccess) {
         onSuccess(result)
       }
-      
-      // 3秒后自动关闭
       setTimeout(() => {
         handleClose()
       }, 3000)
-    } catch (error: any) {
+    } catch (error) {
       console.error('导入失败:', error)
-      const errorMsg = error?.response?.data?.message || error?.response?.data?.error || error?.message || '导入失败，请检查文件格式'
-      toast.error(errorMsg)
+      let errorMsg: string | undefined
+      if (error && typeof error === 'object') {
+        if ('response' in error) {
+          const response = (error as { response?: { data?: { message?: string; error?: string } } }).response
+          errorMsg = response?.data?.message || response?.data?.error
+        }
+        if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+          errorMsg = (error as { message?: string }).message
+        }
+      }
+      toast.error(errorMsg || '导入失败，请检查文件格式')
     } finally {
       setUploading(false)
     }

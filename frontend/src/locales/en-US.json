@@ -454,6 +454,8 @@
     "fillRequired": "Please fill all required fields",
     "createUserFailed": "Failed to create user",
     "active": "Active",
-    "inactive": "Inactive"
+    "inactive": "Inactive",
+    "error403": "No permission. Only admin or manager can access user management. Please confirm your role.",
+    "errorLoadUsers": "Failed to load user list. Please try again later."
   }
 }

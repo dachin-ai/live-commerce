@@ -16,13 +16,14 @@ const ROLE_LABELS: Record<string, string> = {
 export default function WorkflowPage() {
   try {
     return <WorkflowPageContent />
-  } catch (error: any) {
+  } catch (error) {
+    const message = error instanceof Error ? error.message : '未知错误'
     console.error('WorkflowPage 渲染错误:', error)
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-2xl font-bold text-red-600 mb-4">工作流页面加载失败</h1>
-          <p className="text-gray-700 mb-4">{error?.message || '未知错误'}</p>
+          <p className="text-gray-700 mb-4">{message}</p>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
@@ -74,11 +75,13 @@ function WorkflowPageContent() {
     queryFn: async () => {
       try {
         return await listRounds()
-      } catch (e: any) {
+      } catch (e) {
         console.error('获取轮次列表失败:', e)
-        // 如果 API 失败（如 403），返回空数组而不是抛出错误
-        if (e?.response?.status === 403 || e?.response?.status === 401) {
-          return []
+        if (e && typeof e === 'object' && 'response' in e) {
+          const response = (e as { response?: { status?: number } }).response
+          if (response?.status === 403 || response?.status === 401) {
+            return []
+          }
         }
         throw e
       }
@@ -91,7 +94,7 @@ function WorkflowPageContent() {
     queryFn: async () => {
       try {
         return await getRoundDetail(selectedRoundId!)
-      } catch (e: any) {
+      } catch (e) {
         console.error('获取轮次详情失败:', e)
         throw e
       }

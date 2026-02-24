@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useLiveStats, type LiveStats } from '../services/stats'
 import { useCurrentUser } from '../services/auth'
 import { useStore } from '../contexts/StoreContext'
-import StatCard from '../components/StatCard'
+import StatCard, { type StatCardProps } from '../components/StatCard'
 import StoreList from '../components/StoreList'
 import TaskList from '../components/TaskList'
 import Sidebar from '../components/Sidebar'
@@ -205,7 +205,7 @@ export default function Dashboard() {
     const rounds = Math.max(0, Math.min(1000000, s.rounds || 0))
     const ordersCount = Math.max(0, Math.min(10000000, s.completedOrders || s.totalOrders || 0))
 
-    const statsMap: Record<DataItemType, any> = {
+    const statsMap: Record<DataItemType, StatCardProps> = {
       gmv: {
         title: t('stats.gmv'),
         value: formatCurrency(Math.max(0, s.totalGMV || 0)),
@@ -534,8 +534,9 @@ export default function Dashboard() {
                         try {
                           await downloadDataExport('csv')
                           toast.success(t('dashboard.exportStartedCSV'))
-                        } catch (e: any) {
-                          const msg = e?.response?.data?.error || e?.message || t('dashboard.exportFailed')
+                        } catch (e: unknown) {
+                          const err = e as { response?: { data?: { error?: string } }; message?: string }
+                          const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
                           toast.error(msg)
                         } finally {
                           setExporting(false)
@@ -553,8 +554,9 @@ export default function Dashboard() {
                         try {
                           await downloadDataExport('xlsx')
                           toast.success(t('dashboard.exportStartedExcel'))
-                        } catch (e: any) {
-                          const msg = e?.response?.data?.error || e?.message || t('dashboard.exportFailed')
+                        } catch (e: unknown) {
+                          const err = e as { response?: { data?: { error?: string } }; message?: string }
+                          const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
                           toast.error(msg)
                         } finally {
                           setExporting(false)
@@ -575,8 +577,9 @@ export default function Dashboard() {
                             try {
                               await downloadDataExport('csv', selectedStore.id)
                               toast.success(t('dashboard.exportStartedCSVCurrent'))
-                            } catch (e: any) {
-                              const msg = e?.response?.data?.error || e?.message || t('dashboard.exportFailed')
+                            } catch (e: unknown) {
+                              const err = e as { response?: { data?: { error?: string } }; message?: string }
+                              const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
                               toast.error(msg)
                             } finally {
                               setExporting(false)
@@ -594,8 +597,9 @@ export default function Dashboard() {
                             try {
                               await downloadDataExport('xlsx', selectedStore.id)
                               toast.success(t('dashboard.exportStartedExcelCurrent'))
-                            } catch (e: any) {
-                              const msg = e?.response?.data?.error || e?.message || t('dashboard.exportFailed')
+                            } catch (e: unknown) {
+                              const err = e as { response?: { data?: { error?: string } }; message?: string }
+                              const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
                               toast.error(msg)
                             } finally {
                               setExporting(false)

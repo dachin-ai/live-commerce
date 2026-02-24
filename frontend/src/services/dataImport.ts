@@ -9,8 +9,7 @@ export interface DataImportResult {
     totalDuration: number
     totalViewers: number
     rounds: number
-    [key: string]: any
-  }
+  } & Record<string, unknown>
   importRecord: {
     id: string
     fileName: string

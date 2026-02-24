@@ -2,7 +2,7 @@
  * 模块 5 待办事项生成接口测试（按 module-test-workflow 后端验证）
  * 用法: 先启动后端 (cd backend && npm run dev)，再: cd backend && npx tsx scripts/test-generate-tasks-api.ts
  */
-const BASE = 'http://localhost:3000'
+const BASE = 'http://localhost:3001'
 
 async function main() {
   let token: string

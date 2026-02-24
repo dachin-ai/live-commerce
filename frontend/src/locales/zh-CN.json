@@ -454,6 +454,8 @@
     "fillRequired": "请填写完整信息",
     "createUserFailed": "创建用户失败",
     "active": "活跃",
-    "inactive": "禁用"
+    "inactive": "禁用",
+    "error403": "无权限，仅管理员或经理可访问用户管理。请确认当前登录账号角色。",
+    "errorLoadUsers": "加载用户列表失败，请稍后重试。"
   }
 }

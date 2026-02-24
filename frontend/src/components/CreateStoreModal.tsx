@@ -184,8 +184,9 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
       setSelectedLevel2Ids([])
       setCountry('中国')
       setCurrencyOverride(false)
-    } catch (error: any) {
-      const msg = error?.response?.data?.error || error?.message || '创建店铺失败'
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { error?: string } }; message?: string }
+      const msg = err.response?.data?.error || err.message || '创建店铺失败'
       toast.error(msg)
     }
   }

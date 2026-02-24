@@ -42,10 +42,13 @@ api.interceptors.response.use(
       method: error?.config?.method,
       status: error?.response?.status,
       message: error?.message,
-      data: error?.response?.data
+      data: error?.response?.data,
     })
-    
-    if (error.response?.status === 401) {
+
+    const status = error?.response?.status
+    const errorMessage = error?.response?.data?.error
+
+    if (status === 401 || errorMessage === '未登录') {
       console.warn('未授权，需要登录')
       localStorage.removeItem('token')
       localStorage.removeItem('userId')

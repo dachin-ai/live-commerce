@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import Sidebar from '../components/Sidebar'
-import { useCurrentUser, updateProfile, changePassword, changeEmail } from '../services/auth'
+import { useCurrentUser, updateProfile, changePassword, changeEmail, type User as AuthUser } from '../services/auth'
 import { useToast } from '../contexts/ToastContext'
 import { User, Lock, Mail, Save } from 'lucide-react'
 
@@ -29,13 +29,16 @@ export default function Profile() {
     onSuccess: (data) => {
       if (data?.name) {
         localStorage.setItem('userName', data.name)
-        queryClient.setQueryData(['currentUser'], (old: any) => (old ? { ...old, name: data.name } : old))
+        queryClient.setQueryData<AuthUser | undefined>(['currentUser'], (old) =>
+          old ? { ...old, name: data.name } : old
+        )
       }
       toast.success('资料已更新')
       setNameSaving(false)
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.message || '更新失败')
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      toast.error(error.response?.data?.error || error.message || '更新失败')
       setNameSaving(false)
     },
   })
@@ -44,15 +47,18 @@ export default function Profile() {
     mutationFn: ({ email, pwd }: { email: string; pwd: string }) => changeEmail(email, pwd),
     onSuccess: (data) => {
       if (data?.email) {
-        queryClient.setQueryData(['currentUser'], (old: any) => (old ? { ...old, email: data.email } : old))
+        queryClient.setQueryData<AuthUser | undefined>(['currentUser'], (old) =>
+          old ? { ...old, email: data.email } : old
+        )
       }
       toast.success('邮箱已修改')
       setNewEmail('')
       setEmailPassword('')
       setEmailSaving(false)
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.message || '修改失败')
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      toast.error(error.response?.data?.error || error.message || '修改失败')
       setEmailSaving(false)
     },
   })
@@ -67,8 +73,9 @@ export default function Profile() {
       setConfirmPassword('')
       setPasswordSaving(false)
     },
-    onError: (err: any) => {
-      toast.error(err?.response?.data?.error || err?.message || '修改失败')
+    onError: (err: unknown) => {
+      const error = err as { response?: { data?: { error?: string } }; message?: string }
+      toast.error(error.response?.data?.error || error.message || '修改失败')
       setPasswordSaving(false)
     },
   })
