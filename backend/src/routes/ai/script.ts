@@ -24,6 +24,7 @@ import {
   loadScriptLLMConfigCache,
   getScriptLLMAllowedUserIds,
   getScriptLLMAllowedUserIdsSync,
+  getScriptLLMEnabledFeatures,
   getScriptLLMEnabledFeaturesSync,
   getScriptLLMConfigSync,
   getLLMModesSync,
@@ -369,16 +370,51 @@ router.get('/config', async (req: AuthRequest, res) => {
     const isAdmin = req.user?.role === 'admin'
     if (isAdmin) {
       const allowedUserIds = await getScriptLLMAllowedUserIds()
-      const enabledFeatures = getScriptLLMEnabledFeaturesSync()
+      const enabledFeatures = await getScriptLLMEnabledFeatures()
       res.json({ configured, allowedUserIds: allowedUserIds ?? null, enabledFeatures: enabledFeatures ?? null })
     } else {
-      const allowed = getScriptLLMAllowedUserIdsSync()
-      const enabledFeatures = getScriptLLMEnabledFeaturesSync()
+      // 非管理员：从 DB 直接读，与 generate-tasks 一致，避免多实例下缓存不同步导致「配置了仍 403」
+      const allowed = await getScriptLLMAllowedUserIds()
+      const enabledFeatures = await getScriptLLMEnabledFeatures()
       const hasAccess = allowed === null || (Array.isArray(allowed) && req.user && allowed.includes(req.user.userId))
       const tasksEnabled = enabledFeatures === null || enabledFeatures.includes('tasks')
       res.json({ configured, hasAccess, hasAccessForTasks: hasAccess && tasksEnabled })
     }
   } catch (e) {
+    res.status(500).json({ error: '查询失败' })
+  }
+})
+
+/** GET /api/ai/script/permission-check?userId=xxx 管理员诊断：指定用户能否使用智能生成待办（从 DB 读配置，便于排查「配置了仍 403」） */
+router.get('/permission-check', requireAdmin, async (req: AuthRequest, res: express.Response) => {
+  try {
+    const userId = typeof req.query.userId === 'string' ? req.query.userId.trim() : req.user?.userId
+    if (!userId) {
+      return res.status(400).json({ error: '请提供 query 参数 userId（要检查的用户 ID），或使用当前登录用户' })
+    }
+    const allowed = await getScriptLLMAllowedUserIds()
+    const enabledFeatures = await getScriptLLMEnabledFeatures()
+    const userInList = allowed === null || allowed.includes(userId)
+    const tasksEnabled = enabledFeatures === null || enabledFeatures.includes('tasks')
+    const canGenerateTasks = userInList && tasksEnabled
+    res.json({
+      userId,
+      allowedFromDB: allowed === null ? 'all' : allowed,
+      allowedCount: allowed === null ? null : allowed.length,
+      enabledFeatures: enabledFeatures ?? null,
+      userInList,
+      tasksEnabled,
+      canGenerateTasks,
+      message: canGenerateTasks
+        ? '该用户可正常使用智能生成待办'
+        : !userInList
+          ? '该用户不在「可使用 LLM 的用户」列表中，请在权限配置中勾选并保存'
+          : !tasksEnabled
+            ? '「智能生成待办」功能未勾选，请在权限配置中勾选并保存'
+            : '未知原因',
+    })
+  } catch (e) {
+    console.error('[permission-check]', e)
     res.status(500).json({ error: '查询失败' })
   }
 })

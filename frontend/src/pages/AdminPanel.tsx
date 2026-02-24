@@ -376,6 +376,7 @@ export default function AdminPanel() {
               <thead>
                 <tr className="border-b border-gray-200">
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('admin.nameLabel')}</th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('admin.userIdLabel', { fallback: '用户 ID' })}</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('admin.emailLabel')}</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('admin.roleLabel')}</th>
                   <th className="text-left py-3 px-4 text-sm font-medium text-gray-700">{t('admin.statusLabel')}</th>
@@ -387,6 +388,20 @@ export default function AdminPanel() {
                 {users.map((user) => (
                   <tr key={user.id} className="border-b border-gray-100 hover:bg-gray-50">
                     <td className="py-3 px-4 text-sm text-gray-900">{user.name}</td>
+                    <td className="py-3 px-4 text-sm text-gray-600 font-mono">
+                      <span title={user.id} className="text-xs">{user.id.length > 12 ? `${user.id.slice(0, 8)}…` : user.id}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(user.id)
+                          toast.success(t('admin.userIdCopied', { fallback: '用户 ID 已复制' }))
+                        }}
+                        className="ml-1.5 text-indigo-600 hover:underline text-xs"
+                        title={t('admin.copyUserId', { fallback: '复制用户 ID' })}
+                      >
+                        {t('admin.copy', { fallback: '复制' })}
+                      </button>
+                    </td>
                     <td className="py-3 px-4 text-sm text-gray-600">{user.email}</td>
                     <td className="py-3 px-4">
                       <span
