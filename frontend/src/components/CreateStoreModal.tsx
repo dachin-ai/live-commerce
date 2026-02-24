@@ -576,7 +576,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
             <div>
               <p className="text-sm text-gray-600 mb-2">
                 {t('createStore.priceRange', {
-                  currency: (CURRENCY_I18N_KEYS[formData.currency] ? t(`createStore.${CURRENCY_I18N_KEYS[formData.currency]}`) : formData.currency)
+                  currency: (formData.currency && CURRENCY_I18N_KEYS[formData.currency] ? t(`createStore.${CURRENCY_I18N_KEYS[formData.currency]}`) : formData.currency ?? '')
                 })}
               </p>
               <div className="grid grid-cols-2 gap-4">

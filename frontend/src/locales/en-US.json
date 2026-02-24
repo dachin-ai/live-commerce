@@ -24,6 +24,21 @@
     "supportAuthor": "Support Author",
     "feedbackManage": "Feedback Management"
   },
+  "permissionConfig": {
+    "title": "Permissions",
+    "subtitle": "View role-to-capability mapping. Actual permissions are set via User Management roles.",
+    "howToChange": "How to change permissions?",
+    "howToChangeDesc": "Permissions are controlled by each user's role in User Management. Go to User Management, set role (Admin / Manager / Operator / Viewer / User) per user, then save.",
+    "goToUserManagement": "Go to User Management",
+    "roleMatrixTitle": "Roles and Access",
+    "roleColumn": "Role",
+    "accessColumn": "Access",
+    "roleAdminDesc": "Full access: stores, analysis, tools, user management, workflow, LLM config, feedback.",
+    "roleManagerDesc": "Same as Admin: full access including user management and workflow.",
+    "roleOperatorDesc": "Stores, analysis, tools, profile; no user management or workflow.",
+    "roleViewerDesc": "Read-only / viewer access.",
+    "roleUserDesc": "Basic access."
+  },
   "dashboard": {
     "title": "Store Management",
     "subtitle": "Configure stores, regions, and upload latest data",

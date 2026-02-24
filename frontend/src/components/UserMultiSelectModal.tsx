@@ -28,6 +28,7 @@ export default function UserMultiSelectModal({
   placeholder = '搜索姓名或邮箱',
   permissionScope,
 }: UserMultiSelectModalProps) {
+  void permissionScope // 预留，后续可扩展多类权限独立选择
   const [search, setSearch] = useState('')
   const [draftIds, setDraftIds] = useState<string[]>(selectedIds)
 

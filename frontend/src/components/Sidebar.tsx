@@ -348,9 +348,9 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   <span>{t('sidebar.userManagement')}</span>
                 </Link>
                 <Link
-                  to="/admin"
+                  to="/admin/permissions"
                   className={`w-full flex items-center gap-3 p-2 rounded-lg ${
-                    location.pathname === '/admin'
+                    location.pathname === '/admin/permissions'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-700 hover:bg-gray-200'
                   }`}
@@ -485,9 +485,9 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   </span>
                 </Link>
                 <Link
-                  to="/admin"
+                  to="/admin/permissions"
                   className={`group relative p-3 rounded-lg transition-colors ${
-                    location.pathname === '/admin'
+                    location.pathname === '/admin/permissions'
                       ? 'bg-purple-100 text-purple-600'
                       : 'hover:bg-gray-200 text-gray-600'
                   }`}

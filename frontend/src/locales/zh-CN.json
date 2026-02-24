@@ -24,6 +24,21 @@
     "supportAuthor": "支持作者",
     "feedbackManage": "反馈管理"
   },
+  "permissionConfig": {
+    "title": "权限配置",
+    "subtitle": "查看角色与功能对应关系，实际权限在用户管理中通过「角色」设置",
+    "howToChange": "如何修改权限？",
+    "howToChangeDesc": "权限由「用户管理」中的用户角色控制。请进入用户管理，为每个用户选择角色（管理员 / 经理 / 运营 / 查看者 / 普通用户），保存后即生效。",
+    "goToUserManagement": "去用户管理",
+    "roleMatrixTitle": "角色与可访问功能",
+    "roleColumn": "角色",
+    "accessColumn": "可访问功能",
+    "roleAdminDesc": "全部功能：店铺管理、数据分析、执行工具、用户管理、工作流、LLM 配置、反馈管理。",
+    "roleManagerDesc": "与管理员相同：全部功能含用户管理、工作流。",
+    "roleOperatorDesc": "店铺管理、数据分析、执行工具、个人中心；无用户管理、工作流。",
+    "roleViewerDesc": "只读/查看权限，具体以系统配置为准。",
+    "roleUserDesc": "基础权限，具体以系统配置为准。"
+  },
   "dashboard": {
     "title": "店铺管理",
     "subtitle": "可配店铺、区域鉴别、上传最新数据",

@@ -9,6 +9,7 @@ import ForgotPassword from './pages/ForgotPassword'
 import ResetPassword from './pages/ResetPassword'
 import Profile from './pages/Profile'
 import AdminPanel from './pages/AdminPanel'
+import PermissionConfigPage from './pages/PermissionConfigPage'
 import LLMPage from './pages/LLMPage'
 import FeedbackManagement from './pages/FeedbackManagement'
 import MessageCenter from './pages/MessageCenter'
@@ -118,6 +119,18 @@ function App() {
             <ProtectedRoute>
               {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
                 <AdminPanel />
+              ) : (
+                <Navigate to="/" replace />
+              )}
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/permissions"
+          element={
+            <ProtectedRoute>
+              {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
+                <PermissionConfigPage />
               ) : (
                 <Navigate to="/" replace />
               )}
