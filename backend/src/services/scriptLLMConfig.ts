@@ -8,6 +8,8 @@ const KEY_URL = 'script_llm_url'
 const KEY_API_KEY = 'script_llm_api_key'
 const KEY_MODEL = 'script_llm_model'
 const KEY_ALLOWED_USER_IDS = 'script_llm_allowed_user_ids'
+/** 已启用的功能 id 列表（如 ['script','tasks']）；未配置或 null 表示全部启用，兼容旧数据 */
+const KEY_ENABLED_FEATURES = 'script_llm_enabled_features'
 /** 按功能选择的智能体方式：coze = Coze 智能体 (stream_run)，openai = OpenAI 兼容接口 */
 export const KEY_LLM_MODE_TODO = 'llm_mode_todo'
 export const KEY_LLM_MODE_SCRIPT = 'llm_mode_script'
@@ -22,6 +24,8 @@ const ENV_AGENT_KEY = process.env.AGENT_API_KEY || ''
 let cached: { url: string; apiKey: string; model?: string } | null = null
 /** 允许使用话术生成的用户 ID 列表；null 表示未配置（沿用旧逻辑视为全体可用），空数组表示仅管理员等需单独配置 */
 let cachedAllowedIds: string[] | null = null
+/** 已启用的功能 id（script=话术生成, tasks=智能生成待办）；null 表示全部启用 */
+let cachedEnabledFeatures: string[] | null = null
 /** 按功能选择的智能体方式：coze_agent=Coze Agent，openai=OpenAI 兼容；异常分析与待办共用 todo */
 export type LLMModeValue = 'coze_agent' | 'openai'
 let cachedModeTodo: LLMModeValue = 'coze_agent'
@@ -59,12 +63,18 @@ export function getScriptLLMAllowedUserIdsSync(): string[] | null {
   return cachedAllowedIds === undefined ? null : cachedAllowedIds
 }
 
-/** 保存话术 LLM 配置到数据库（仅管理员可调用对应接口）；allowedUserIds 为空或未传时存为全体可用 * */
+/** 同步读取已启用的功能 id 列表；null 表示全部启用（兼容旧数据） */
+export function getScriptLLMEnabledFeaturesSync(): string[] | null {
+  return cachedEnabledFeatures
+}
+
+/** 保存话术 LLM 配置到数据库（仅管理员可调用对应接口）；allowedUserIds 为空或未传时存为全体可用；enabledFeatures 未传或 null 表示全部功能启用 */
 export async function setScriptLLMConfigInDB(
   url: string,
   apiKey: string,
   model?: string,
-  allowedUserIds?: string[]
+  allowedUserIds?: string[],
+  enabledFeatures?: string[] | null
 ): Promise<void> {
   const u = (url || '').trim()
   const k = (apiKey || '').trim()
@@ -73,6 +83,12 @@ export async function setScriptLLMConfigInDB(
     ? allowedUserIds.map((id) => String(id).trim()).filter(Boolean)
     : null
   const allowed = ids === null ? '*' : ids.length === 0 ? '' : ids.join(',')
+  const featuresVal =
+    enabledFeatures === undefined || enabledFeatures === null
+      ? ''
+      : Array.isArray(enabledFeatures)
+        ? JSON.stringify(enabledFeatures.map((s) => String(s).trim()).filter(Boolean))
+        : ''
   const now = new Date().toISOString()
   await dbRun(
     `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
@@ -90,6 +106,10 @@ export async function setScriptLLMConfigInDB(
     `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
     [KEY_ALLOWED_USER_IDS, allowed, now, allowed, now]
   )
+  await dbRun(
+    `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
+    [KEY_ENABLED_FEATURES, featuresVal, now, featuresVal, now]
+  )
 }
 
 
@@ -105,6 +125,18 @@ export async function loadScriptLLMConfigCache(): Promise<void> {
     cachedAllowedIds = []
   } else {
     cachedAllowedIds = v.split(',').map((s) => s.trim()).filter(Boolean)
+  }
+  const featuresRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [KEY_ENABLED_FEATURES])
+  const fRaw = featuresRow?.value?.trim()
+  if (!fRaw) {
+    cachedEnabledFeatures = null
+  } else {
+    try {
+      const arr = JSON.parse(fRaw)
+      cachedEnabledFeatures = Array.isArray(arr) ? arr.map((x: unknown) => String(x).trim()).filter(Boolean) : null
+    } catch {
+      cachedEnabledFeatures = null
+    }
   }
   const todoRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [KEY_LLM_MODE_TODO])
   const scriptRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [KEY_LLM_MODE_SCRIPT])

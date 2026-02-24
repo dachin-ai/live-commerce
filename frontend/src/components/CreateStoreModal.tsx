@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Plus } from 'lucide-react'
 import { useCreateStore, CreateStoreData } from '../services/stores'
 import { useCreateTask } from '../services/tasks'
@@ -8,7 +9,14 @@ import { useCountries, useCurrencyByRegion } from '../services/regions'
 import { getCurrentUserRole } from '../services/auth'
 import { useStore } from '../contexts/StoreContext'
 import { useToast } from '../contexts/ToastContext'
+import { useLanguage } from '../contexts/LanguageContext'
 import CountrySelector from './CountrySelector'
+
+/** 按当前语言显示分类名称：泰语用 nameTh，其余用 name */
+function getCategoryDisplayName(cat: { name: string; nameTh?: string | null }, locale: string): string {
+  if (locale === 'th-TH' && cat.nameTh) return cat.nameTh
+  return cat.name
+}
 
 // 国家→货币静态映射，切换国家时立即更新显示，不依赖接口返回时机
 const COUNTRY_CURRENCY: Record<string, { currency: string; symbol: string; code: string }> = {
@@ -33,8 +41,17 @@ interface CreateStoreModalProps {
   onClose: () => void
 }
 
+const CURRENCY_I18N_KEYS: Record<string, string> = {
+  CNY: 'currencyCNY', HKD: 'currencyHKD', TWD: 'currencyTWD', THB: 'currencyTHB',
+  VND: 'currencyVND', IDR: 'currencyIDR', MYR: 'currencyMYR', SGD: 'currencySGD',
+  PHP: 'currencyPHP', MMK: 'currencyMMK', KHR: 'currencyKHR', LAK: 'currencyLAK', BND: 'currencyBND',
+}
+
 export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalProps) {
+  const { t } = useTranslation()
+  const { locale } = useLanguage()
   const toast = useToast()
+  const storeNameInputRef = useRef<HTMLInputElement>(null)
   const createStore = useCreateStore()
   const createTask = useCreateTask()
   const { setSelectedStore } = useStore()
@@ -105,12 +122,9 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
   }, [currencyInfo, currencyOverride, currencyFetching, country])
 
   const handleSubmit = async () => {
-    // 确保从DOM获取最新值（防止React状态未更新）
-    const nameInput = document.querySelector('input[placeholder*="店铺名称"]') as HTMLInputElement
-    const actualName = nameInput?.value?.trim() || formData.name.trim()
-    
+    const actualName = storeNameInputRef.current?.value?.trim() || formData.name.trim()
     if (!actualName) {
-      toast.warning('请输入店铺名称')
+      toast.warning(t('createStore.pleaseEnterStoreName'))
       return
     }
     
@@ -143,11 +157,11 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
         } catch { /* 忽略待办创建失败 */ }
         // 待办 2：生成或确认品牌影响力策略（合并到待办实现：在待办中完成策略生成/编辑）
         try {
-          // 获取已选分类的显示名称
+          // 获取已选分类的显示名称（按当前语言）
           const categoryNames = selectedCategories
             .map(catId => {
               const cat = level3Categories.find(c => c.id === catId) ?? level2Categories.find(c => c.id === catId)
-              return cat ? cat.name : null
+              return cat ? getCategoryDisplayName(cat, locale) : null
             })
             .filter(Boolean)
             .join('、')
@@ -186,7 +200,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
       setCurrencyOverride(false)
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } }; message?: string }
-      const msg = err.response?.data?.error || err.message || '创建店铺失败'
+      const msg = err.response?.data?.error || err.message || t('createStore.createFailed')
       toast.error(msg)
     }
   }
@@ -221,17 +235,17 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
     // 无三级子分类的二级：直接加入已选分类
     const toAdd = level2IdsWithNoLevel3.filter(id => !selectedCategories.includes(id))
     if (toAdd.length === 0 && selectedCategories.length === 0) {
-      toast.warning('请先勾选三级分类，或勾选无三级子分类的二级分类')
+      toast.warning(t('createStore.pleaseSelectCategories'))
       return
     }
     if (toAdd.length > 0) {
       setSelectedCategories(prev => {
         const next = [...new Set([...prev, ...toAdd])]
-        toast.success(`已选 ${next.length} 个分类，创建店铺时会一并保存`)
+        toast.success(t('createStore.categoriesSelected', { count: next.length }))
         return next
       })
     } else {
-      toast.success(`已选 ${selectedCategories.length} 个分类，创建店铺时会一并保存`)
+      toast.success(t('createStore.categoriesSelected', { count: selectedCategories.length }))
     }
   }
 
@@ -243,8 +257,8 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
       <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-xl font-semibold text-gray-900">创建店铺</h3>
-            <p className="text-sm text-gray-500 mt-1">参考抖音电商/千牛卖家中心店铺定义，创建新的直播店铺</p>
+            <h3 className="text-xl font-semibold text-gray-900">{t('createStore.title')}</h3>
+            <p className="text-sm text-gray-500 mt-1">{t('createStore.subtitle')}</p>
           </div>
           <button
             onClick={onClose}
@@ -257,65 +271,66 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
         <div className="space-y-6">
           {/* 基本信息 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">基本信息</h4>
+            <h4 className="font-medium text-gray-900">{t('createStore.basicInfo')}</h4>
             
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                店铺名称 *
+                {t('createStore.storeName')}
               </label>
               <input
+                ref={storeNameInputRef}
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="输入店铺名称"
+                placeholder={t('createStore.storeNamePlaceholder')}
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                平台 *
+                {t('createStore.platform')}
               </label>
               <select
                 value={formData.platform}
                 onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
-                <option value="抖音">抖音</option>
-                <option value="TikTok">TikTok</option>
-                <option value="淘宝">淘宝</option>
-                <option value="天猫">天猫</option>
-                <option value="京东">京东</option>
-                <option value="小红书">小红书</option>
-                <option value="快手">快手</option>
-                <option value="其他">其他</option>
+                <option value="抖音">{t('createStore.platformDouyin')}</option>
+                <option value="TikTok">{t('createStore.platformTikTok')}</option>
+                <option value="淘宝">{t('createStore.platformTaobao')}</option>
+                <option value="天猫">{t('createStore.platformTmall')}</option>
+                <option value="京东">{t('createStore.platformJD')}</option>
+                <option value="小红书">{t('createStore.platformXiaohongshu')}</option>
+                <option value="快手">{t('createStore.platformKuaishou')}</option>
+                <option value="其他">{t('createStore.platformOther')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                店铺名称 (泰语)
+                {t('createStore.storeNameTh')}
               </label>
               <input
                 type="text"
                 value={formData.nameTh || ''}
                 onChange={(e) => setFormData({ ...formData, nameTh: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="输入泰语店铺名称"
+                placeholder={t('createStore.storeNameThPlaceholder')}
               />
             </div>
 
             {isAdmin && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  选择用户（管理员可指定）
+                  {t('createStore.selectUser')}
                 </label>
                 <select
                   value={formData.userId || ''}
                   onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="">当前用户</option>
+                  <option value="">{t('createStore.currentUser')}</option>
                   {users.map(user => (
                     <option key={user.id} value={user.id}>
                       {user.name} ({user.email})
@@ -328,9 +343,9 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
 
           {/* 国家 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">国家</h4>
+            <h4 className="font-medium text-gray-900">{t('createStore.country')}</h4>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">国家 *</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.countryRequired')}</label>
               <CountrySelector
                 value={country}
                 onChange={setCountry}
@@ -351,13 +366,14 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                   { id: '其他', name: '其他' },
                 ]}
                 defaultCountry="中国"
-                placeholder="选择国家"
+                placeholder={t('createStore.countryPlaceholder')}
               />
-              <p className="text-xs text-gray-500 mt-1">默认中国，支持搜索；开放中国与东南亚等国家</p>
+              <p className="text-xs text-gray-500 mt-1">{t('createStore.countryHint')}</p>
               <p className="text-sm text-blue-600 mt-1 min-h-[1.25rem]" aria-live="polite">
                 {(() => {
                   const cur = COUNTRY_CURRENCY[country] || COUNTRY_CURRENCY['中国']
-                  return `推荐货币: ${cur.currency} (${cur.symbol} ${cur.code})`
+                  const currencyLabel = CURRENCY_I18N_KEYS[cur.code] ? t(`createStore.${CURRENCY_I18N_KEYS[cur.code]}`) : `${cur.currency} (${cur.symbol} ${cur.code})`
+                  return t('createStore.recommendedCurrency', { currency: currencyLabel, symbol: cur.symbol, code: cur.code })
                 })()}
               </p>
             </div>
@@ -365,10 +381,10 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
 
           {/* 产品分类 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">产品分类 (支持多选)</h4>
+            <h4 className="font-medium text-gray-900">{t('createStore.categoriesTitle')}</h4>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">一级分类</label>
+              <label className="block text-sm font-medium text-gray-700 mb-2">{t('createStore.level1')}</label>
               <select
                 value={selectedLevel1}
                 onChange={(e) => {
@@ -377,32 +393,33 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                   setSelectedCategories([])
                 }}
                 className="w-full max-w-xs min-w-[12rem] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                aria-label="一级分类"
+                aria-label={t('createStore.level1')}
                 aria-busy={level1Loading}
               >
                 <option value="">
-                  {level1Loading ? '加载中…' : level1Error ? '加载失败，请重试' : '选择一级分类'}
+                  {level1Loading ? t('createStore.level1Loading') : level1Error ? t('createStore.level1Error') : t('createStore.level1Placeholder')}
                 </option>
                 {level1Categories.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  <option key={cat.id} value={cat.id}>{getCategoryDisplayName(cat, locale)}</option>
                 ))}
               </select>
               {level1Error && (
-                <p className="text-xs text-red-600 mt-1">一级分类加载失败，请确认后端已启动。
-                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">重试</button>
+                <p className="text-xs text-red-600 mt-1">
+                  {t('createStore.level1LoadFailed')}
+                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">{t('createStore.retry')}</button>
                 </p>
               )}
               {!level1Loading && !level1Error && level1Categories.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
-                  暂无分类数据。请运行根目录「重置数据库.bat」后刷新页面，或确认后端已启动。
-                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">重试</button>
+                  {t('createStore.level1NoData')}
+                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">{t('createStore.retry')}</button>
                 </p>
               )}
             </div>
 
             {selectedLevel1 && level2Categories.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">二级分类（可多选）</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('createStore.level2')}</label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-2 max-h-32 overflow-y-auto">
                   {level2Categories.map(cat => (
                     <label
@@ -415,7 +432,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                         onChange={() => handleLevel2Toggle(cat.id)}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">{cat.name}</span>
+                      <span className="text-sm">{getCategoryDisplayName(cat, locale)}</span>
                     </label>
                   ))}
                 </div>
@@ -425,7 +442,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
             {selectedLevel2Ids.length > 0 && level3Categories.length > 0 && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  三级分类（可多选）
+                  {t('createStore.level3')}
                 </label>
                 <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
                   {level3Categories.map(cat => (
@@ -439,7 +456,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                         onChange={() => handleCategoryToggle(cat.id)}
                         className="w-4 h-4 text-blue-600"
                       />
-                      <span className="text-sm">{cat.name}</span>
+                      <span className="text-sm">{getCategoryDisplayName(cat, locale)}</span>
                     </label>
                   ))}
                 </div>
@@ -449,11 +466,11 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                   >
                     <Plus className="w-4 h-4" />
-                    添加选中的分类
+                    {t('createStore.addSelectedCategories')}
                   </button>
                   {level2IdsWithNoLevel3.length > 0 && (
                     <span className="text-xs text-gray-500">
-                      当前勾选的二级中有 {level2IdsWithNoLevel3.length} 个无三级子分类，点击按钮会一并添加
+                      {t('createStore.level2NoLevel3Hint', { count: level2IdsWithNoLevel3.length })}
                     </span>
                   )}
                 </div>
@@ -467,10 +484,10 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
                 >
                   <Plus className="w-4 h-4" />
-                  添加选中的分类
+                  {t('createStore.addSelectedCategories')}
                 </button>
                 <span className="text-xs text-gray-500">
-                  当前一级下无三级分类，可直接添加已勾选的二级分类
+                  {t('createStore.level2OnlyHint')}
                 </span>
               </div>
             )}
@@ -484,7 +501,7 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                       key={catId}
                       className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs flex items-center gap-1"
                     >
-                      {cat.name}
+                      {getCategoryDisplayName(cat, locale)}
                       <button
                         onClick={() => handleCategoryToggle(catId)}
                         className="text-blue-600 hover:text-blue-800"
@@ -498,29 +515,29 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
             )}
 
             <p className="text-xs text-gray-500">
-              参考抖音电商三级分类：先选一级（如服饰内衣、美妆、食品等），再勾选多个二级，再勾选多个三级，点击「添加选中的分类」
+              {t('createStore.categoriesHint')}
             </p>
           </div>
 
           {/* 货币和价格（可省略，跟随国家推荐） */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">货币与价格</h4>
+            <h4 className="font-medium text-gray-900">{t('createStore.currencyAndPrice')}</h4>
             {!currencyOverride && currencyInfo ? (
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-sm text-gray-700">
-                  货币：{formData.currencySymbol} {formData.currency}（跟随国家推荐）
+                  {t('createStore.currencyFollowCountry', { symbol: formData.currencySymbol, code: formData.currency })}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrencyOverride(true)}
                   className="text-sm text-blue-600 hover:underline"
                 >
-                  修改
+                  {t('createStore.modify')}
                 </button>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">货币单位（可选）</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.currencyOptional')}</label>
                 <select
                   value={[formData.currencySymbol, formData.currency].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '¥ CNY'}
                   onChange={(e) => {
@@ -532,60 +549,59 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
                   }}
                   className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="¥ CNY">¥ 人民币 (CNY)</option>
-                  <option value="HK$ HKD">HK$ 港币 (HKD)</option>
-                  <option value="NT$ TWD">NT$ 新台币 (TWD)</option>
-                  <option value="฿ THB">฿ 泰铢 (THB)</option>
-                  <option value="₫ VND">₫ 越南盾 (VND)</option>
-                  <option value="Rp IDR">Rp 印尼盾 (IDR)</option>
-                  <option value="RM MYR">RM 林吉特 (MYR)</option>
-                  <option value="S$ SGD">S$ 新加坡元 (SGD)</option>
-                  <option value="₱ PHP">₱ 菲律宾比索 (PHP)</option>
-                  <option value="K MMK">K 缅元 (MMK)</option>
-                  <option value="៛ KHR">៛ 瑞尔 (KHR)</option>
-                  <option value="₭ LAK">₭ 基普 (LAK)</option>
-                  <option value="B$ BND">B$ 文莱元 (BND)</option>
+                  <option value="¥ CNY">¥ {t('createStore.currencyCNY')}</option>
+                  <option value="HK$ HKD">HK$ {t('createStore.currencyHKD')}</option>
+                  <option value="NT$ TWD">NT$ {t('createStore.currencyTWD')}</option>
+                  <option value="฿ THB">฿ {t('createStore.currencyTHB')}</option>
+                  <option value="₫ VND">₫ {t('createStore.currencyVND')}</option>
+                  <option value="Rp IDR">Rp {t('createStore.currencyIDR')}</option>
+                  <option value="RM MYR">RM {t('createStore.currencyMYR')}</option>
+                  <option value="S$ SGD">S$ {t('createStore.currencySGD')}</option>
+                  <option value="₱ PHP">₱ {t('createStore.currencyPHP')}</option>
+                  <option value="K MMK">K {t('createStore.currencyMMK')}</option>
+                  <option value="៛ KHR">៛ {t('createStore.currencyKHR')}</option>
+                  <option value="₭ LAK">₭ {t('createStore.currencyLAK')}</option>
+                  <option value="B$ BND">B$ {t('createStore.currencyBND')}</option>
                 </select>
                 <button
                   type="button"
                   onClick={() => setCurrencyOverride(false)}
                   className="ml-2 text-sm text-gray-500 hover:underline"
                 >
-                  恢复跟随国家
+                  {t('createStore.restoreFollowCountry')}
                 </button>
               </div>
             )}
 
             <div>
               <p className="text-sm text-gray-600 mb-2">
-                价格区间（{(() => {
-                  const cur = COUNTRY_CURRENCY[formData.region || country] || COUNTRY_CURRENCY['中国']
-                  return cur.currency
-                })()}）
+                {t('createStore.priceRange', {
+                  currency: (CURRENCY_I18N_KEYS[formData.currency] ? t(`createStore.${CURRENCY_I18N_KEYS[formData.currency]}`) : formData.currency)
+                })}
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    最低价
+                    {t('createStore.minPrice')}
                   </label>
                   <input
                     type="number"
                     value={formData.minPrice || ''}
                     onChange={(e) => setFormData({ ...formData, minPrice: e.target.value ? Number(e.target.value) : undefined })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="最低价"
+                    placeholder={t('createStore.minPricePlaceholder')}
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    最高价 <span className="text-gray-500 font-normal">({formData.currencySymbol || '¥'} {formData.currency || 'CNY'})</span>
+                    {t('createStore.maxPrice')} <span className="text-gray-500 font-normal">({formData.currencySymbol || '¥'} {formData.currency || 'CNY'})</span>
                   </label>
                   <input
                     type="number"
                     value={formData.maxPrice || ''}
                     onChange={(e) => setFormData({ ...formData, maxPrice: e.target.value ? Number(e.target.value) : undefined })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="最高价"
+                    placeholder={t('createStore.maxPricePlaceholder')}
                   />
                 </div>
               </div>
@@ -595,32 +611,32 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
           {/* 目标人群 */}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              目标人群
+              {t('createStore.targetAudience')}
             </label>
             <input
               type="text"
               value={formData.targetAudience || ''}
               onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="描述目标人群特征,如:25-45岁女性,关注护肤"
+              placeholder={t('createStore.targetAudiencePlaceholder')}
             />
           </div>
 
           {/* 品牌定位（无品牌/小型/中型/大型，可在待办中确认） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">品牌定位</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.brandPositioning')}</label>
             <select
               value={formData.brandPositioning || '小型品牌'}
               onChange={(e) => setFormData({ ...formData, brandPositioning: e.target.value })}
               className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="无品牌">无品牌</option>
-              <option value="小型品牌">小型品牌</option>
-              <option value="中型品牌">中型品牌</option>
-              <option value="大型品牌">大型品牌</option>
+              <option value="无品牌">{t('createStore.brandNone')}</option>
+              <option value="小型品牌">{t('createStore.brandSmall')}</option>
+              <option value="中型品牌">{t('createStore.brandMedium')}</option>
+              <option value="大型品牌">{t('createStore.brandLarge')}</option>
             </select>
-            <p className="text-xs text-gray-500 mt-1">创建后可在「待处理任务」中确认或调整品牌定位</p>
-            <p className="text-xs text-blue-600 mt-1">品牌影响力策略将在「待处理任务」中生成，请在待办中完成</p>
+            <p className="text-xs text-gray-500 mt-1">{t('createStore.brandPositioningHint')}</p>
+            <p className="text-xs text-blue-600 mt-1">{t('createStore.brandStrategyHint')}</p>
           </div>
         </div>
 
@@ -629,14 +645,14 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
             onClick={onClose}
             className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
           >
-            取消
+            {t('createStore.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             disabled={createStore.isPending}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {createStore.isPending ? '创建中...' : '创建店铺'}
+            {createStore.isPending ? t('createStore.submitting') : t('createStore.submit')}
           </button>
         </div>
       </div>

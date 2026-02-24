@@ -57,14 +57,15 @@ export interface ScriptLLMResult {
   [key: string]: unknown
 }
 
-/** 查询话术 LLM 配置（GET /api/ai/script/config）；管理员返回 allowedUserIds，非管理员返回 hasAccess */
+/** 查询话术 LLM 配置（GET /api/ai/script/config）；管理员返回 allowedUserIds、enabledFeatures，非管理员返回 hasAccess */
 export async function getScriptLLMConfig(): Promise<{
   configured: boolean
   allowedUserIds?: string[] | null
+  enabledFeatures?: string[] | null
   hasAccess?: boolean
 }> {
   const data = await api.get('/ai/script/config')
-  return data as unknown as { configured: boolean; allowedUserIds?: string[] | null; hasAccess?: boolean }
+  return data as unknown as { configured: boolean; allowedUserIds?: string[] | null; enabledFeatures?: string[] | null; hasAccess?: boolean }
 }
 
 /** 豆包（火山方舟）API 基地址 */
@@ -106,18 +107,20 @@ export async function setLlmModes(options: { todo?: LLMModeId; script?: LLMModeI
   return data as unknown as Awaited<ReturnType<typeof setLlmModes>>
 }
 
-/** 保存话术 LLM 配置（POST /api/ai/script/config），仅管理员可调用；allowedUserIds 为选定可用的用户 ID 列表 */
+/** 保存话术 LLM 配置（POST /api/ai/script/config），仅管理员可调用；allowedUserIds 为选定用户；enabledFeatures 为启用功能 id 列表（未传或 null 表示全部启用） */
 export async function saveScriptLLMConfig(
   url: string,
   apiKey: string,
   model?: string,
-  allowedUserIds?: string[]
+  allowedUserIds?: string[],
+  enabledFeatures?: string[] | null
 ): Promise<{ success: boolean; message?: string }> {
   const data = await api.post('/ai/script/config', {
     url,
     apiKey,
     model: model || undefined,
     allowedUserIds: allowedUserIds ?? undefined,
+    enabledFeatures: enabledFeatures ?? undefined,
   })
   return data as unknown as { success: boolean; message?: string }
 }

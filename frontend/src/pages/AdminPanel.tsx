@@ -5,6 +5,7 @@ import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../servic
 import { User, type UserRole } from '../services/users'
 import { getScriptLLMConfig, saveScriptLLMConfig, DEFAULT_SCRIPT_LLM_URL, DOUBAO_LLM_BASE_URL } from '../services/ai'
 import Sidebar from '../components/Sidebar'
+import UserMultiSelectModal from '../components/UserMultiSelectModal'
 import { useToast } from '../contexts/ToastContext'
 
 type UsersQueryError = {
@@ -13,6 +14,12 @@ type UsersQueryError = {
     data?: { error?: string }
   }
 }
+
+/** 当前「可使用 LLM 的用户」勾选后，所开放的功能列表（仅展示用）。预留：后续可改为 per-feature 开关。 */
+const LLM_PERMISSION_FEATURES: { id: string; labelKey: string }[] = [
+  { id: 'script', labelKey: 'admin.llmFeatureScript' },
+  { id: 'tasks', labelKey: 'admin.llmFeatureTasks' },
+]
 
 export default function AdminPanel() {
   const { t } = useTranslation()
@@ -44,6 +51,8 @@ export default function AdminPanel() {
   const [llmConfigured, setLlmConfigured] = useState<boolean | null>(null)
   const [llmSaving, setLlmSaving] = useState(false)
   const [llmAllowedUserIds, setLlmAllowedUserIds] = useState<string[]>([])
+  const [llmEnabledFeatures, setLlmEnabledFeatures] = useState<string[]>(LLM_PERMISSION_FEATURES.map((f) => f.id))
+  const [showLlmUserModal, setShowLlmUserModal] = useState(false)
 
   const handleCreate = async () => {
     if (!formData.name || !formData.email || !formData.password) {
@@ -115,6 +124,14 @@ export default function AdminPanel() {
                 : []
           )
         }
+        if (r.enabledFeatures !== undefined) {
+          const allIds = LLM_PERMISSION_FEATURES.map((f) => f.id)
+          if (r.enabledFeatures === null || r.enabledFeatures === undefined) {
+            setLlmEnabledFeatures(allIds)
+          } else if (Array.isArray(r.enabledFeatures)) {
+            setLlmEnabledFeatures(r.enabledFeatures.filter((id) => allIds.includes(id)))
+          }
+        }
       })
       .catch(() => setLlmConfigured(false))
   }, [users])
@@ -130,7 +147,9 @@ export default function AdminPanel() {
     setLlmSaving(true)
     try {
       const toSend = llmAllowedUserIds.length === users.length ? undefined : llmAllowedUserIds
-      await saveScriptLLMConfig(url, key, model, toSend)
+      const allFeatureIds = LLM_PERMISSION_FEATURES.map((f) => f.id)
+      const featuresToSend = llmEnabledFeatures.length === allFeatureIds.length ? undefined : llmEnabledFeatures
+      await saveScriptLLMConfig(url, key, model, toSend, featuresToSend)
       setLlmConfigured(true)
       setLlmApiKey('')
       toast.success(
@@ -146,13 +165,15 @@ export default function AdminPanel() {
     }
   }
 
-  const toggleLlmUser = (userId: string) => {
-    setLlmAllowedUserIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
-    )
-  }
   const selectAllLlmUsers = () => setLlmAllowedUserIds(users.map((u) => u.id))
   const clearAllLlmUsers = () => setLlmAllowedUserIds([])
+  const toggleLlmFeature = (featureId: string) => {
+    setLlmEnabledFeatures((prev) =>
+      prev.includes(featureId) ? prev.filter((id) => id !== featureId) : [...prev, featureId]
+    )
+  }
+  const selectAllLlmFeatures = () => setLlmEnabledFeatures(LLM_PERMISSION_FEATURES.map((f) => f.id))
+  const clearAllLlmFeatures = () => setLlmEnabledFeatures([])
 
   return (
     <div className="h-screen min-h-0 bg-gray-50 flex overflow-hidden">
@@ -242,40 +263,74 @@ export default function AdminPanel() {
                   />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="block text-sm font-medium text-gray-700">{t('admin.llmUsersLabel')}</label>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={selectAllLlmUsers}
-                        className="text-xs text-indigo-600 hover:underline"
-                      >
-                        {t('admin.selectAll')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={clearAllLlmUsers}
-                        className="text-xs text-gray-500 hover:underline"
-                      >
-                        {t('admin.clear')}
-                      </button>
-                    </div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">{t('admin.llmUsersLabel')}</label>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => setShowLlmUserModal(true)}
+                      className="px-3 py-2 border border-indigo-600 text-indigo-600 rounded-lg text-sm font-medium hover:bg-indigo-50"
+                    >
+                      {llmAllowedUserIds.length === 0
+                        ? t('admin.selectUsers', { fallback: '选择用户' })
+                        : t('admin.selectedUsersCount', { count: llmAllowedUserIds.length, fallback: `已选 ${llmAllowedUserIds.length} 人` })}
+                    </button>
+                    <span className="text-xs text-gray-500">
+                      {llmAllowedUserIds.length === users.length && users.length > 0
+                        ? t('admin.allUsersCanUse', { fallback: '当前为全选，所有用户可使用' })
+                        : llmAllowedUserIds.length === 0
+                          ? t('admin.onlyAdminCanUse', { fallback: '未选时仅管理员可用' })
+                          : null}
+                    </span>
+                    {llmAllowedUserIds.length > 0 && llmAllowedUserIds.length < users.length && (
+                      <div className="flex gap-2">
+                        <button type="button" onClick={selectAllLlmUsers} className="text-xs text-indigo-600 hover:underline">
+                          {t('admin.selectAll')}
+                        </button>
+                        <button type="button" onClick={clearAllLlmUsers} className="text-xs text-gray-500 hover:underline">
+                          {t('admin.clear')}
+                        </button>
+                      </div>
+                    )}
                   </div>
-                  <div className="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2 space-y-1">
-                    {users.map((u) => (
-                      <label key={u.id} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-1">
-                        <input
-                          type="checkbox"
-                          checked={llmAllowedUserIds.includes(u.id)}
-                          onChange={() => toggleLlmUser(u.id)}
-                          className="rounded border-gray-300"
-                        />
-                        <span className="text-sm text-gray-800">{u.name}</span>
-                        <span className="text-xs text-gray-500">({u.email})</span>
-                      </label>
-                    ))}
+                  <div className="rounded-lg border border-gray-200 bg-gray-50/80 px-3 py-2">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-xs font-medium text-gray-600">{t('admin.llmFeaturesLabel', { fallback: '能够使用的功能' })}</p>
+                      <div className="flex gap-2">
+                        <button type="button" onClick={selectAllLlmFeatures} className="text-xs text-indigo-600 hover:underline">
+                          {t('admin.selectAll')}
+                        </button>
+                        <button type="button" onClick={clearAllLlmFeatures} className="text-xs text-gray-500 hover:underline">
+                          {t('admin.clear')}
+                        </button>
+                      </div>
+                    </div>
+                    <ul className="text-sm text-gray-700 space-y-1.5">
+                      {LLM_PERMISSION_FEATURES.map((f) => (
+                        <li key={f.id}>
+                          <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-100/80 rounded px-1 py-0.5 -mx-1">
+                            <input
+                              type="checkbox"
+                              checked={llmEnabledFeatures.includes(f.id)}
+                              onChange={() => toggleLlmFeature(f.id)}
+                              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                            />
+                            <span>{t(f.labelKey)}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
                   </div>
                 </div>
+                <UserMultiSelectModal
+                  open={showLlmUserModal}
+                  onClose={() => setShowLlmUserModal(false)}
+                  users={users}
+                  selectedIds={llmAllowedUserIds}
+                  onConfirm={setLlmAllowedUserIds}
+                  title={t('admin.llmUsersLabel')}
+                  placeholder={t('admin.searchUserPlaceholder', { fallback: '搜索姓名或邮箱' })}
+                  permissionScope="llm"
+                />
                 <button
                   type="button"
                   onClick={handleSaveLLMConfig}

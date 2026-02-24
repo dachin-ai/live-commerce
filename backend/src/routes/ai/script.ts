@@ -24,6 +24,7 @@ import {
   loadScriptLLMConfigCache,
   getScriptLLMAllowedUserIds,
   getScriptLLMAllowedUserIdsSync,
+  getScriptLLMEnabledFeaturesSync,
   getScriptLLMConfigSync,
   getLLMModesSync,
 } from '../../services/scriptLLMConfig'
@@ -368,7 +369,8 @@ router.get('/config', async (req: AuthRequest, res) => {
     const isAdmin = req.user?.role === 'admin'
     if (isAdmin) {
       const allowedUserIds = await getScriptLLMAllowedUserIds()
-      res.json({ configured, allowedUserIds: allowedUserIds ?? null })
+      const enabledFeatures = getScriptLLMEnabledFeaturesSync()
+      res.json({ configured, allowedUserIds: allowedUserIds ?? null, enabledFeatures: enabledFeatures ?? null })
     } else {
       const allowed = getScriptLLMAllowedUserIdsSync()
       const hasAccess = allowed === null || (Array.isArray(allowed) && req.user && allowed.includes(req.user.userId))
@@ -393,15 +395,16 @@ router.get('/last-raw', requireAdmin, (_req: express.Request, res: express.Respo
 
 router.post('/config', requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { url, apiKey, model, allowedUserIds: rawAllowed } = req.body ?? {}
+    const { url, apiKey, model, allowedUserIds: rawAllowed, enabledFeatures: rawFeatures } = req.body ?? {}
     const u = typeof url === 'string' ? url.trim() : ''
     const k = typeof apiKey === 'string' ? apiKey.trim() : ''
     const m = typeof model === 'string' ? model.trim() : undefined
     const allowedUserIds = Array.isArray(rawAllowed) ? rawAllowed.map((id: unknown) => String(id).trim()).filter(Boolean) : undefined
+    const enabledFeatures = Array.isArray(rawFeatures) ? rawFeatures.map((id: unknown) => String(id).trim()).filter(Boolean) : undefined
     if (!u || !k) {
       return res.status(400).json({ error: '请填写 API 地址与 API 密钥' })
     }
-    await setScriptLLMConfigInDB(u, k, m, allowedUserIds)
+    await setScriptLLMConfigInDB(u, k, m, allowedUserIds, enabledFeatures)
     await loadScriptLLMConfigCache()
     const defaultId = await getDefaultToolId()
     if (defaultId) {
@@ -426,6 +429,10 @@ router.post('/', async (req, res) => {
       const allowed = getScriptLLMAllowedUserIdsSync()
       if (allowed !== null && (!authReq.user || !allowed.includes(authReq.user.userId))) {
         return res.status(403).json({ error: SCRIPT_LLM_ACCESS_DENIED_MESSAGE, code: 'SCRIPT_LLM_ACCESS_DENIED' })
+      }
+      const enabled = getScriptLLMEnabledFeaturesSync()
+      if (enabled !== null && !enabled.includes('script')) {
+        return res.status(403).json({ error: '当前未开放话术生成功能，请联系管理员在「权限配置」中勾选「话术生成」。', code: 'SCRIPT_LLM_FEATURE_DISABLED' })
       }
     }
     const { userInput, storeContext, effectiveProduct, topic, storeId } = await parseScriptRequestBody(req.body)

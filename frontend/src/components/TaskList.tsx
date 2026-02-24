@@ -107,6 +107,8 @@ export default function TaskList() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [filter, setFilter] = useState<TaskFilter>('all')
   const llmConfigured = scriptLlmConfig?.configured ?? null
+  /** 与话术共用：管理员配置的「允许使用 LLM 的用户」；非管理员且未勾选时为 false */
+  const canGenerateTasks = scriptLlmConfig?.hasAccess !== false
   const currentLocale = locale || 'zh-CN'
 
   const pendingTasks = tasks
@@ -241,14 +243,17 @@ export default function TaskList() {
     } catch (error) {
       console.error('生成任务失败:', error)
       let errorMsg: string | undefined
-      if (error && typeof error === 'object') {
-        if ('response' in error) {
-          const response = (error as { response?: { data?: { error?: string; detail?: string } } }).response
-          errorMsg = response?.data?.detail || response?.data?.error
+      if (error && typeof error === 'object' && 'response' in error) {
+        const res = (error as { response?: { status?: number; data?: { error?: string; detail?: string; message?: string; code?: string } } }).response
+        errorMsg = res?.data?.error || res?.data?.detail || res?.data?.message
+        // 403 且为权限类：优先展示后端文案，便于非管理员看到「请联系管理员勾选开通」
+        if (res?.status === 403 && (res?.data?.code === 'GENERATE_TASKS_ACCESS_DENIED' || /权限|开通|勾选/.test(errorMsg || ''))) {
+          toast.warning(errorMsg || '您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。')
+          return
         }
-        if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
-          errorMsg = (error as { message?: string }).message
-        }
+      }
+      if (!errorMsg && error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
+        errorMsg = (error as { message?: string }).message
       }
       toast.error(errorMsg || '生成任务失败，请检查网络连接或登录状态')
     } finally {
@@ -311,9 +316,14 @@ export default function TaskList() {
             <button
               onClick={(e) => {
                 e.stopPropagation()
+                if (!canGenerateTasks) {
+                  toast.warning('您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。')
+                  return
+                }
                 handleRefresh()
               }}
               disabled={refreshing}
+              title={!canGenerateTasks ? '您暂无智能生成待办权限，请联系管理员开通' : undefined}
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -347,6 +357,12 @@ export default function TaskList() {
       {/* 内容区 - 可展开/收起 */}
       {isExpanded && (
         <div className="p-6">
+          {!canGenerateTasks && (
+            <div className="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <p className="font-medium">您暂无智能生成待办权限</p>
+              <p className="mt-1">请联系管理员在「管理员」-「LLM 配置」中为您勾选开通（与话术生成共用同一权限配置）。</p>
+            </div>
+          )}
           {/* 筛选标签 */}
           <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
             <button
@@ -429,6 +445,11 @@ export default function TaskList() {
                           {task.storeName != null && String(task.storeName) && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
                               {String(task.storeName)}
+                            </span>
+                          )}
+                          {task.createdByName != null && String(task.createdByName) && (
+                            <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full shrink-0" title="创建该待办的账号">
+                              👤 {String(task.createdByName)}
                             </span>
                           )}
                           {task.assignedRole != null && String(task.assignedRole) && (

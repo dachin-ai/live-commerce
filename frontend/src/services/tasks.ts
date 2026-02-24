@@ -21,6 +21,8 @@ export interface Task {
   storeName?: string | null
   /** 列表接口返回的分配角色（仅列表有） */
   assignedRole?: string | null
+  /** 列表接口 JOIN 返回的创建人姓名（管理员/经理查看时便于区分不同账号生成的历史待办） */
+  createdByName?: string | null
 }
 
 export const useTasks = (storeId?: string) => {

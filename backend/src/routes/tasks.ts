@@ -16,8 +16,8 @@ router.get('/', async (req: AuthRequest, res) => {
     const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
     const { storeId } = req.query // 支持按店铺过滤
 
-    // 修改查询以包含店铺名称
-    let query = 'SELECT t.*, s.name as storeName FROM tasks t LEFT JOIN stores s ON t.storeId = s.id WHERE 1=1'
+    // 修改查询以包含店铺名称；管理员/经理查看时带出创建人姓名，便于区分不同账号生成的历史待办
+    let query = 'SELECT t.*, s.name as storeName, u.name as createdByName FROM tasks t LEFT JOIN stores s ON t.storeId = s.id LEFT JOIN users u ON t.userId = u.id WHERE 1=1'
     const params: any[] = []
 
     // 普通用户只能看到自己的任务

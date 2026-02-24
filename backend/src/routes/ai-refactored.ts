@@ -5,7 +5,7 @@ import { dbRun, dbGet, dbAll } from '../db'
 import { authenticate, AuthRequest, requireAdmin } from '../middleware/auth'
 import crypto from 'crypto'
 import { callLLMOnce, isScriptLLMConfigured } from '../services/scriptLLM'
-import { getScriptLLMConfigSync, getScriptLLMConfigSource } from '../services/scriptLLMConfig'
+import { getScriptLLMConfigSync, getScriptLLMConfigSource, getScriptLLMAllowedUserIdsSync, getScriptLLMEnabledFeaturesSync } from '../services/scriptLLMConfig'
 import { getLLMModesSync, setLLMModesInDB, loadScriptLLMConfigCache } from '../services/scriptLLMConfig'
 import {
   listLlmTools,
@@ -2720,6 +2720,22 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
     const { storeId, useStatsFromStoreId, rawDailyTable, metricsOverride, userPrompt, locale: bodyLocale, countryCode: bodyCountryCode } = req.body
     const userId = req.user!.userId
     const isAdmin = req.user!.role === 'admin'
+
+    // 与话术一致：若管理员配置了「允许使用 LLM 的用户」列表，则仅列表内用户（及管理员）可调用智能生成待办
+    const allowedUserIds = getScriptLLMAllowedUserIdsSync()
+    if (!isAdmin && allowedUserIds !== null && !allowedUserIds.includes(userId)) {
+      return res.status(403).json({
+        error: '您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。',
+        code: 'GENERATE_TASKS_ACCESS_DENIED',
+      })
+    }
+    const enabledFeatures = getScriptLLMEnabledFeaturesSync()
+    if (enabledFeatures !== null && !enabledFeatures.includes('tasks')) {
+      return res.status(403).json({
+        error: '当前未开放智能生成待办功能，请联系管理员在「权限配置」中勾选「智能生成待办」。',
+        code: 'GENERATE_TASKS_FEATURE_DISABLED',
+      })
+    }
 
     // 任务归属：有店铺时，管理员为他人店铺生成则归属店铺主，否则归属当前用户（便于店铺主在待办列表看到）
     let taskOwnerId = userId
