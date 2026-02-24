@@ -1439,9 +1439,9 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                             toast.success(`成功生成 ${total} 个新任务！`)
                           }
                         } catch (error: unknown) {
-                          const err = error as { response?: { data?: { error?: string } }; message?: string }
+                          const err = error as { response?: { data?: { error?: string; detail?: string } }; message?: string }
                           console.error('生成任务失败:', error)
-                          const errorMsg = err.response?.data?.error || err.message || '生成任务失败'
+                          const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '生成任务失败'
                           toast.error(errorMsg)
                         } finally {
                           setRefreshing(false)

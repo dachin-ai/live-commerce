@@ -243,8 +243,8 @@ export default function TaskList() {
       let errorMsg: string | undefined
       if (error && typeof error === 'object') {
         if ('response' in error) {
-          const response = (error as { response?: { data?: { error?: string } } }).response
-          errorMsg = response?.data?.error
+          const response = (error as { response?: { data?: { error?: string; detail?: string } } }).response
+          errorMsg = response?.data?.detail || response?.data?.error
         }
         if (!errorMsg && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
           errorMsg = (error as { message?: string }).message

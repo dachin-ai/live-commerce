@@ -3499,8 +3499,11 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
     })
     console.error('生成任务失败:', message)
     if (err.stack) console.error(err.stack)
-    const isProd = process.env.NODE_ENV === 'production'
-    res.status(500).json({ error: isProd ? '生成任务失败' : message })
+    res.status(500).json({
+      error: '生成任务失败',
+      /** 具体错误原因，便于在浏览器 Network 或控制台排查 */
+      detail: message,
+    })
   }
 })
 
