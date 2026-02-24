@@ -5,7 +5,7 @@ import { dbRun, dbGet, dbAll } from '../db'
 import { authenticate, AuthRequest, requireAdmin } from '../middleware/auth'
 import crypto from 'crypto'
 import { callLLMOnce, isScriptLLMConfigured } from '../services/scriptLLM'
-import { getScriptLLMConfigSync, getScriptLLMConfigSource, getScriptLLMAllowedUserIdsSync, getScriptLLMEnabledFeaturesSync } from '../services/scriptLLMConfig'
+import { getScriptLLMConfigSync, getScriptLLMConfigSource, getScriptLLMAllowedUserIds, getScriptLLMEnabledFeatures } from '../services/scriptLLMConfig'
 import { getLLMModesSync, setLLMModesInDB, loadScriptLLMConfigCache } from '../services/scriptLLMConfig'
 import {
   listLlmTools,
@@ -2721,18 +2721,30 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
     const userId = req.user!.userId
     const isAdmin = req.user!.role === 'admin'
 
-    // 与话术一致：若管理员配置了「允许使用 LLM 的用户」列表，则仅列表内用户（及管理员）可调用智能生成待办
-    const allowedUserIds = getScriptLLMAllowedUserIdsSync()
+    // 与话术一致：若管理员配置了「允许使用 LLM 的用户」列表，则仅列表内用户（及管理员）可调用智能生成待办。从 DB 直接读最新配置，避免多进程/缓存未刷新导致已配置仍 403
+    const allowedUserIds = await getScriptLLMAllowedUserIds()
     if (!isAdmin && allowedUserIds !== null && !allowedUserIds.includes(userId)) {
+      console.warn('[generate-tasks] 403 用户不在允许列表', {
+        userId,
+        role: req.user!.role,
+        allowedCount: allowedUserIds.length,
+        hint: '请在管理员-权限配置中勾选该用户（或全选）并保存',
+      })
       return res.status(403).json({
-        error: '您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。',
+        error: '您暂无智能生成待办权限，请联系管理员在「管理员」-「权限配置」-「可使用 LLM 的用户」中勾选您的账号并保存。',
         code: 'GENERATE_TASKS_ACCESS_DENIED',
       })
     }
-    const enabledFeatures = getScriptLLMEnabledFeaturesSync()
+    const enabledFeatures = await getScriptLLMEnabledFeatures()
     if (enabledFeatures !== null && !enabledFeatures.includes('tasks')) {
+      console.warn('[generate-tasks] 403 智能生成待办功能未开放', {
+        userId,
+        role: req.user!.role,
+        enabledFeatures,
+        hint: '请在权限配置中勾选「能够使用的功能」-「智能生成待办」并保存',
+      })
       return res.status(403).json({
-        error: '当前未开放智能生成待办功能，请联系管理员在「权限配置」中勾选「智能生成待办」。',
+        error: '当前未开放智能生成待办功能，请联系管理员在「权限配置」中勾选「智能生成待办」并保存。',
         code: 'GENERATE_TASKS_FEATURE_DISABLED',
       })
     }

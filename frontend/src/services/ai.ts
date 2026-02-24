@@ -57,15 +57,16 @@ export interface ScriptLLMResult {
   [key: string]: unknown
 }
 
-/** 查询话术 LLM 配置（GET /api/ai/script/config）；管理员返回 allowedUserIds、enabledFeatures，非管理员返回 hasAccess */
+/** 查询话术 LLM 配置（GET /api/ai/script/config）；管理员返回 allowedUserIds、enabledFeatures，非管理员返回 hasAccess、hasAccessForTasks（能否使用智能生成待办） */
 export async function getScriptLLMConfig(): Promise<{
   configured: boolean
   allowedUserIds?: string[] | null
   enabledFeatures?: string[] | null
   hasAccess?: boolean
+  hasAccessForTasks?: boolean
 }> {
   const data = await api.get('/ai/script/config')
-  return data as unknown as { configured: boolean; allowedUserIds?: string[] | null; enabledFeatures?: string[] | null; hasAccess?: boolean }
+  return data as unknown as { configured: boolean; allowedUserIds?: string[] | null; enabledFeatures?: string[] | null; hasAccess?: boolean; hasAccessForTasks?: boolean }
 }
 
 /** 豆包（火山方舟）API 基地址 */

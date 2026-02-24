@@ -63,6 +63,19 @@ export function getScriptLLMAllowedUserIdsSync(): string[] | null {
   return cachedAllowedIds === undefined ? null : cachedAllowedIds
 }
 
+/** 从数据库读取已启用的功能 id 列表；null 表示全部启用。用于生成待办等接口，避免多进程下缓存未同步。 */
+export async function getScriptLLMEnabledFeatures(): Promise<string[] | null> {
+  const row = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [KEY_ENABLED_FEATURES])
+  const raw = row?.value?.trim()
+  if (!raw) return null
+  try {
+    const arr = JSON.parse(raw)
+    return Array.isArray(arr) ? arr.map((x: unknown) => String(x).trim()).filter(Boolean) : null
+  } catch {
+    return null
+  }
+}
+
 /** 同步读取已启用的功能 id 列表；null 表示全部启用（兼容旧数据） */
 export function getScriptLLMEnabledFeaturesSync(): string[] | null {
   return cachedEnabledFeatures

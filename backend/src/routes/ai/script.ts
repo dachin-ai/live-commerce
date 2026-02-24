@@ -373,8 +373,10 @@ router.get('/config', async (req: AuthRequest, res) => {
       res.json({ configured, allowedUserIds: allowedUserIds ?? null, enabledFeatures: enabledFeatures ?? null })
     } else {
       const allowed = getScriptLLMAllowedUserIdsSync()
+      const enabledFeatures = getScriptLLMEnabledFeaturesSync()
       const hasAccess = allowed === null || (Array.isArray(allowed) && req.user && allowed.includes(req.user.userId))
-      res.json({ configured, hasAccess })
+      const tasksEnabled = enabledFeatures === null || enabledFeatures.includes('tasks')
+      res.json({ configured, hasAccess, hasAccessForTasks: hasAccess && tasksEnabled })
     }
   } catch (e) {
     res.status(500).json({ error: '查询失败' })

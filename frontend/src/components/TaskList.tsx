@@ -107,8 +107,8 @@ export default function TaskList() {
   const [isExpanded, setIsExpanded] = useState(true)
   const [filter, setFilter] = useState<TaskFilter>('all')
   const llmConfigured = scriptLlmConfig?.configured ?? null
-  /** 与话术共用：管理员配置的「允许使用 LLM 的用户」；非管理员且未勾选时为 false */
-  const canGenerateTasks = scriptLlmConfig?.hasAccess !== false
+  /** 与话术共用：须在允许用户列表且「智能生成待办」功能已开放；后端返回 hasAccessForTasks 时优先使用 */
+  const canGenerateTasks = scriptLlmConfig?.hasAccessForTasks !== false && scriptLlmConfig?.hasAccess !== false
   const currentLocale = locale || 'zh-CN'
 
   const pendingTasks = tasks
@@ -246,9 +246,13 @@ export default function TaskList() {
       if (error && typeof error === 'object' && 'response' in error) {
         const res = (error as { response?: { status?: number; data?: { error?: string; detail?: string; message?: string; code?: string } } }).response
         errorMsg = res?.data?.error || res?.data?.detail || res?.data?.message
-        // 403 且为权限类：优先展示后端文案，便于非管理员看到「请联系管理员勾选开通」
-        if (res?.status === 403 && (res?.data?.code === 'GENERATE_TASKS_ACCESS_DENIED' || /权限|开通|勾选/.test(errorMsg || ''))) {
-          toast.warning(errorMsg || '您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。')
+        // 403：优先展示后端返回的文案（用户权限、功能未开放等），便于用户按提示操作
+        if (res?.status === 403) {
+          const fallback =
+            res?.data?.code === 'GENERATE_TASKS_FEATURE_DISABLED'
+              ? '当前未开放智能生成待办功能，请联系管理员在「权限配置」中勾选「智能生成待办」。'
+              : '您暂无智能生成待办权限，请联系管理员在「管理员」-「权限配置」中为您勾选用户并勾选「智能生成待办」后保存。'
+          toast.warning(errorMsg || fallback)
           return
         }
       }
