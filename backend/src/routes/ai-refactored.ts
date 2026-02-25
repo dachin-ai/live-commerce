@@ -16,6 +16,10 @@ import {
   createLlmTool,
   updateLlmTool,
   deleteLlmTool,
+  getLLMConfigForFeature,
+  getFeatureLlmMapping,
+  setFeatureLlmMapping,
+  type FeatureLlmMapping,
 } from '../services/llmTools'
 import { logRequest } from '../utils/requestLog'
 import scriptRouter from './ai/script'
@@ -267,9 +271,9 @@ router.post('/bot/generate-tasks', requireBotApiKey, async (req, res) => {
       })
     }
 
-    const llmConfig = getScriptLLMConfigSync()
+    let llmConfig = await getLLMConfigForFeature('tasks')
     if (!llmConfig) {
-      return res.status(503).json({ success: false, error: '未配置 LLM，无法生成智能待办。请配置 SCRIPT_LLM_URL / SCRIPT_LLM_API_KEY 或管理后台话术 LLM。' })
+      return res.status(503).json({ success: false, error: '未配置 LLM，无法生成智能待办。请配置 SCRIPT_LLM_URL / SCRIPT_LLM_API_KEY 或管理后台话术 LLM，或为「智能待办」指定工具。' })
     }
 
     let tasks: Array<{ title: string; description: string; priority: string }> = []
@@ -431,21 +435,40 @@ router.put('/llm-modes', async (req: AuthRequest, res) => {
 
 // ==================== 多套 AI 工具配置（llm_tools 表 + 用户选择） ====================
 
-/** GET /api/ai/llm-tools：列表 + 当前用户选中的 toolId + 默认 toolId */
+/** GET /api/ai/llm-tools：列表 + 当前用户选中的 toolId + 默认 toolId + 功能映射（管理员可见） */
 router.get('/llm-tools', async (req: AuthRequest, res) => {
   try {
     const tools = await listLlmTools()
     const defaultId = await getDefaultToolId()
     const userId = req.user?.userId
     const selectedId = userId ? await getUserSelectedToolId(userId) : null
+    const isAdmin = req.user?.role === 'admin'
+    const featureMapping = isAdmin ? await getFeatureLlmMapping() : undefined
     res.json({
       tools,
       defaultToolId: defaultId,
       selectedToolId: selectedId ?? defaultId,
+      ...(featureMapping !== undefined && { featureMapping }),
     })
   } catch (e) {
     console.error('GET /llm-tools 失败:', e)
     res.status(500).json({ error: '查询失败' })
+  }
+})
+
+/** PUT /api/ai/feature-llm-mapping：设置功能→工具映射（仅管理员） */
+router.put('/feature-llm-mapping', requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const { script, tasks, anomaly } = req.body ?? {}
+    const mapping: FeatureLlmMapping = {}
+    if (script != null && typeof script === 'string' && script.trim()) mapping.script = script.trim()
+    if (tasks != null && typeof tasks === 'string' && tasks.trim()) mapping.tasks = tasks.trim()
+    if (anomaly != null && typeof anomaly === 'string' && anomaly.trim()) mapping.anomaly = anomaly.trim()
+    await setFeatureLlmMapping(mapping)
+    res.json({ success: true, message: '功能映射已保存' })
+  } catch (e) {
+    console.error('PUT /feature-llm-mapping 失败:', e)
+    res.status(500).json({ error: '保存失败' })
   }
 })
 
@@ -2790,7 +2813,7 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
     let llmEmptyReasonFromStore: string | undefined
     let llmConfig: { url: string; apiKey: string; model?: string } | null =
       await getEffectiveToolConfigForUser(userId, req.body?.toolId)
-    if (!llmConfig) llmConfig = getScriptLLMConfigSync()
+    if (!llmConfig) llmConfig = await getLLMConfigForFeature('tasks')
     if (storeId) {
       const suggestedResult = await generateSuggestedTodosForStore(storeId, {
         llmConfig: llmConfig ?? undefined,

@@ -21,6 +21,7 @@ import {
 import { isScriptLLMConfigured, streamScriptFromLLM } from '../../services/scriptLLM'
 import {
   setScriptLLMConfigInDB,
+  setScriptLLMPermissionsOnlyInDB,
   loadScriptLLMConfigCache,
   getScriptLLMAllowedUserIds,
   getScriptLLMAllowedUserIdsSync,
@@ -29,7 +30,7 @@ import {
   getScriptLLMConfigSync,
   getLLMModesSync,
 } from '../../services/scriptLLMConfig'
-import { getEffectiveToolConfigForUser, getDefaultToolId, setDefaultToolId, updateLlmTool, createLlmTool, listLlmTools } from '../../services/llmTools'
+import { getEffectiveToolConfigForUser, getLLMConfigForFeature, getDefaultToolId, setDefaultToolId, updateLlmTool, createLlmTool, listLlmTools } from '../../services/llmTools'
 import { logRequest } from '../../utils/requestLog'
 import { translateLongText, TranslateQuotaError, TRANSLATE_QUOTA_MESSAGE } from '../../utils/translate'
 import type { ScriptType } from '../../rules/scriptGeneration'
@@ -431,6 +432,21 @@ router.get('/last-raw', requireAdmin, (_req: express.Request, res: express.Respo
   })
 })
 
+/** POST /api/ai/script/config/permissions 仅保存权限（允许用户、已启用功能），不要求 API 地址/密钥。用于管理员只改权限时保存 */
+router.post('/config/permissions', requireAdmin, async (req: AuthRequest, res) => {
+  try {
+    const { allowedUserIds: rawAllowed, enabledFeatures: rawFeatures } = req.body ?? {}
+    const allowedUserIds = rawAllowed === undefined ? undefined : Array.isArray(rawAllowed) ? rawAllowed.map((id: unknown) => String(id).trim()).filter(Boolean) : null
+    const enabledFeatures = rawFeatures === undefined ? undefined : (Array.isArray(rawFeatures) ? rawFeatures.map((id: unknown) => String(id).trim()).filter(Boolean) : null)
+    await setScriptLLMPermissionsOnlyInDB(allowedUserIds, enabledFeatures)
+    await loadScriptLLMConfigCache()
+    res.json({ success: true, message: '权限已保存' })
+  } catch (e) {
+    console.error('保存权限失败:', e)
+    res.status(500).json({ error: '保存失败' })
+  }
+})
+
 router.post('/config', requireAdmin, async (req: AuthRequest, res) => {
   try {
     const { url, apiKey, model, allowedUserIds: rawAllowed, enabledFeatures: rawFeatures } = req.body ?? {}
@@ -558,7 +574,7 @@ router.post('/stream', async (req: express.Request, res: express.Response) => {
     let llmConfig = authReq.user?.userId
       ? await getEffectiveToolConfigForUser(authReq.user.userId, (req.body as any)?.toolId)
       : null
-    if (!llmConfig) llmConfig = getScriptLLMConfigSync()
+    if (!llmConfig) llmConfig = await getLLMConfigForFeature('script')
     const configured = Boolean(llmConfig)
     if (configured) {
       const allowed = getScriptLLMAllowedUserIdsSync()

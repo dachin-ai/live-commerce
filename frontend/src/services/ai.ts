@@ -84,6 +84,23 @@ export async function getLlmDiagnostic(): Promise<{ configured: boolean; source:
   return data as unknown as { configured: boolean; source: 'env' | 'db' | 'none'; hint: string }
 }
 
+/** 获取 LLM 工具列表及功能映射（GET /api/ai/llm-tools）；管理员会多返回 featureMapping */
+export async function getLlmTools(): Promise<{
+  tools: Array<{ id: string; name: string; url: string; model: string | null; sort_order: number }>
+  defaultToolId: string | null
+  selectedToolId: string | null
+  featureMapping?: { script?: string; tasks?: string; anomaly?: string }
+}> {
+  const data = await api.get('/ai/llm-tools')
+  return data as unknown as Awaited<ReturnType<typeof getLlmTools>>
+}
+
+/** 设置功能→工具映射（PUT /api/ai/feature-llm-mapping），仅管理员 */
+export async function setFeatureLlmMapping(mapping: { script?: string; tasks?: string; anomaly?: string }): Promise<{ success: boolean; message?: string }> {
+  const data = await api.put('/ai/feature-llm-mapping', mapping)
+  return data as unknown as { success: boolean; message?: string }
+}
+
 /** 获取可选智能体方式与当前偏好（GET /api/ai/llm-modes） */
 export async function getLlmModes(): Promise<{
   modes: Array<{ id: LLMModeId; label: string }>
@@ -106,6 +123,22 @@ export async function setLlmModes(options: { todo?: LLMModeId; script?: LLMModeI
 }> {
   const data = await api.put('/ai/llm-modes', options)
   return data as unknown as Awaited<ReturnType<typeof setLlmModes>>
+}
+
+/** 仅保存权限（POST /api/ai/script/config/permissions），不要求 API 地址/密钥。用于管理员只改「可使用 LLM 的用户」或「能够使用的功能」时保存 */
+export async function saveScriptLLMPermissions(
+  allowedUserIds: string[],
+  enabledFeatures: string[],
+  totalUserCount: number,
+  totalFeatureCount: number
+): Promise<{ success: boolean; message?: string }> {
+  const allowedToSend = allowedUserIds.length === totalUserCount ? null : allowedUserIds
+  const featuresToSend = enabledFeatures.length === totalFeatureCount ? null : enabledFeatures
+  const data = await api.post('/ai/script/config/permissions', {
+    allowedUserIds: allowedToSend,
+    enabledFeatures: featuresToSend,
+  })
+  return data as unknown as { success: boolean; message?: string }
 }
 
 /** 保存话术 LLM 配置（POST /api/ai/script/config），仅管理员可调用；allowedUserIds 为选定用户；enabledFeatures 为启用功能 id 列表（未传或 null 表示全部启用） */

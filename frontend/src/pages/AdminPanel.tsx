@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
-import { Users, Settings, Shield, Plus, X, Edit, Key, CheckCircle } from 'lucide-react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { Users, Settings, Shield, Plus, X, Edit, Key, CheckCircle, Cpu } from 'lucide-react'
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from '../services/users'
 import { User, type UserRole } from '../services/users'
-import { getScriptLLMConfig, saveScriptLLMConfig, DEFAULT_SCRIPT_LLM_URL, DOUBAO_LLM_BASE_URL } from '../services/ai'
+import { getScriptLLMConfig, saveScriptLLMConfig, saveScriptLLMPermissions, getLlmTools, setFeatureLlmMapping, DEFAULT_SCRIPT_LLM_URL, DOUBAO_LLM_BASE_URL } from '../services/ai'
 import Sidebar from '../components/Sidebar'
 import UserMultiSelectModal from '../components/UserMultiSelectModal'
 import { useToast } from '../contexts/ToastContext'
@@ -53,6 +54,28 @@ export default function AdminPanel() {
   const [llmAllowedUserIds, setLlmAllowedUserIds] = useState<string[]>([])
   const [llmEnabledFeatures, setLlmEnabledFeatures] = useState<string[]>(LLM_PERMISSION_FEATURES.map((f) => f.id))
   const [showLlmUserModal, setShowLlmUserModal] = useState(false)
+
+  const queryClient = useQueryClient()
+  const { data: llmToolsData } = useQuery({
+    queryKey: ['llm-tools'],
+    queryFn: getLlmTools,
+    staleTime: 60_000,
+  })
+  const [featureMapping, setFeatureMapping] = useState<{ script?: string; tasks?: string; anomaly?: string }>({})
+  useEffect(() => {
+    if (llmToolsData?.featureMapping) setFeatureMapping(llmToolsData.featureMapping)
+  }, [llmToolsData?.featureMapping])
+  const setFeatureMappingMutation = useMutation({
+    mutationFn: setFeatureLlmMapping,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['llm-tools'] })
+      toast.success(t('admin.featureMappingSaved', { fallback: '功能映射已保存' }))
+    },
+    onError: (err: unknown) => {
+      const e = err as { response?: { data?: { error?: string } } }
+      toast.error(e.response?.data?.error || '保存失败')
+    },
+  })
 
   const handleCreate = async () => {
     if (!formData.name || !formData.email || !formData.password) {
@@ -167,6 +190,20 @@ export default function AdminPanel() {
 
   const selectAllLlmUsers = () => setLlmAllowedUserIds(users.map((u) => u.id))
   const clearAllLlmUsers = () => setLlmAllowedUserIds([])
+
+  const handleSaveLLMPermissionsOnly = async () => {
+    setLlmSaving(true)
+    try {
+      const allFeatureIds = LLM_PERMISSION_FEATURES.map((f) => f.id)
+      await saveScriptLLMPermissions(llmAllowedUserIds, llmEnabledFeatures, users.length, allFeatureIds.length)
+      toast.success(t('admin.llmPermissionsSaved', { fallback: '权限已保存，无需填写 API 密钥。' }))
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } }
+      toast.error(err.response?.data?.error || '保存失败')
+    } finally {
+      setLlmSaving(false)
+    }
+  }
   const toggleLlmFeature = (featureId: string) => {
     setLlmEnabledFeatures((prev) =>
       prev.includes(featureId) ? prev.filter((id) => id !== featureId) : [...prev, featureId]
@@ -331,16 +368,98 @@ export default function AdminPanel() {
                   placeholder={t('admin.searchUserPlaceholder', { fallback: '搜索姓名或邮箱' })}
                   permissionScope="llm"
                 />
-                <button
-                  type="button"
-                  onClick={handleSaveLLMConfig}
-                  disabled={llmSaving}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-                >
-                  {llmSaving ? t('admin.saving') : t('admin.saveConfig')}
-                </button>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleSaveLLMPermissionsOnly}
+                    disabled={llmSaving}
+                    className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 disabled:opacity-50"
+                    title={t('admin.savePermissionsOnlyHint', { fallback: '只保存用户与功能勾选，无需填写 API 密钥' })}
+                  >
+                    {llmSaving ? t('admin.saving') : t('admin.savePermissionsOnly', { fallback: '仅保存权限' })}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveLLMConfig}
+                    disabled={llmSaving}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+                  >
+                    {llmSaving ? t('admin.saving') : t('admin.saveConfig')}
+                  </button>
+                </div>
               </div>
             </div>
+
+            {llmToolsData && llmToolsData.tools.length > 0 && llmToolsData.featureMapping !== undefined && (
+              <div className="card">
+                <div className="flex items-center gap-2 mb-4">
+                  <Cpu className="w-5 h-5 text-indigo-600" />
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-900">{t('admin.featureMappingTitle', { fallback: '功能与模型映射' })}</h2>
+                    <p className="text-sm text-gray-500">{t('admin.featureMappingDesc', { fallback: '为各功能指定使用的 LLM 工具；未指定时使用话术配置或默认工具。' })}</p>
+                  </div>
+                </div>
+                <div className="space-y-3 max-w-xl">
+                  <div className="flex items-center gap-3">
+                    <label className="w-28 text-sm font-medium text-gray-700">{t('admin.llmFeatureScript')}</label>
+                    <select
+                      value={featureMapping.script ?? ''}
+                      onChange={(e) => setFeatureMapping((p) => ({ ...p, script: e.target.value || undefined }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">— 使用默认（话术配置或系统默认工具）—</option>
+                      {llmToolsData.tools.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.url && t.url.includes('coze.site') ? `${t.name} (Coze)` : t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-28 text-sm font-medium text-gray-700">{t('admin.llmFeatureTasks')}</label>
+                    <select
+                      value={featureMapping.tasks ?? ''}
+                      onChange={(e) => setFeatureMapping((p) => ({ ...p, tasks: e.target.value || undefined }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">— 使用默认（话术配置或系统默认工具）—</option>
+                      {llmToolsData.tools.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.url && t.url.includes('coze.site') ? `${t.name} (Coze)` : t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="w-28 text-sm font-medium text-gray-700">{t('admin.llmFeatureAnomaly', { fallback: '异常分析' })}</label>
+                    <select
+                      value={featureMapping.anomaly ?? ''}
+                      onChange={(e) => setFeatureMapping((p) => ({ ...p, anomaly: e.target.value || undefined }))}
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                    >
+                      <option value="">— 使用默认（话术配置或系统默认工具）—</option>
+                      {llmToolsData.tools.map((t) => (
+                        <option key={t.id} value={t.id}>
+                          {t.url && t.url.includes('coze.site') ? `${t.name} (Coze)` : t.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setFeatureMappingMutation.mutate({
+                      script: featureMapping.script || undefined,
+                      tasks: featureMapping.tasks || undefined,
+                      anomaly: featureMapping.anomaly || undefined,
+                    })}
+                    disabled={setFeatureMappingMutation.isPending}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm"
+                  >
+                    {setFeatureMappingMutation.isPending ? t('admin.saving') : t('admin.saveFeatureMapping', { fallback: '保存映射' })}
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="card">
         <div className="flex items-center justify-between mb-6">

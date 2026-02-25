@@ -125,6 +125,34 @@ export async function setScriptLLMConfigInDB(
   )
 }
 
+/** 仅更新权限（允许用户列表、已启用功能），不修改 url/apiKey/model。用于管理员仅勾选权限时保存，避免因未填写 API 密钥导致权限无法写入 */
+export async function setScriptLLMPermissionsOnlyInDB(
+  allowedUserIds?: string[] | null,
+  enabledFeatures?: string[] | null
+): Promise<void> {
+  const now = new Date().toISOString()
+  if (allowedUserIds !== undefined) {
+    const ids = Array.isArray(allowedUserIds) ? allowedUserIds.map((id) => String(id).trim()).filter(Boolean) : null
+    const v = ids === null ? '*' : ids.length === 0 ? '' : ids.join(',')
+    await dbRun(
+      `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
+      [KEY_ALLOWED_USER_IDS, v, now, v, now]
+    )
+  }
+  if (enabledFeatures !== undefined) {
+    const featuresVal =
+      enabledFeatures === null
+        ? ''
+        : Array.isArray(enabledFeatures)
+          ? JSON.stringify(enabledFeatures.map((s) => String(s).trim()).filter(Boolean))
+          : ''
+    await dbRun(
+      `INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?`,
+      [KEY_ENABLED_FEATURES, featuresVal, now, featuresVal, now]
+    )
+  }
+}
+
 
 /** 从数据库加载配置到内存缓存（启动时与管理员保存后调用） */
 export async function loadScriptLLMConfigCache(): Promise<void> {

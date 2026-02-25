@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "vefaas-browser": {
+      "command": "npx",
+      "args": [
+        "@faas-mcp/browser@latest",
+        "--allowed-origins", "http://localhost:5173;http://localhost:3000"
+      ]
+    }
+  }
+}

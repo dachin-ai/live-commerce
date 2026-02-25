@@ -2,12 +2,17 @@
  * 多套 AI 工具配置：CRUD、用户选择、按工具 ID 取配置供调用。
  * 与 scriptLLMConfig 并存：scriptLLMConfig 为旧版单套配置（环境变量/ system_config 单条）；
  * 本模块为 llm_tools 表 + 用户偏好 selectedLlmToolId，调用时按「用户选择的工具 ID」取 URL/Key。
+ * 支持按功能映射：feature_llm_mapping 指定 script/tasks/anomaly 各自使用的工具 ID。
  */
 
 import crypto from 'crypto'
 import { dbRun, dbGet, dbAll } from '../db'
+import { getScriptLLMConfigSync } from './scriptLLMConfig'
 
 const SYS_KEY_DEFAULT_TOOL_ID = 'llm_tool_default_id'
+const SYS_KEY_FEATURE_LLM_MAPPING = 'feature_llm_mapping'
+
+export type FeatureId = 'script' | 'tasks' | 'anomaly'
 
 export interface LlmToolRecord {
   id: string
@@ -185,6 +190,52 @@ export async function updateLlmTool(
 
 /** 删除一套工具（仅管理员） */
 export async function deleteLlmTool(id: string): Promise<boolean> {
-  const r = await dbRun('DELETE FROM llm_tools WHERE id = ?', [id])
+  await dbRun('DELETE FROM llm_tools WHERE id = ?', [id])
   return true
+}
+
+/** 功能 → 工具 ID 映射类型 */
+export type FeatureLlmMapping = Partial<Record<FeatureId, string>>
+
+/** 获取功能 → 工具 ID 映射 */
+export async function getFeatureLlmMapping(): Promise<FeatureLlmMapping> {
+  const row = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [SYS_KEY_FEATURE_LLM_MAPPING])
+  const raw = row?.value?.trim()
+  if (!raw) return {}
+  try {
+    const obj = JSON.parse(raw)
+    if (obj && typeof obj === 'object') {
+      const out: FeatureLlmMapping = {}
+      for (const k of ['script', 'tasks', 'anomaly']) {
+        const v = obj[k]
+        if (typeof v === 'string' && v.trim()) out[k as FeatureId] = v.trim()
+      }
+      return out
+    }
+  } catch {
+    /* ignore */
+  }
+  return {}
+}
+
+/** 设置功能 → 工具 ID 映射（仅管理员） */
+export async function setFeatureLlmMapping(mapping: FeatureLlmMapping): Promise<void> {
+  const now = new Date().toISOString()
+  const val = JSON.stringify(mapping)
+  await dbRun(
+    "INSERT INTO system_config (key, value, updatedAt) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = ?, updatedAt = ?",
+    [SYS_KEY_FEATURE_LLM_MAPPING, val, now, val, now]
+  )
+}
+
+/** 按功能获取 LLM 配置：优先从 feature_llm_mapping 取工具，无映射则回退 scriptLLMConfig */
+export async function getLLMConfigForFeature(feature: FeatureId): Promise<LlmToolConfig | null> {
+  const mapping = await getFeatureLlmMapping()
+  const toolId = mapping[feature]?.trim()
+  if (toolId) {
+    const cfg = await getLlmToolConfigById(toolId)
+    if (cfg) return cfg
+  }
+  const fallback = getScriptLLMConfigSync()
+  return fallback ? { url: fallback.url, apiKey: fallback.apiKey, model: fallback.model } : null
 }
