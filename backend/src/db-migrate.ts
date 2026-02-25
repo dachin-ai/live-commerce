@@ -36,9 +36,14 @@ async function getCurrentVersion(): Promise<number> {
 }
 
 /**
- * 记录迁移版本
+ * 记录迁移版本（若已存在则跳过，避免 UNIQUE 冲突）
  */
 async function recordMigration(version: number, description: string) {
+  const exists = await dbGet<{ c: number }>(
+    `SELECT COUNT(*) as c FROM ${DB_VERSION_TABLE} WHERE version = ?`,
+    [version]
+  )
+  if (exists && exists.c > 0) return
   await dbRun(
     `INSERT INTO ${DB_VERSION_TABLE} (version, description) VALUES (?, ?)`,
     [version, description]
@@ -85,8 +90,32 @@ export async function updateSeedData() {
     await insertVersionLogs()
     await recordMigration(3, '初始化版本日志数据')
   }
+
+  // 迁移：添加运动户外下的休闲与室外休闲设备、骑行用品等（已有库增量更新）
+  if (currentVersion < 10) {
+    console.log('📦 添加运动户外细分类目（休闲与室外休闲设备、骑行用品等）...')
+    await addMissingCategoriesV10()
+    await recordMigration(10, '添加运动户外细分类目')
+  }
   
   console.log('✅ 种子数据更新完成')
+}
+
+/** 添加运动户外下的休闲与室外休闲设备、骑行用品等（INSERT OR IGNORE 避免重复） */
+async function addMissingCategoriesV10() {
+  const toAdd = [
+    ['cat-2-69', '休闲与室外休闲设备', 'อุปกรณ์สันทนาการและกลางแจ้ง', 2, 'cat-1-7', 4],
+    ['cat-3-77', '骑行用品', 'อุปกรณ์ขี่จักรยาน', 3, 'cat-2-69', 1],
+    ['cat-3-78', '露营装备', 'อุปกรณ์แค้มป์', 3, 'cat-2-69', 2],
+    ['cat-3-79', '垂钓用品', 'อุปกรณ์ตกปลา', 3, 'cat-2-69', 3],
+  ]
+  for (const row of toAdd) {
+    await dbRun(
+      'INSERT OR IGNORE INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
+      row
+    )
+  }
+  console.log('✅ 运动户外细分类目已添加')
 }
 
 /**

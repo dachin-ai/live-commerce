@@ -19,6 +19,7 @@ import { StoreProvider } from './contexts/StoreContext'
 import { LayoutPreferencesProvider } from './contexts/LayoutPreferencesContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { LanguageProvider } from './contexts/LanguageContext'
+import { GenerateTasksProvider } from './contexts/GenerateTasksContext'
 
 function App() {
   try {
@@ -31,6 +32,7 @@ function App() {
       <Router>
         <LanguageProvider>
         <ToastProvider>
+        <GenerateTasksProvider>
         <LayoutPreferencesProvider>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -160,6 +162,7 @@ function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </LayoutPreferencesProvider>
+        </GenerateTasksProvider>
         </ToastProvider>
         </LanguageProvider>
       </Router>

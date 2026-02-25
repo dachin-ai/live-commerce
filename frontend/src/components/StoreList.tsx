@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Store as StoreIcon, Plus, X, Search, Upload, Circle } from 'lucide-react'
+import { Store as StoreIcon, Plus, X, Search, Upload, Circle, Pencil } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useStores, useDeleteStore, type Store } from '../services/stores'
 import { useStore } from '../contexts/StoreContext'
@@ -132,6 +132,17 @@ export default function StoreList({ onUploadStore }: StoreListProps = {}) {
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
+                    window.dispatchEvent(new CustomEvent('openEditStoreModal', { detail: store }))
+                  }}
+                  className="text-blue-500 hover:text-blue-700 p-1"
+                  title={t('dashboard.editStore', { default: '编辑店铺' })}
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
                     onUploadStore?.(store)
                   }}
                   className="text-green-500 hover:text-green-700 p-1"
@@ -140,7 +151,11 @@ export default function StoreList({ onUploadStore }: StoreListProps = {}) {
                   <Upload className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => handleDelete(store.id)}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleDelete(store.id)
+                  }}
                   className="text-red-500 hover:text-red-700 p-1"
                   title={t('dashboard.deleteStore')}
                 >

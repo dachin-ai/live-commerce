@@ -100,6 +100,7 @@ export default function Dashboard() {
   )
   useCurrentUser()
   const [showCreateStoreModal, setShowCreateStoreModal] = useState(false)
+  const [editStore, setEditStore] = useState<import('../services/stores').Store | null>(null)
   const [showDataImportModal, setShowDataImportModal] = useState(false)
   const [exportDropdownOpen, setExportDropdownOpen] = useState(false)
   const [exporting, setExporting] = useState(false)
@@ -117,11 +118,25 @@ export default function Dashboard() {
     setCustomDateTo(end.toISOString().slice(0, 10))
   }, [timePeriod, customDateFrom, customDateTo])
 
-  // 统一打开创建店铺模态框（无店铺时的「创建新店铺」与商店列表的「创建商店」）
+  // 统一打开创建/编辑店铺模态框
   useEffect(() => {
-    const handler = () => setShowCreateStoreModal(true)
-    window.addEventListener('openCreateStoreModal', handler)
-    return () => window.removeEventListener('openCreateStoreModal', handler)
+    const onCreate = () => {
+      setEditStore(null)
+      setShowCreateStoreModal(true)
+    }
+    const onEdit = (e: Event) => {
+      const detail = (e as CustomEvent<import('../services/stores').Store>).detail
+      if (detail) {
+        setEditStore(detail)
+        setShowCreateStoreModal(true)
+      }
+    }
+    window.addEventListener('openCreateStoreModal', onCreate)
+    window.addEventListener('openEditStoreModal', onEdit)
+    return () => {
+      window.removeEventListener('openCreateStoreModal', onCreate)
+      window.removeEventListener('openEditStoreModal', onEdit)
+    }
   }, [])
   
   // 布局偏好
@@ -984,10 +999,11 @@ export default function Dashboard() {
 
       </div>
       
-      {/* 创建店铺模态框（统一入口：无店铺时「创建新店铺」与商店列表「创建商店」） */}
+      {/* 创建/编辑店铺模态框 */}
       <CreateStoreModal
         isOpen={showCreateStoreModal}
-        onClose={() => setShowCreateStoreModal(false)}
+        onClose={() => { setShowCreateStoreModal(false); setEditStore(null) }}
+        store={editStore}
       />
       
       {/* 数据导入模态框 */}

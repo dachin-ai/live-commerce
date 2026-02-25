@@ -2742,11 +2742,13 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
   try {
     const { storeId, useStatsFromStoreId, rawDailyTable, metricsOverride, userPrompt, locale: bodyLocale, countryCode: bodyCountryCode } = req.body
     const userId = req.user!.userId
-    const isAdmin = req.user!.role === 'admin'
+    const role = req.user!.role
+    const isAdmin = role === 'admin'
+    const canBypassUserList = role === 'admin' || role === 'viewer'
 
-    // 与话术一致：若管理员配置了「允许使用 LLM 的用户」列表，则仅列表内用户（及管理员）可调用智能生成待办。从 DB 直接读最新配置，避免多进程/缓存未刷新导致已配置仍 403
+    // 管理员、虚拟管理员可绕过用户列表；其他角色须在「允许使用 LLM 的用户」中。从 DB 直接读最新配置
     const allowedUserIds = await getScriptLLMAllowedUserIds()
-    if (!isAdmin && allowedUserIds !== null && !allowedUserIds.includes(userId)) {
+    if (!canBypassUserList && allowedUserIds !== null && !allowedUserIds.includes(userId)) {
       console.warn('[generate-tasks] 403 用户不在允许列表', {
         userId,
         role: req.user!.role,

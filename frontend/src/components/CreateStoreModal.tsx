@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Plus } from 'lucide-react'
-import { useCreateStore, CreateStoreData } from '../services/stores'
+import { useCreateStore, useUpdateStore, CreateStoreData, type Store } from '../services/stores'
 import { useCreateTask } from '../services/tasks'
 import { useUsers } from '../services/users'
 import { useCategories } from '../services/categories'
@@ -39,6 +39,8 @@ const COUNTRY_CURRENCY: Record<string, { currency: string; symbol: string; code:
 interface CreateStoreModalProps {
   isOpen: boolean
   onClose: () => void
+  /** 传入则为编辑模式，否则为创建模式 */
+  store?: Store | null
 }
 
 const CURRENCY_I18N_KEYS: Record<string, string> = {
@@ -47,14 +49,16 @@ const CURRENCY_I18N_KEYS: Record<string, string> = {
   PHP: 'currencyPHP', MMK: 'currencyMMK', KHR: 'currencyKHR', LAK: 'currencyLAK', BND: 'currencyBND',
 }
 
-export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalProps) {
+export default function CreateStoreModal({ isOpen, onClose, store: editStore }: CreateStoreModalProps) {
+  const isEditMode = !!editStore
   const { t } = useTranslation()
   const { locale } = useLanguage()
   const toast = useToast()
   const storeNameInputRef = useRef<HTMLInputElement>(null)
   const createStore = useCreateStore()
+  const updateStore = useUpdateStore()
   const createTask = useCreateTask()
-  const { setSelectedStore } = useStore()
+  const { selectedStore, setSelectedStore } = useStore()
   const userRole = getCurrentUserRole()
   const isAdmin = userRole === 'admin'
   const { data: users = [] } = useUsers()
@@ -88,13 +92,47 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
     status: 'active',
   })
 
-  // 每次打开弹窗时重置为国家默认（中国）
+  // 打开弹窗时：编辑模式预填表单，创建模式重置
   useEffect(() => {
-    if (isOpen) {
+    if (!isOpen) return
+    if (editStore) {
+      setCountry(editStore.region || '中国')
+      setCurrencyOverride(false)
+      setFormData({
+        name: editStore.name,
+        nameTh: editStore.nameTh || '',
+        userId: editStore.userId || '',
+        region: editStore.region || '中国',
+        currency: editStore.currency || 'CNY',
+        currencySymbol: editStore.currencySymbol || '¥',
+        minPrice: editStore.minPrice,
+        maxPrice: editStore.maxPrice,
+        targetAudience: editStore.targetAudience || '',
+        brandPositioning: editStore.brandPositioning || '小型品牌',
+        brandStrategy: editStore.brandStrategy || '',
+        categoryIds: [],
+        platform: editStore.platform || '抖音',
+        status: editStore.status || 'active',
+      })
+      const cats = editStore.categories || []
+      setSelectedCategories(cats.map((c: { id: string }) => c.id))
+      const level2Ids = [...new Set(cats.map((c: { level: number; id: string; parentId?: string }) => c.level === 2 ? c.id : c.parentId).filter(Boolean) as string[])]
+      setSelectedLevel2Ids(level2Ids)
+      const level1Id = cats.find((c: { level: number; parentId?: string }) => c.level === 2)?.parentId || ''
+      setSelectedLevel1(level1Id)
+    } else {
       setCountry('中国')
       setCurrencyOverride(false)
+      setFormData({
+        name: '', nameTh: '', userId: '', region: '中国', currency: 'CNY', currencySymbol: '¥',
+        minPrice: undefined, maxPrice: undefined, targetAudience: '', brandPositioning: '小型品牌',
+        brandStrategy: '', categoryIds: [], platform: '抖音', status: 'active',
+      })
+      setSelectedCategories([])
+      setSelectedLevel2Ids([])
+      setSelectedLevel1('')
     }
-  }, [isOpen])
+  }, [isOpen, editStore?.id])
 
   // 切换国家时立即用静态映射更新 region 与货币，保证选择越南/泰国等立刻显示对应货币
   useEffect(() => {
@@ -127,80 +165,63 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
       toast.warning(t('createStore.pleaseEnterStoreName'))
       return
     }
-    
-    // 如果DOM值和状态不一致，更新状态
     if (actualName !== formData.name.trim()) {
       setFormData(prev => ({ ...prev, name: actualName }))
     }
 
-    try {
-      // 使用实际名称（从DOM或状态）
-      const finalFormData = {
-        ...formData,
-        name: actualName,
-        categoryIds: selectedCategories,
-      }
+    const payload = {
+      ...formData,
+      name: actualName,
+      categoryIds: selectedCategories,
+    }
 
-      const newStore = await createStore.mutateAsync(finalFormData)
-      // 自动选择新创建的店铺
-      if (newStore && newStore.id) {
-        setSelectedStore(newStore)
-        // 待办 1：确认品牌定位（可在待办中确认或调整）
-        try {
-          await createTask.mutateAsync({
-            title: '确认品牌定位',
-            description: `当前选择：${formData.brandPositioning}。请在待办中确认或调整为：无品牌/小型品牌/中型品牌/大型品牌。`,
-            priority: 'normal',
-            status: 'pending',
-            storeId: newStore.id,
-          })
-        } catch { /* 忽略待办创建失败 */ }
-        // 待办 2：生成或确认品牌影响力策略（合并到待办实现：在待办中完成策略生成/编辑）
-        try {
-          // 获取已选分类的显示名称（按当前语言）
-          const categoryNames = selectedCategories
-            .map(catId => {
-              const cat = level3Categories.find(c => c.id === catId) ?? level2Categories.find(c => c.id === catId)
-              return cat ? getCategoryDisplayName(cat, locale) : null
+    try {
+      if (isEditMode && editStore) {
+        const updated = await updateStore.mutateAsync({ id: editStore.id, ...payload })
+        if (updated && selectedStore?.id === editStore.id) {
+          setSelectedStore(updated)
+        }
+        toast.success(t('createStore.updateSuccess', { default: '店铺已更新' }))
+      } else {
+        const newStore = await createStore.mutateAsync(payload)
+        if (newStore && newStore.id) {
+          setSelectedStore(newStore)
+          try {
+            await createTask.mutateAsync({
+              title: '确认品牌定位',
+              description: `当前选择：${formData.brandPositioning}。请在待办中确认或调整为：无品牌/小型品牌/中型品牌/大型品牌。`,
+              priority: 'normal', status: 'pending', storeId: newStore.id,
             })
-            .filter(Boolean)
-            .join('、')
-          
-          await createTask.mutateAsync({
-            title: '生成或确认品牌影响力策略',
-            description: `店铺「${formData.name.trim()}」已创建。请在待办中完成品牌影响力策略：\n\n【操作步骤】\n① 在 Dashboard 的「AI自动生成」功能区，点击「市场分析」或「商品推荐」\n② 或使用「AI助手」功能，输入"为店铺${formData.name.trim()}生成品牌策略"\n③ 系统将基于以下店铺属性自动生成策略：\n\n【店铺属性】\n- 平台：${formData.platform}\n- 区域：${formData.region}\n- 价格区间：${formData.minPrice || '未设置'} - ${formData.maxPrice || '未设置'} ${formData.currency}\n- 目标人群：${formData.targetAudience || '未设置'}\n- 品牌定位：${formData.brandPositioning}\n- 产品分类：${selectedCategories.length > 0 ? `${categoryNames}（共${selectedCategories.length}个）` : '未设置'}\n\n【完成标准】\n生成策略后，请确认策略内容是否符合店铺定位，确认后在本待办中标记完成。`,
-            priority: 'normal',
-            status: 'pending',
-            storeId: newStore.id,
-          })
-        } catch { /* 忽略待办创建失败 */ }
+          } catch { /* ignore */ }
+          try {
+            const categoryNames = selectedCategories
+              .map(catId => {
+                const cat = level3Categories.find(c => c.id === catId) ?? level2Categories.find(c => c.id === catId)
+                return cat ? getCategoryDisplayName(cat, locale) : null
+              })
+              .filter(Boolean)
+              .join('、')
+            await createTask.mutateAsync({
+              title: '生成或确认品牌影响力策略',
+              description: `店铺「${formData.name.trim()}」已创建。请在待办中完成品牌影响力策略：\n\n【操作步骤】\n① 在 Dashboard 的「AI自动生成」功能区，点击「市场分析」或「商品推荐」\n② 或使用「AI助手」功能，输入"为店铺${formData.name.trim()}生成品牌策略"\n③ 系统将基于以下店铺属性自动生成策略：\n\n【店铺属性】\n- 平台：${formData.platform}\n- 区域：${formData.region}\n- 价格区间：${formData.minPrice || '未设置'} - ${formData.maxPrice || '未设置'} ${formData.currency}\n- 目标人群：${formData.targetAudience || '未设置'}\n- 品牌定位：${formData.brandPositioning}\n- 产品分类：${selectedCategories.length > 0 ? `${categoryNames}（共${selectedCategories.length}个）` : '未设置'}\n\n【完成标准】\n生成策略后，请确认策略内容是否符合店铺定位，确认后在本待办中标记完成。`,
+              priority: 'normal', status: 'pending', storeId: newStore.id,
+            })
+          } catch { /* ignore */ }
+        }
+        toast.success(t('createStore.submitSuccess', { default: '店铺已创建' }))
       }
       onClose()
-      // 重置表单
-      setFormData({
-        name: '',
-        nameTh: '',
-        userId: '',
-        region: '中国',
-        currency: 'CNY',
-        currencySymbol: '¥',
-        minPrice: undefined,
-        maxPrice: undefined,
-        targetAudience: '',
-        brandPositioning: '小型品牌',
-        brandStrategy: '',
-        categoryIds: [],
-        platform: '抖音',
-        status: 'active',
-      })
-      setSelectedCategories([])
-      setSelectedLevel1('')
-      setSelectedLevel2Ids([])
-      setCountry('中国')
-      setCurrencyOverride(false)
+      if (!isEditMode) {
+        setFormData({ name: '', nameTh: '', userId: '', region: '中国', currency: 'CNY', currencySymbol: '¥', minPrice: undefined, maxPrice: undefined, targetAudience: '', brandPositioning: '小型品牌', brandStrategy: '', categoryIds: [], platform: '抖音', status: 'active' })
+        setSelectedCategories([])
+        setSelectedLevel1('')
+        setSelectedLevel2Ids([])
+        setCountry('中国')
+        setCurrencyOverride(false)
+      }
     } catch (error: unknown) {
       const err = error as { response?: { data?: { error?: string } }; message?: string }
-      const msg = err.response?.data?.error || err.message || t('createStore.createFailed')
+      const msg = err.response?.data?.error || err.message || t(isEditMode ? 'createStore.updateFailed' : 'createStore.createFailed')
       toast.error(msg)
     }
   }
@@ -257,8 +278,8 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
       <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h3 className="text-xl font-semibold text-gray-900">{t('createStore.title')}</h3>
-            <p className="text-sm text-gray-500 mt-1">{t('createStore.subtitle')}</p>
+            <h3 className="text-xl font-semibold text-gray-900">{isEditMode ? t('createStore.editTitle', { default: '编辑店铺' }) : t('createStore.title')}</h3>
+            <p className="text-sm text-gray-500 mt-1">{isEditMode ? t('createStore.editSubtitle', { default: '修改店铺基本信息、分类、货币等属性' }) : t('createStore.subtitle')}</p>
           </div>
           <button
             onClick={onClose}
@@ -649,10 +670,10 @@ export default function CreateStoreModal({ isOpen, onClose }: CreateStoreModalPr
           </button>
           <button
             onClick={handleSubmit}
-            disabled={createStore.isPending}
+            disabled={createStore.isPending || updateStore.isPending}
             className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
-            {createStore.isPending ? t('createStore.submitting') : t('createStore.submit')}
+            {(createStore.isPending || updateStore.isPending) ? t('createStore.submitting') : (isEditMode ? t('createStore.saveChanges', { default: '保存修改' }) : t('createStore.submit'))}
           </button>
         </div>
       </div>

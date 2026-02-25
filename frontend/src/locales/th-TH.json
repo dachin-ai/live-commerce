@@ -58,6 +58,7 @@
     "dataFilters": "แถบเครื่องมือกรองข้อมูล",
     "howToImport": "วิธีนำเข้า: เลือกร้านค้า TikTok/Douyin คลิก 'นำเข้าข้อมูล' อัปโหลด Excel แล้วดูสถิติที่แดชบอร์ด",
     "deleteStore": "ลบร้านค้า",
+    "editStore": "แก้ไขร้านค้า",
     "uploadBaseline": "อัปโหลดข้อมูลพื้นฐาน",
     "pendingTasks": "งานที่รอดำเนินการ",
     "totalTasks": "ทั้งหมด {{count}} งาน / {{urgent}} ด่วน",

@@ -3,6 +3,7 @@ import { useTasks, useUpdateTask, translateTasksForLocale, TRANSLATE_QUOTA_MESSA
 import { generateTasks, getScriptLLMConfig, getLlmDiagnostic, type GenerateTasksMetadata } from '../services/ai'
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
+import { useGenerateTasks } from '../contexts/GenerateTasksContext'
 import { CheckCircle2, Clock, AlertCircle, RefreshCw, ChevronDown, ChevronUp, ListTodo, ExternalLink } from 'lucide-react'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -101,7 +102,9 @@ export default function TaskList() {
   })
   const queryClient = useQueryClient()
   const updateTask = useUpdateTask()
-  const [refreshing, setRefreshing] = useState(false)
+  const { generatingStoreId, setGenerating } = useGenerateTasks()
+  /** 当前店铺正在生成：使用全局状态，切换页面后返回仍能正确显示「生成中」 */
+  const refreshing = generatingStoreId === selectedStore?.id
   const [translating, setTranslating] = useState(false)
   const translatingRef = useRef(false)
   const [isExpanded, setIsExpanded] = useState(true)
@@ -208,7 +211,7 @@ export default function TaskList() {
       toast.warning(t('tasks.selectStoreFirst'))
       return
     }
-    setRefreshing(true)
+    setGenerating(selectedStore.id)
     try {
       const res = await generateTasks({
         storeId: selectedStore.id,
@@ -261,7 +264,7 @@ export default function TaskList() {
       }
       toast.error(errorMsg || '生成任务失败，请检查网络连接或登录状态')
     } finally {
-      setRefreshing(false)
+      setGenerating(null)
     }
   }
 

@@ -177,43 +177,70 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
   }
 })
 
-// 更新商店 - 普通用户只能更新自己的商店
+// 更新商店 - 普通用户只能更新自己的商店，支持全部店铺属性与分类
 router.put('/:id', authenticate, async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
-    const { name, description, platform, status } = req.body
-    const userId = req.user!.userId
+    const {
+      name, nameTh, description, platform, status,
+      region, currency, currencySymbol, minPrice, maxPrice,
+      targetAudience, brandPositioning, brandStrategy,
+      categoryIds, userId,
+    } = req.body
+    const currentUserId = req.user!.userId
     const isAdmin = req.user!.role === 'admin'
 
     let query = 'SELECT * FROM stores WHERE id = ?'
     const params: any[] = [id]
-
     if (!isAdmin) {
       query += ' AND userId = ?'
-      params.push(userId)
+      params.push(currentUserId)
     }
-
     const store = await dbGet(query, params)
-
     if (!store) {
       return res.status(404).json({ error: '商店不存在或无权访问' })
     }
 
-    const updates: any = {}
+    const updates: Record<string, unknown> = {}
     if (name !== undefined) updates.name = name
+    if (nameTh !== undefined) updates.nameTh = nameTh
     if (description !== undefined) updates.description = description
     if (platform !== undefined) updates.platform = platform
     if (status !== undefined) updates.status = status
+    if (region !== undefined) updates.region = region
+    if (currency !== undefined) updates.currency = currency
+    if (currencySymbol !== undefined) updates.currencySymbol = currencySymbol
+    if (minPrice !== undefined) updates.minPrice = minPrice
+    if (maxPrice !== undefined) updates.maxPrice = maxPrice
+    if (targetAudience !== undefined) updates.targetAudience = targetAudience
+    if (brandPositioning !== undefined) updates.brandPositioning = brandPositioning
+    if (brandStrategy !== undefined) updates.brandStrategy = brandStrategy
+    if (isAdmin && userId !== undefined) updates.userId = userId
     updates.updatedAt = new Date().toISOString()
 
-    const updateFields = Object.keys(updates)
-      .map((key) => `${key} = ?`)
-      .join(', ')
+    const updateFields = Object.keys(updates).map((key) => `${key} = ?`).join(', ')
     const updateValues = Object.values(updates)
-
     await dbRun(`UPDATE stores SET ${updateFields} WHERE id = ?`, [...updateValues, id])
 
+    // 更新分类关联
+    if (Array.isArray(categoryIds)) {
+      await dbRun('DELETE FROM store_categories WHERE storeId = ?', [id])
+      const now = new Date().toISOString()
+      for (const categoryId of categoryIds) {
+        if (!categoryId) continue
+        await dbRun(
+          'INSERT INTO store_categories (id, storeId, categoryId, createdAt) VALUES (?, ?, ?, ?)',
+          [crypto.randomUUID(), id, categoryId, now]
+        )
+      }
+    }
+
     const updatedStore = await dbGet('SELECT * FROM stores WHERE id = ?', [id])
+    const categories = await dbAll(
+      `SELECT c.* FROM categories c INNER JOIN store_categories sc ON c.id = sc.categoryId WHERE sc.storeId = ?`,
+      [id]
+    )
+    updatedStore.categories = categories
     res.json(updatedStore)
   } catch (error) {
     console.error('更新商店失败:', error)

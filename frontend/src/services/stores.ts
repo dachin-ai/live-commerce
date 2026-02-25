@@ -17,7 +17,7 @@ export interface Store {
   targetAudience?: string
   brandPositioning?: string
   brandStrategy?: string
-  categories?: Array<{ id: string; name: string; level: number }>
+  categories?: Array<{ id: string; name: string; level: number; parentId?: string }>
   status: 'active' | 'inactive'
   createdAt: string
 }
@@ -82,10 +82,12 @@ export const useUpdateStore = () => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ id, ...updates }: Partial<Store> & { id: string }) => {
-      return await api.put(`/stores/${id}`, updates)
+      const data = await api.put(`/stores/${id}`, updates)
+      return data as unknown as Store
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['stores'] })
+      queryClient.invalidateQueries({ queryKey: ['stores', variables.id] })
     },
   })
 }

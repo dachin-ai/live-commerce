@@ -58,6 +58,7 @@
     "dataFilters": "Data Filters Toolbar",
     "howToImport": "How to import: Select a TikTok/Douyin store, click 'Import Data' to upload Excel, then view stats on dashboard.",
     "deleteStore": "Delete Store",
+    "editStore": "Edit store",
     "uploadBaseline": "Upload Baseline Data",
     "pendingTasks": "Pending Tasks",
     "totalTasks": "Total {{count}} Tasks / {{urgent}} Urgent",

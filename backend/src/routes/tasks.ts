@@ -13,15 +13,15 @@ router.use(authenticate)
 router.get('/', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId
-    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
+    const canSeeAllTasks = req.user!.role === 'admin' || req.user!.role === 'manager' || req.user!.role === 'viewer'
     const { storeId } = req.query // 支持按店铺过滤
 
-    // 修改查询以包含店铺名称；管理员/经理查看时带出创建人姓名，便于区分不同账号生成的历史待办
+    // 管理员/经理/虚拟管理员可查看全部待办；普通用户只看自己的。带出创建人姓名便于区分
     let query = 'SELECT t.*, s.name as storeName, u.name as createdByName FROM tasks t LEFT JOIN stores s ON t.storeId = s.id LEFT JOIN users u ON t.userId = u.id WHERE 1=1'
     const params: any[] = []
 
     // 普通用户只能看到自己的任务
-    if (!isAdmin) {
+    if (!canSeeAllTasks) {
       query += ' AND t.userId = ?'
       params.push(userId)
     }
