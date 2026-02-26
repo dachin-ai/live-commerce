@@ -1,18 +1,20 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
-import AnalysisPage from './pages/AnalysisPage'
-import ToolsPage from './pages/ToolsPage'
-import WorkflowPage from './pages/WorkflowPage'
 import Login from './pages/Login'
-import Register from './pages/Register'
-import ForgotPassword from './pages/ForgotPassword'
-import ResetPassword from './pages/ResetPassword'
-import Profile from './pages/Profile'
-import AdminPanel from './pages/AdminPanel'
-import PermissionConfigPage from './pages/PermissionConfigPage'
-import LLMPage from './pages/LLMPage'
-import FeedbackManagement from './pages/FeedbackManagement'
-import MessageCenter from './pages/MessageCenter'
+// 路由懒加载，减少首屏体积（Recharts 等大库延后加载）
+const AnalysisPage = lazy(() => import('./pages/AnalysisPage'))
+const ToolsPage = lazy(() => import('./pages/ToolsPage'))
+const WorkflowPage = lazy(() => import('./pages/WorkflowPage'))
+const Register = lazy(() => import('./pages/Register'))
+const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/ResetPassword'))
+const Profile = lazy(() => import('./pages/Profile'))
+const AdminPanel = lazy(() => import('./pages/AdminPanel'))
+const PermissionConfigPage = lazy(() => import('./pages/PermissionConfigPage'))
+const LLMPage = lazy(() => import('./pages/LLMPage'))
+const FeedbackManagement = lazy(() => import('./pages/FeedbackManagement'))
+const MessageCenter = lazy(() => import('./pages/MessageCenter'))
 import ProtectedRoute from './components/ProtectedRoute'
 import { getCurrentUserRole } from './services/auth'
 import { StoreProvider } from './contexts/StoreContext'
@@ -34,6 +36,7 @@ function App() {
         <ToastProvider>
         <GenerateTasksProvider>
         <LayoutPreferencesProvider>
+        <Suspense fallback={<div className="min-h-screen flex items-center justify-center text-gray-500">加载中...</div>}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
@@ -161,6 +164,7 @@ function App() {
         />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </LayoutPreferencesProvider>
         </GenerateTasksProvider>
         </ToastProvider>
