@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, lazy, Suspense } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu } from 'lucide-react'
 import { useCurrentUser, useLogout, getCurrentUserRole } from '../services/auth'
@@ -7,8 +7,9 @@ import type { Locale } from '../contexts/LanguageContext'
 import { useTranslation } from 'react-i18next'
 import TutorialModal from './TutorialModal'
 import FeedbackModal from './FeedbackModal'
-import SupportAuthorModal from './SupportAuthorModal'
 import { useUnreadCount } from '../services/messages'
+
+const SupportAuthorModal = lazy(() => import('./SupportAuthorModal'))
 
 interface SidebarProps {
   /** 可选：不传则使用全局 LanguageContext（多语言持久化） */
@@ -595,7 +596,9 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
         <FeedbackModal onClose={() => setShowFeedbackModal(false)} />
       )}
       {showSupportAuthorModal && (
-        <SupportAuthorModal onClose={() => setShowSupportAuthorModal(false)} />
+        <Suspense fallback={null}>
+          <SupportAuthorModal onClose={() => setShowSupportAuthorModal(false)} />
+        </Suspense>
       )}
     </div>
   )

@@ -1,8 +1,8 @@
 import { lazy, Suspense } from 'react'
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import Dashboard from './pages/Dashboard'
-import Login from './pages/Login'
-// 路由懒加载，减少首屏体积（Recharts 等大库延后加载）
+// 路由懒加载，减少首屏体积（Dashboard/Login 最重，延后加载）
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Login = lazy(() => import('./pages/Login'))
 const AnalysisPage = lazy(() => import('./pages/AnalysisPage'))
 const ToolsPage = lazy(() => import('./pages/ToolsPage'))
 const WorkflowPage = lazy(() => import('./pages/WorkflowPage'))

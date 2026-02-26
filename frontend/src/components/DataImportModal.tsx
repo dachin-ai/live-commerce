@@ -19,6 +19,7 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
   const [importResult, setImportResult] = useState<DataImportResult | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
 
   // 锁定导入目标：优先使用调用方传入的 targetStore，保证「当前店铺正常抓取」不因切店而错写
   const importTarget = (targetStore && targetStore.id)
@@ -29,17 +30,40 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
 
   if (!isOpen) return null
 
+  const validateAndSetFile = (file: File | null) => {
+    if (!file) return
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      toast.error('只支持Excel文件（.xlsx, .xls）')
+      return
+    }
+    setSelectedFile(file)
+    setImportResult(null)
+  }
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      // 验证文件类型
-      if (!file.name.match(/\.(xlsx|xls)$/i)) {
-        toast.error('只支持Excel文件（.xlsx, .xls）')
-        return
-      }
-      setSelectedFile(file)
-      setImportResult(null)
-    }
+    validateAndSetFile(file ?? null)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!uploading) setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    if (uploading) return
+    const file = e.dataTransfer.files?.[0]
+    validateAndSetFile(file ?? null)
   }
 
   const handleUpload = async () => {
@@ -129,7 +153,16 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
             <label className="block text-sm font-medium text-gray-700 mb-2">
               选择Excel文件
             </label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg hover:border-blue-400 transition-colors">
+            <div
+              className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg transition-colors ${
+                isDragging
+                  ? 'border-blue-500 bg-blue-50'
+                  : 'border-gray-300 hover:border-blue-400'
+              }`}
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <div className="space-y-1 text-center">
                 <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
                 <div className="flex text-sm text-gray-600">

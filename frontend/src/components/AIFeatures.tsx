@@ -27,6 +27,7 @@ import {
   Activity,
 } from 'lucide-react'
 import { getCurrentUserRole } from '../services/auth'
+import { copyToClipboard } from '../utils/clipboard'
 import {
   generateScript,
   generateScriptStream,
@@ -1102,17 +1103,14 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                     <button
                       type="button"
                       onClick={async () => {
-                        try {
-                          const text = scriptData?.streaming
-                            ? streamingContent
-                            : scriptNeedsTranslation && scriptTranslatedContent
-                              ? scriptTranslatedContent
-                              : scriptData?.content
-                          await navigator.clipboard.writeText(String(text ?? ''))
-                          toast.success(t('tools.copyToClipboard'))
-                        } catch {
-                          toast.error(t('tools.copyFailed'))
-                        }
+                        const text = scriptData?.streaming
+                          ? streamingContent
+                          : scriptNeedsTranslation && scriptTranslatedContent
+                            ? scriptTranslatedContent
+                            : scriptData?.content
+                        const ok = await copyToClipboard(String(text ?? ''))
+                        if (ok) toast.success(t('tools.copyToClipboard'))
+                        else toast.error(t('tools.copyFailed'))
                       }}
                       className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
                       title={t('tools.copyFullText')}
@@ -1620,13 +1618,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       <button
                         type="button"
                         onClick={async () => {
-                          try {
-                            const copyText = scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)
-                            await navigator.clipboard.writeText(copyText)
-                            toast.success(t('tools.copyToClipboard'))
-                          } catch {
-                            toast.error(t('tools.copyFailed'))
-                          }
+                          const copyText = scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)
+                          const ok = await copyToClipboard(copyText ?? '')
+                          if (ok) toast.success(t('tools.copyToClipboard'))
+                          else toast.error(t('tools.copyFailed'))
                         }}
                         className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
                       >

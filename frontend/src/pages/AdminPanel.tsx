@@ -8,6 +8,7 @@ import { getScriptLLMConfig, saveScriptLLMConfig, saveScriptLLMPermissions, getL
 import Sidebar from '../components/Sidebar'
 import UserMultiSelectModal from '../components/UserMultiSelectModal'
 import { useToast } from '../contexts/ToastContext'
+import { copyToClipboard } from '../utils/clipboard'
 
 type UsersQueryError = {
   response?: {
@@ -511,9 +512,10 @@ export default function AdminPanel() {
                       <span title={user.id} className="text-xs">{user.id.length > 12 ? `${user.id.slice(0, 8)}…` : user.id}</span>
                       <button
                         type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(user.id)
-                          toast.success(t('admin.userIdCopied', { fallback: '用户 ID 已复制' }))
+                        onClick={async () => {
+                          const ok = await copyToClipboard(user.id)
+                          if (ok) toast.success(t('admin.userIdCopied', { fallback: '用户 ID 已复制' }))
+                          else toast.error(t('admin.copyFailed', { fallback: '复制失败，请手动选择复制' }))
                         }}
                         className="ml-1.5 text-indigo-600 hover:underline text-xs"
                         title={t('admin.copyUserId', { fallback: '复制用户 ID' })}

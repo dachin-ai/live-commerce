@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
-import i18n from '../i18n'
+import i18n, { loadLocale } from '../i18n'
 
 const STORAGE_KEY = 'lvbcsym_locale'
 
@@ -47,18 +47,22 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(loadStoredLocale)
 
   const setLocale = useCallback((next: Locale) => {
-    setLocaleState(next)
-    i18n.changeLanguage(next)
-    try {
-      localStorage.setItem(STORAGE_KEY, next)
-    } catch {
-      // ignore
-    }
+    loadLocale(next).then(() => {
+      setLocaleState(next)
+      i18n.changeLanguage(next)
+      try {
+        localStorage.setItem(STORAGE_KEY, next)
+      } catch {
+        // ignore
+      }
+    })
   }, [])
 
+  // 存储语言非 zh-CN 时，启动时按需加载
   useEffect(() => {
     const stored = loadStoredLocale()
     if (stored !== locale) setLocaleState(stored)
+    if (stored !== 'zh-CN') loadLocale(stored).then(() => i18n.changeLanguage(stored))
   }, [])
 
   const countryCode = localeToCountryCode(locale)
