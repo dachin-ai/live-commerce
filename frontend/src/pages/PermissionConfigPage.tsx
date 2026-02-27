@@ -45,12 +45,10 @@ function StoreAccessTab({
   users,
   t,
   toast,
-  currentRole,
 }: {
   users: User[]
   t: (key: string, opts?: { fallback?: string }) => string
   toast: { success: (m: string) => void; error: (m: string) => void }
-  currentRole: string
 }) {
   const targetUsers = users.filter((u) => u.role === 'operator' || u.role === 'user')
   const [selectedUserId, setSelectedUserId] = useState<string>('')
@@ -549,7 +547,6 @@ export default function PermissionConfigPage() {
               users={users}
               t={t}
               toast={toast}
-              currentRole={currentRole}
             />
           )}
 
