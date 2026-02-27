@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu } from 'lucide-react'
+import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu, Shield } from 'lucide-react'
 import { useCurrentUser, useLogout, getCurrentUserRole } from '../services/auth'
 import { useLanguage } from '../contexts/LanguageContext'
 import type { Locale } from '../contexts/LanguageContext'
@@ -41,7 +41,6 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
     if (role === 'admin') return t('sidebar.roleAdmin')
     if (role === 'manager') return t('sidebar.roleManager')
     if (role === 'operator') return t('sidebar.roleOperator')
-    if (role === 'viewer') return t('sidebar.roleViewer')
     return t('sidebar.roleUser')
   }
 
@@ -130,7 +129,7 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                     <button
                       onClick={() => {
                         setShowUserMenu(false)
-                        navigate('/admin')
+                        navigate('/admin/permissions')
                       }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                     >
@@ -195,7 +194,7 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                     <button
                       onClick={() => {
                         setShowUserMenu(false)
-                        navigate('/admin')
+                        navigate('/admin/permissions')
                       }}
                       className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded"
                     >
@@ -338,26 +337,15 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   <span>{t('sidebar.llmModes')}</span>
                 </Link>
                 <Link
-                  to="/admin"
-                  className={`w-full flex items-center gap-3 p-2 rounded-lg ${
-                    location.pathname === '/admin'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <Users className="w-5 h-5" />
-                  <span>{t('sidebar.userManagement')}</span>
-                </Link>
-                <Link
                   to="/admin/permissions"
                   className={`w-full flex items-center gap-3 p-2 rounded-lg ${
                     location.pathname === '/admin/permissions'
                       ? 'bg-purple-100 text-purple-700'
                       : 'text-gray-700 hover:bg-gray-200'
                   }`}
-                  title={t('sidebar.permissionConfigHint', { fallback: '权限由用户管理中的角色控制' })}
+                  title={t('sidebar.permissionConfigHint', { fallback: '角色、用户管理、店铺可见、LLM 配置' })}
                 >
-                  <Settings className="w-5 h-5" />
+                  <Shield className="w-5 h-5" />
                   <span>{t('sidebar.permissionConfig')}</span>
                 </Link>
                 <Link
@@ -472,29 +460,15 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
                   </span>
                 </Link>
                 <Link
-                  to="/admin"
-                  className={`group relative p-3 rounded-lg transition-colors ${
-                    location.pathname === '/admin'
-                      ? 'bg-purple-100 text-purple-600'
-                      : 'hover:bg-gray-200 text-gray-600'
-                  }`}
-                  title={t('sidebar.userManagement')}
-                >
-                  <Users className="w-5 h-5" />
-                  <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                    {t('sidebar.userManagement')}
-                  </span>
-                </Link>
-                <Link
                   to="/admin/permissions"
                   className={`group relative p-3 rounded-lg transition-colors ${
                     location.pathname === '/admin/permissions'
                       ? 'bg-purple-100 text-purple-600'
                       : 'hover:bg-gray-200 text-gray-600'
                   }`}
-                  title={t('sidebar.permissionConfigHint', { fallback: '权限由用户管理中的角色控制' })}
+                  title={t('sidebar.permissionConfigHint', { fallback: '角色、用户管理、店铺可见、LLM 配置' })}
                 >
-                  <Settings className="w-5 h-5" />
+                  <Shield className="w-5 h-5" />
                   <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
                     {t('sidebar.permissionConfig')}
                   </span>

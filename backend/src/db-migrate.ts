@@ -97,7 +97,34 @@ export async function updateSeedData() {
     await addMissingCategoriesV10()
     await recordMigration(10, '添加运动户外细分类目')
   }
-  
+
+  // 迁移：将虚拟管理员(viewer)合并为经理(manager)
+  if (currentVersion < 11) {
+    console.log('📦 将虚拟管理员(viewer)角色合并为经理(manager)...')
+    const result = await dbRun('UPDATE users SET role = ? WHERE role = ?', ['manager', 'viewer'])
+    console.log('✅ 已迁移 viewer 用户为 manager')
+    await recordMigration(11, '合并 viewer 角色为 manager')
+  }
+
+  // 迁移：创建 user_store_access 表，支持一个店铺被多人查看
+  if (currentVersion < 12) {
+    console.log('📦 创建 user_store_access 表（店铺多人可见）...')
+    await dbRun(`
+      CREATE TABLE IF NOT EXISTS user_store_access (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        storeId TEXT NOT NULL,
+        createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (userId) REFERENCES users(id),
+        FOREIGN KEY (storeId) REFERENCES stores(id),
+        UNIQUE(userId, storeId)
+      )
+    `)
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_user_store_access_userId ON user_store_access(userId)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId)')
+    await recordMigration(12, '创建 user_store_access 表')
+  }
+
   console.log('✅ 种子数据更新完成')
 }
 

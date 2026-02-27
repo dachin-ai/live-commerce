@@ -8,7 +8,7 @@ export interface AuthRequest extends Request {
   user?: {
     userId: string
     email: string
-    role: 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
+    role: 'user' | 'admin' | 'operator' | 'manager'
   }
 }
 
@@ -50,7 +50,7 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 }
 
 // 权限检查中间件
-export function requireRole(...roles: ('user' | 'admin' | 'operator' | 'manager' | 'viewer')[]) {
+export function requireRole(...roles: ('user' | 'admin' | 'operator' | 'manager')[]) {
   return (req: AuthRequest, res: Response, next: NextFunction) => {
     if (!req.user) {
       return res.status(401).json({ error: '未登录' })

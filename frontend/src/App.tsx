@@ -10,7 +10,6 @@ const Register = lazy(() => import('./pages/Register'))
 const ForgotPassword = lazy(() => import('./pages/ForgotPassword'))
 const ResetPassword = lazy(() => import('./pages/ResetPassword'))
 const Profile = lazy(() => import('./pages/Profile'))
-const AdminPanel = lazy(() => import('./pages/AdminPanel'))
 const PermissionConfigPage = lazy(() => import('./pages/PermissionConfigPage'))
 const LLMPage = lazy(() => import('./pages/LLMPage'))
 const FeedbackManagement = lazy(() => import('./pages/FeedbackManagement'))
@@ -123,7 +122,7 @@ function App() {
           element={
             <ProtectedRoute>
               {(getCurrentUserRole() === 'admin' || getCurrentUserRole() === 'manager') ? (
-                <AdminPanel />
+                <Navigate to="/admin/permissions" replace />
               ) : (
                 <Navigate to="/" replace />
               )}

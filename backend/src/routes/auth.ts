@@ -17,8 +17,8 @@ router.post('/register', async (req, res) => {
   return
   try {
     const { name, email, password, role: bodyRole } = req.body
-    // 注册时不允许自行设置为 admin/manager/viewer，仅允许 user 或 operator（由管理员在用户管理中创建）
-    const role = ['admin', 'manager', 'viewer'].includes(bodyRole) ? 'user' : (bodyRole || 'user')
+    // 注册时不允许自行设置为 admin/manager，仅允许 user 或 operator（由管理员在用户管理中创建）
+    const role = ['admin', 'manager'].includes(bodyRole) ? 'user' : (bodyRole || 'user')
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: '姓名、邮箱和密码不能为空' })

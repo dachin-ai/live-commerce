@@ -1,7 +1,7 @@
 import api from './api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
-export type UserRole = 'user' | 'admin' | 'operator' | 'manager' | 'viewer'
+export type UserRole = 'user' | 'admin' | 'operator' | 'manager'
 
 export interface User {
   id: string
@@ -62,6 +62,35 @@ export const useDeleteUser = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
+    },
+  })
+}
+
+export interface UserStoreAccess {
+  ownedStoreIds: string[]
+  accessStoreIds: string[]
+}
+
+export const useUserStoreAccess = (userId: string) => {
+  return useQuery<UserStoreAccess>({
+    queryKey: ['users', userId, 'store-access'],
+    queryFn: async () => {
+      const data = await api.get(`/users/${userId}/store-access`)
+      return data as unknown as UserStoreAccess
+    },
+    enabled: !!userId,
+  })
+}
+
+export const useSetUserStoreAccess = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, accessStoreIds }: { userId: string; accessStoreIds: string[] }) => {
+      await api.put(`/users/${userId}/store-access`, { accessStoreIds })
+    },
+    onSuccess: (_, { userId }) => {
+      queryClient.invalidateQueries({ queryKey: ['users', userId, 'store-access'] })
+      queryClient.invalidateQueries({ queryKey: ['stores'] })
     },
   })
 }

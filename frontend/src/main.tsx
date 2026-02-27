@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import App from './App'
+import AuthGate from './AuthGate'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import './index.css'
 import './i18n'
@@ -27,7 +27,7 @@ try {
     <React.StrictMode>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <App />
+          <AuthGate />
         </QueryClientProvider>
       </ErrorBoundary>
     </React.StrictMode>,

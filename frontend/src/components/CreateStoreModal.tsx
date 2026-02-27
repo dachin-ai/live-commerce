@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { X, Plus } from 'lucide-react'
-import { useCreateStore, useUpdateStore, CreateStoreData, type Store } from '../services/stores'
+import { useCreateStore, useUpdateStore, useStoreById, CreateStoreData, type Store } from '../services/stores'
 import { useCreateTask } from '../services/tasks'
 import { useUsers } from '../services/users'
 import { useCategories } from '../services/categories'
@@ -51,6 +51,8 @@ const CURRENCY_I18N_KEYS: Record<string, string> = {
 
 export default function CreateStoreModal({ isOpen, onClose, store: editStore }: CreateStoreModalProps) {
   const isEditMode = !!editStore
+  const { data: fullStore } = useStoreById(editStore?.id ?? '')
+  const storeForEdit = fullStore ?? editStore
   const { t } = useTranslation()
   const { locale } = useLanguage()
   const toast = useToast()
@@ -60,7 +62,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
   const createTask = useCreateTask()
   const { selectedStore, setSelectedStore } = useStore()
   const userRole = getCurrentUserRole()
-  const isAdmin = userRole === 'admin'
+  const canAssignStore = userRole === 'admin' || userRole === 'manager'
   const { data: users = [] } = useUsers()
   const { data: level1Categories = [], isLoading: level1Loading, isError: level1Error, refetch: refetchCategories } = useCategories(1)
   const { data: countries = [] } = useCountries()
@@ -75,6 +77,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
   const { data: level3Categories = [] } = useCategories(3, level3ParentIds)
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
 
+  const [accessUserIds, setAccessUserIds] = useState<string[]>([])
   const [formData, setFormData] = useState<CreateStoreData>({
     name: '',
     nameTh: '',
@@ -92,29 +95,31 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
     status: 'active',
   })
 
-  // 打开弹窗时：编辑模式预填表单，创建模式重置
+  // 打开弹窗时：编辑模式预填表单，创建模式重置（使用 fullStore 以获取 categories，列表可能为精简）
   useEffect(() => {
     if (!isOpen) return
     if (editStore) {
-      setCountry(editStore.region || '中国')
+      const s = storeForEdit ?? editStore
+      setCountry(s.region || '中国')
       setCurrencyOverride(false)
+      setAccessUserIds((s as Store & { accessUserIds?: string[] }).accessUserIds || [])
       setFormData({
-        name: editStore.name,
-        nameTh: editStore.nameTh || '',
-        userId: editStore.userId || '',
-        region: editStore.region || '中国',
-        currency: editStore.currency || 'CNY',
-        currencySymbol: editStore.currencySymbol || '¥',
-        minPrice: editStore.minPrice,
-        maxPrice: editStore.maxPrice,
-        targetAudience: editStore.targetAudience || '',
-        brandPositioning: editStore.brandPositioning || '小型品牌',
-        brandStrategy: editStore.brandStrategy || '',
+        name: s.name,
+        nameTh: s.nameTh || '',
+        userId: s.userId || '',
+        region: s.region || '中国',
+        currency: s.currency || 'CNY',
+        currencySymbol: s.currencySymbol || '¥',
+        minPrice: s.minPrice,
+        maxPrice: s.maxPrice,
+        targetAudience: s.targetAudience || '',
+        brandPositioning: s.brandPositioning || '小型品牌',
+        brandStrategy: s.brandStrategy || '',
         categoryIds: [],
-        platform: editStore.platform || '抖音',
-        status: editStore.status || 'active',
+        platform: s.platform || '抖音',
+        status: s.status || 'active',
       })
-      const cats = editStore.categories || []
+      const cats = s.categories || []
       setSelectedCategories(cats.map((c: { id: string }) => c.id))
       const level2Ids = [...new Set(cats.map((c: { level: number; id: string; parentId?: string }) => c.level === 2 ? c.id : c.parentId).filter(Boolean) as string[])]
       setSelectedLevel2Ids(level2Ids)
@@ -123,6 +128,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
     } else {
       setCountry('中国')
       setCurrencyOverride(false)
+      setAccessUserIds([])
       setFormData({
         name: '', nameTh: '', userId: '', region: '中国', currency: 'CNY', currencySymbol: '¥',
         minPrice: undefined, maxPrice: undefined, targetAudience: '', brandPositioning: '小型品牌',
@@ -132,7 +138,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
       setSelectedLevel2Ids([])
       setSelectedLevel1('')
     }
-  }, [isOpen, editStore?.id])
+  }, [isOpen, editStore?.id, storeForEdit])
 
   // 切换国家时立即用静态映射更新 region 与货币，保证选择越南/泰国等立刻显示对应货币
   useEffect(() => {
@@ -169,10 +175,13 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
       setFormData(prev => ({ ...prev, name: actualName }))
     }
 
-    const payload = {
+    const payload: CreateStoreData & { categoryIds?: string[] } = {
       ...formData,
       name: actualName,
       categoryIds: selectedCategories,
+    }
+    if (canAssignStore) {
+      payload.userIds = accessUserIds
     }
 
     try {
@@ -341,24 +350,59 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
               />
             </div>
 
-            {isAdmin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('createStore.selectUser')}
-                </label>
-                <select
-                  value={formData.userId || ''}
-                  onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">{t('createStore.currentUser')}</option>
-                  {users.map(user => (
-                    <option key={user.id} value={user.id}>
-                      {user.name} ({user.email})
-                    </option>
-                  ))}
-                </select>
-              </div>
+            {canAssignStore && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('createStore.selectUser')}
+                  </label>
+                  <select
+                    value={formData.userId || ''}
+                    onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">{t('createStore.currentUser')}</option>
+                    {(userRole === 'manager'
+                      ? users.filter((u) => u.role === 'operator' || u.role === 'user')
+                      : users
+                    ).map(user => (
+                      <option key={user.id} value={user.id}>
+                        {user.name} ({user.email})
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">{t('createStore.ownerHint', { default: '主归属人，拥有该店铺的完整权限' })}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {t('createStore.accessUsers', { default: '可查看该店铺的其他用户' })}
+                  </label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-2 max-h-32 overflow-y-auto">
+                    {(userRole === 'manager'
+                      ? users.filter((u) => u.role === 'operator' || u.role === 'user')
+                      : users
+                    ).filter((u) => u.id !== formData.userId).map(user => (
+                      <label
+                        key={user.id}
+                        className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={accessUserIds.includes(user.id)}
+                          onChange={() => setAccessUserIds(prev =>
+                            prev.includes(user.id)
+                              ? prev.filter(id => id !== user.id)
+                              : [...prev, user.id]
+                          )}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm">{user.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-1">{t('createStore.accessUsersHint', { default: '勾选后可查看该店铺数据，支持多人共享' })}</p>
+                </div>
+              </>
             )}
           </div>
 

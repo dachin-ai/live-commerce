@@ -23,7 +23,8 @@ interface StoreContextType {
 const StoreContext = createContext<StoreContextType | undefined>(undefined)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const { data: stores = [], isLoading, error } = useStores()
+  const { data, isLoading, error } = useStores({ page: 1, limit: 50, light: true })
+  const stores = data?.items ?? []
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null)
 
   // 从localStorage恢复选中的店铺

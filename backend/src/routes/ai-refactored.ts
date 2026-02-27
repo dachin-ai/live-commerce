@@ -2744,9 +2744,9 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
     const userId = req.user!.userId
     const role = req.user!.role
     const isAdmin = role === 'admin'
-    const canBypassUserList = role === 'admin' || role === 'viewer'
+    const canBypassUserList = role === 'admin' || role === 'manager'
 
-    // 管理员、虚拟管理员可绕过用户列表；其他角色须在「允许使用 LLM 的用户」中。从 DB 直接读最新配置
+    // 管理员、经理可绕过用户列表；其他角色须在「允许使用 LLM 的用户」中。从 DB 直接读最新配置
     const allowedUserIds = await getScriptLLMAllowedUserIds()
     if (!canBypassUserList && allowedUserIds !== null && !allowedUserIds.includes(userId)) {
       console.warn('[generate-tasks] 403 用户不在允许列表', {
@@ -2781,7 +2781,9 @@ router.post('/generate-tasks', async (req: AuthRequest, res) => {
       if (!store) {
         return res.status(404).json({ error: '店铺不存在' })
       }
-      if (!isAdmin && store.userId !== userId) {
+      const { userCanAccessStore } = await import('../utils/storeAccess')
+      const canAccess = await userCanAccessStore(userId, storeId, req.user!.role)
+      if (!canAccess) {
         return res.status(403).json({ error: '无权为该店铺生成待办' })
       }
       if (isAdmin && store.userId && store.userId !== userId) {

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { useLogin } from '../services/auth'
+import { useLogin, isAuthenticated } from '../services/auth'
 import { LogIn, Mail, Lock } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
 
@@ -12,6 +12,13 @@ export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (isAuthenticated()) {
+      window.location.href = '/'
+      return
+    }
+  }, [])
 
   useEffect(() => {
     const state = location.state as { message?: string } | null
@@ -41,7 +48,8 @@ export default function Login() {
       const res = await login.mutateAsync({ email, password })
       if (res.firstLoginEver) sessionStorage.setItem('showWelcome', '1')
       if (res.newIpFirstLogin) sessionStorage.setItem('showTutorial', '1')
-      navigate('/', { replace: true })
+      // 刷新并加载完整应用（StoreProvider、Dashboard 等）
+      window.location.href = '/'
     } catch (err: unknown) {
       const error = err as { response?: { data?: { error?: string } }; message?: string; code?: string }
       const msg =

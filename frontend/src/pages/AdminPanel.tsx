@@ -9,6 +9,7 @@ import Sidebar from '../components/Sidebar'
 import UserMultiSelectModal from '../components/UserMultiSelectModal'
 import { useToast } from '../contexts/ToastContext'
 import { copyToClipboard } from '../utils/clipboard'
+import { getCurrentUserRole } from '../services/auth'
 
 type UsersQueryError = {
   response?: {
@@ -26,6 +27,7 @@ const LLM_PERMISSION_FEATURES: { id: string; labelKey: string }[] = [
 export default function AdminPanel() {
   const { t } = useTranslation()
   const toast = useToast()
+  const currentRole = getCurrentUserRole()
   const [sidebarExpanded, setSidebarExpanded] = useState(true)
   const { data: users = [], isLoading, isError, error } = useUsers()
   const createUser = useCreateUser()
@@ -542,8 +544,6 @@ export default function AdminPanel() {
                             ? t('sidebar.roleManager')
                             : user.role === 'operator'
                             ? t('sidebar.roleOperator')
-                            : user.role === 'viewer'
-                            ? t('sidebar.roleViewer')
                             : t('sidebar.roleUser')}
                       </span>
                     </td>
@@ -640,9 +640,12 @@ export default function AdminPanel() {
                 >
                   <option value="user">{t('sidebar.roleUser')}</option>
                   <option value="operator">{t('sidebar.roleOperator')}</option>
-                  <option value="manager">{t('sidebar.roleManager')}</option>
-                  <option value="viewer">{t('sidebar.roleViewer')}</option>
-                  <option value="admin">{t('sidebar.roleAdmin')}</option>
+                  {currentRole === 'admin' && (
+                    <>
+                      <option value="manager">{t('sidebar.roleManager')}</option>
+                      <option value="admin">{t('sidebar.roleAdmin')}</option>
+                    </>
+                  )}
                 </select>
               </div>
               <div>

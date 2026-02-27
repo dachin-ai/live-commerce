@@ -134,7 +134,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const toast = useToast()
   const queryClient = useQueryClient()
   const { selectedStore } = useStore()
-  const { data: stores = [] } = useStores()
+  const { data: storesData } = useStores()
+  const stores = storesData?.items ?? []
   const { data: materials = [] } = useMaterials(selectedStore?.id)
   const { data: tasks = [], refetch: refetchTasks } = useTasks(selectedStore?.id)
   const createMaterial = useCreateMaterial()
@@ -1221,7 +1222,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                         <>
                           <p className="text-sm mb-2">您可以在管理员后台配置 LLM，配置后全体用户均可使用话术生成。</p>
                           <p className="text-sm mb-2">
-                            请进入 <Link to="/admin" className="text-indigo-600 underline font-medium">管理员</Link> 页面，在「LLM 配置」中填写 API 地址与 API 密钥并保存。
+                            请进入 <Link to="/admin/permissions?tab=llm" className="text-indigo-600 underline font-medium">权限配置</Link> 页面的「LLM 配置」标签，填写 API 地址与 API 密钥并保存。
                           </p>
                         </>
                       ) : (

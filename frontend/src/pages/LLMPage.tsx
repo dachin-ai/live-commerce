@@ -137,7 +137,7 @@ export default function LLMPage() {
               )}
               <button
                 type="button"
-                onClick={() => navigate('/admin')}
+                onClick={() => navigate('/admin/permissions?tab=llm')}
                 className="text-sm text-blue-600 hover:text-blue-800"
               >
                 前往配置

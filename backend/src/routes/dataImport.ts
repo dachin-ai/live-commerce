@@ -68,8 +68,9 @@ router.post('/tiktok', upload.single('file'), async (req: AuthRequest, res) => {
       return res.status(404).json({ error: '店铺不存在' })
     }
 
-    const isAdmin = req.user!.role === 'admin'
-    if (!isAdmin && store.userId !== userId) {
+    const { userCanAccessStore } = await import('../utils/storeAccess')
+    const canAccess = await userCanAccessStore(userId, storeId, req.user!.role)
+    if (!canAccess) {
       return res.status(403).json({ error: '无权访问该店铺' })
     }
 
@@ -511,8 +512,8 @@ router.get('/export', async (req: AuthRequest, res) => {
     `
     const params: any[] = []
     if (!isAdmin) {
-      sql += ' AND s.userId = ?'
-      params.push(userId)
+      sql += ' AND (s.userId = ? OR s.id IN (SELECT storeId FROM user_store_access WHERE userId = ?))'
+      params.push(userId, userId)
     }
     if (queryStoreId && typeof queryStoreId === 'string' && queryStoreId.trim()) {
       sql += ' AND st.storeId = ?'
@@ -603,8 +604,8 @@ router.get('/history', async (req: AuthRequest, res) => {
     const params: any[] = []
 
     if (!isAdmin) {
-      query += ' AND s.userId = ?'
-      params.push(userId)
+      query += ' AND (s.userId = ? OR s.id IN (SELECT storeId FROM user_store_access WHERE userId = ?))'
+      params.push(userId, userId)
     }
 
     if (storeId) {

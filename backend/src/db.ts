@@ -337,6 +337,19 @@ export async function initDatabase() {
     }
   }
 
+  // 用户-店铺多对多可见表（一个店铺可被多人查看）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS user_store_access (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      storeId TEXT NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (userId) REFERENCES users(id),
+      FOREIGN KEY (storeId) REFERENCES stores(id),
+      UNIQUE(userId, storeId)
+    )
+  `)
+
   // 创建商店分类关联表
   await dbRun(`
     CREATE TABLE IF NOT EXISTS store_categories (
@@ -451,6 +464,8 @@ export async function initDatabase() {
     CREATE INDEX IF NOT EXISTS idx_categories_parentId ON categories(parentId);
     CREATE INDEX IF NOT EXISTS idx_store_categories_storeId ON store_categories(storeId);
     CREATE INDEX IF NOT EXISTS idx_store_categories_categoryId ON store_categories(categoryId);
+    CREATE INDEX IF NOT EXISTS idx_user_store_access_userId ON user_store_access(userId);
+    CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId);
   `)
 
   // 创建复合索引用于加速去重查询（title + status + userId + storeId）
@@ -483,7 +498,7 @@ export async function initDatabase() {
       ['user-6', '运营测试3', 'operator3@test.com', userPassword, 'operator', 'active'],
       ['user-7', '运营测试4', 'operator4@test.com', userPassword, 'operator', 'active'],
       ['user-8', '运营测试5', 'operator5@test.com', userPassword, 'operator', 'active'],
-      ['user-9', '虚拟管理员', 'viewer@example.com', userPassword, 'viewer', 'active'],
+      ['user-9', '经理示例', 'manager@example.com', userPassword, 'manager', 'active'],
     ]
 
     for (const user of sampleUsers) {

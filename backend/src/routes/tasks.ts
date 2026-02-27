@@ -13,10 +13,10 @@ router.use(authenticate)
 router.get('/', async (req: AuthRequest, res) => {
   try {
     const userId = req.user!.userId
-    const canSeeAllTasks = req.user!.role === 'admin' || req.user!.role === 'manager' || req.user!.role === 'viewer'
+    const canSeeAllTasks = req.user!.role === 'admin' || req.user!.role === 'manager'
     const { storeId } = req.query // 支持按店铺过滤
 
-    // 管理员/经理/虚拟管理员可查看全部待办；普通用户只看自己的。带出创建人姓名便于区分
+    // 管理员/经理可查看全部待办；普通用户只看自己的。带出创建人姓名便于区分
     let query = 'SELECT t.*, s.name as storeName, u.name as createdByName FROM tasks t LEFT JOIN stores s ON t.storeId = s.id LEFT JOIN users u ON t.userId = u.id WHERE 1=1'
     const params: any[] = []
 
@@ -153,19 +153,23 @@ router.post('/', async (req: AuthRequest, res) => {
   }
 })
 
+/** 可操作任意待办的角色（admin/manager 可编辑删除，其他角色可读） */
+const canEditAnyTask = (role: string) =>
+  role === 'admin' || role === 'manager'
+
 // 更新任务
 router.put('/:id', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const { title, description, priority, status, storeId } = req.body
     const userId = req.user!.userId
-    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
+    const canEdit = canEditAnyTask(req.user!.role)
 
     let query = 'SELECT * FROM tasks WHERE id = ?'
     const params: any[] = [id]
 
     // 普通用户只能更新自己的任务
-    if (!isAdmin) {
+    if (!canEdit) {
       query += ' AND userId = ?'
       params.push(userId)
     }
@@ -204,13 +208,13 @@ router.delete('/:id', async (req: AuthRequest, res) => {
   try {
     const { id } = req.params
     const userId = req.user!.userId
-    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
+    const canEdit = canEditAnyTask(req.user!.role)
 
     let query = 'SELECT * FROM tasks WHERE id = ?'
     const params: any[] = [id]
 
     // 普通用户只能删除自己的任务
-    if (!isAdmin) {
+    if (!canEdit) {
       query += ' AND userId = ?'
       params.push(userId)
     }
@@ -233,7 +237,7 @@ router.post('/batch/complete', async (req: AuthRequest, res) => {
   try {
     const { taskIds } = req.body // 任务ID数组
     const userId = req.user!.userId
-    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
+    const canEdit = canEditAnyTask(req.user!.role)
 
     if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
       return res.status(400).json({ error: '任务ID列表不能为空' })
@@ -249,7 +253,7 @@ router.post('/batch/complete', async (req: AuthRequest, res) => {
         const params: any[] = [id]
 
         // 普通用户只能操作自己的任务
-        if (!isAdmin) {
+        if (!canEdit) {
           query += ' AND userId = ?'
           params.push(userId)
         }
@@ -285,7 +289,7 @@ router.post('/batch/delete', async (req: AuthRequest, res) => {
   try {
     const { taskIds } = req.body // 任务ID数组
     const userId = req.user!.userId
-    const isAdmin = (req.user!.role === 'admin' || req.user!.role === 'manager')
+    const canEdit = canEditAnyTask(req.user!.role)
 
     if (!taskIds || !Array.isArray(taskIds) || taskIds.length === 0) {
       return res.status(400).json({ error: '任务ID列表不能为空' })
@@ -301,7 +305,7 @@ router.post('/batch/delete', async (req: AuthRequest, res) => {
         const params: any[] = [id]
 
         // 普通用户只能操作自己的任务
-        if (!isAdmin) {
+        if (!canEdit) {
           query += ' AND userId = ?'
           params.push(userId)
         }
