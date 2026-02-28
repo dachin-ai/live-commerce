@@ -10,6 +10,7 @@ import {
   Sparkles,
   Upload,
   Video,
+  Image,
   X,
   Download,
   Clock,
@@ -50,7 +51,8 @@ import {
   type StatsResult,
   type MarketResearchResult,
 } from '../services/ai'
-import { useMaterials, useCreateMaterial, useDeleteMaterial } from '../services/materials'
+import { useMaterials, useCreateMaterial } from '../services/materials'
+import { useVideos, useUploadVideo, useDeleteVideo } from '../services/videos'
 import { useStores } from '../services/stores'
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
@@ -137,9 +139,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const { data: storesData } = useStores()
   const stores = storesData?.items ?? []
   const { data: materials = [] } = useMaterials(selectedStore?.id)
+  const { data: videos = [], refetch: refetchVideos } = useVideos(selectedStore?.id)
+  const hasProcessingVideos = videos.some((v) => v.status === 'processing')
+  const uploadVideo = useUploadVideo()
+  const deleteVideo = useDeleteVideo()
   const { data: tasks = [], refetch: refetchTasks } = useTasks(selectedStore?.id)
   const createMaterial = useCreateMaterial()
-  const deleteMaterial = useDeleteMaterial()
   const updateTask = useUpdateTask()
   useBatchCompleteTasks()
   const completeAllTasks = useCompleteAllTasks()
@@ -147,6 +152,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const [loading, setLoading] = useState<string | null>(null)
   const [resultExpanded, setResultExpanded] = useState(false)
   const [resultFullScreen, setResultFullScreen] = useState(false)
+  const [isDragging, setIsDragging] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   type ToolResultData =
     | ({ type: 'script'; data: Record<string, unknown> })
@@ -330,6 +337,13 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       })
   }, [scriptTranslationKey, scriptNeedsTranslation, scriptContent, locale])
 
+  // 录屏分析：有分析中的视频时每 5 秒刷新状态
+  useEffect(() => {
+    if (propToolId !== 'screen-recording' || !hasProcessingVideos) return
+    const timer = setInterval(refetchVideos, 5000)
+    return () => clearInterval(timer)
+  }, [propToolId, hasProcessingVideos, refetchVideos])
+
   const quickActions: Array<{
     id: string
     icon: typeof BarChart3
@@ -470,8 +484,19 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       label: t('tools.screenRecording'),
       description: t('tools.screenRecordingDesc'),
       color: 'bg-amber-100 text-amber-600',
+      inDevelopment: false,
+      action: async () => { /* 录屏分析为独立页，展示视频列表与分析结果 */ },
+    },
+    {
+      id: 'image-analysis',
+      icon: Image,
+      label: t('tools.imageAnalysis'),
+      description: t('tools.imageAnalysisDesc'),
+      color: 'bg-sky-100 text-sky-600',
       inDevelopment: true,
-      action: async () => { /* 录屏分析为独立页，仅展示素材库，无需执行 */ },
+      action: async () => {
+        toast.warning(t('tools.functionPending'))
+      },
     },
     {
       id: 'compare',
@@ -550,6 +575,26 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       return
     }
 
+    const isVideoAnalysis = propToolId === 'screen-recording'
+    if (isVideoAnalysis) {
+      const formData = new FormData()
+      formData.append('file', selectedFile)
+      formData.append('storeId', selectedStore.id)
+      try {
+        await uploadVideo.mutateAsync(formData)
+        setShowUploadModal(false)
+        setSelectedFile(null)
+        refetchVideos()
+        toast.success('视频上传成功，AI 分析正在进行中')
+      } catch (error: unknown) {
+        const err = error as { response?: { data?: { error?: string } }; message?: string }
+        console.error('上传失败:', error)
+        const errorMsg = err.response?.data?.error || err.message || '上传失败'
+        toast.error(errorMsg)
+      }
+      return
+    }
+
     const formData = new FormData()
     formData.append('file', selectedFile)
     formData.append('name', selectedFile.name)
@@ -565,18 +610,6 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       const err = error as { response?: { data?: { error?: string } }; message?: string }
       console.error('上传失败:', error)
       const errorMsg = err.response?.data?.error || err.message || '上传失败，请检查网络连接或登录状态'
-      toast.error(errorMsg)
-    }
-  }
-
-  const handleDeleteMaterial = async (id: string) => {
-    if (!confirm('确定要删除这个素材吗？')) return
-    try {
-      await deleteMaterial.mutateAsync(id)
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } }; message?: string }
-      console.error('删除失败:', error)
-      const errorMsg = err.response?.data?.error || err.message || '删除失败，请检查网络连接或登录状态'
       toast.error(errorMsg)
     }
   }
@@ -608,6 +641,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               const isScreenRecording = propToolId === 'screen-recording'
 
               if (isScreenRecording) {
+                const materialsByVideo = materials.reduce<Record<string, typeof materials>>((acc, m) => {
+                  const vid = m.videoId || '_none'
+                  if (!acc[vid]) acc[vid] = []
+                  acc[vid].push(m)
+                  return acc
+                }, {})
                 return (
                   <div className="space-y-4">
                     <div className={`flex items-center gap-3 p-4 rounded-lg ${action.color}`}>
@@ -630,56 +669,105 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       <span className="text-sm text-gray-600">{t('tools.mediaLibraryDesc')}</span>
                       <button
                         onClick={() => setShowUploadModal(true)}
-                        className="btn-secondary flex items-center gap-2 text-sm"
+                        disabled={!selectedStore}
+                        className="btn-secondary flex items-center gap-2 text-sm disabled:opacity-50"
                       >
                         <Upload className="w-4 h-4" />
                         {t('tools.uploadVideo')}
                       </button>
                     </div>
-                    {materials.length === 0 ? (
+                    {videos.length === 0 ? (
                       <div className="text-center py-12 rounded-lg border border-dashed border-gray-200 bg-gray-50/50">
                         <Video className="w-16 h-16 text-gray-300 mx-auto mb-4" />
                         <p className="text-gray-500 mb-2">{t('tools.noMaterials')}</p>
                         <p className="text-sm text-gray-400">{t('tools.uploadVideoHint')}</p>
                       </div>
                     ) : (
-                      <div className="space-y-2">
-                        {materials.map((material) => (
-                          <div
-                            key={material.id}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
-                          >
-                            <div className="flex items-center gap-3 flex-1">
-                              <Video className="w-5 h-5 text-gray-500" />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium text-gray-900 truncate">{material.name}</p>
-                                {material.description && (
-                                  <p className="text-xs text-gray-500 truncate">{material.description}</p>
-                                )}
+                      <div className="space-y-4">
+                        {videos.map((video) => {
+                          const vidMats = materialsByVideo[video.id] || []
+                          const excellent = vidMats.filter((m) => m.type === 'excellent')
+                          const problem = vidMats.filter((m) => m.type === 'problem')
+                          const statusLabel = video.status === 'processing' ? '分析中' : video.status === 'failed' ? '分析失败' : '已完成'
+                          const statusColor = video.status === 'processing' ? 'bg-amber-100 text-amber-800' : video.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+                          return (
+                            <div
+                              key={video.id}
+                              className="p-4 rounded-lg border border-gray-200 bg-white space-y-3"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Video className="w-5 h-5 text-gray-500 shrink-0" />
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium text-gray-900 truncate">{video.fileName}</p>
+                                    <p className="text-xs text-gray-500">{new Date(video.createdAt).toLocaleString()}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className={`inline-flex px-2 py-0.5 rounded text-xs font-medium ${statusColor}`}>
+                                    {statusLabel}
+                                  </span>
+                                  {video.status === 'active' && video.videoUrl && (
+                                    <a
+                                      href={video.videoUrl.startsWith('http') ? video.videoUrl : `${window.location.origin}${video.videoUrl}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="text-blue-600 hover:text-blue-800"
+                                      title={t('tools.view')}
+                                    >
+                                      <Download className="w-4 h-4" />
+                                    </a>
+                                  )}
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm('确定删除该视频及分析结果？')) return
+                                      try {
+                                        await deleteVideo.mutateAsync(video.id)
+                                        toast.success('已删除')
+                                      } catch (e) {
+                                        toast.error((e as Error)?.message || '删除失败')
+                                      }
+                                    }}
+                                    className="text-red-500 hover:text-red-700"
+                                    title={t('common.delete')}
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {material.url && (
-                                <a
-                                  href={typeof window !== 'undefined' ? `${window.location.origin}${material.url}` : material.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="text-blue-600 hover:text-blue-800"
-                                  title={t('tools.view')}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </a>
+                              {video.status === 'active' && video.description && (
+                                <p className="text-xs text-gray-600 line-clamp-2">{video.description}</p>
                               )}
-                              <button
-                                onClick={() => handleDeleteMaterial(material.id)}
-                                className="text-red-500 hover:text-red-700"
-                                title={t('common.delete')}
-                              >
-                                <X className="w-4 h-4" />
-                              </button>
+                              {video.status === 'failed' && video.description && (
+                                <p className="text-xs text-red-600 line-clamp-3">{video.description}</p>
+                              )}
+                              {video.status === 'active' && (excellent.length > 0 || problem.length > 0) && (
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  {excellent.length > 0 && (
+                                    <div className="p-2 rounded bg-green-50">
+                                      <span className="font-medium text-green-800">优秀案例 {excellent.length} 条</span>
+                                      <ul className="mt-1 space-y-1 text-green-700">
+                                        {excellent.slice(0, 3).map((m) => (
+                                          <li key={m.id} className="truncate" title={m.content || m.title}>{m.title || m.name}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                  {problem.length > 0 && (
+                                    <div className="p-2 rounded bg-amber-50">
+                                      <span className="font-medium text-amber-800">问题片段 {problem.length} 条</span>
+                                      <ul className="mt-1 space-y-1 text-amber-700">
+                                        {problem.slice(0, 3).map((m) => (
+                                          <li key={m.id} className="truncate" title={m.content || m.title}>{m.title || m.name}</li>
+                                        ))}
+                                      </ul>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                          </div>
-                        ))}
+                          )
+                        })}
                       </div>
                     )}
                     <p className="text-xs text-gray-500 border-t border-gray-100 pt-3">{t('tools.aiCaseHint')}</p>
@@ -1654,19 +1742,49 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       {/* 上传模态框（录屏分析页与素材上传共用） */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
             <h3 className="text-lg font-semibold mb-4">{t('tools.uploadVideo')}</h3>
             <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  {t('tools.selectFile')}
-                </label>
-                <input
-                  type="file"
-                  accept="video/*"
-                  onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="video/*"
+                className="hidden"
+                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              />
+              <div
+                role="button"
+                tabIndex={0}
+                onClick={() => fileInputRef.current?.click()}
+                onDragOver={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(true)
+                }}
+                onDragLeave={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(false)
+                }}
+                onDrop={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setIsDragging(false)
+                  const file = e.dataTransfer?.files?.[0]
+                  if (file?.type?.startsWith('video/')) {
+                    setSelectedFile(file)
+                  } else if (file) {
+                    toast.error('请选择视频文件（MP4、WebM、MOV 等）')
+                  }
+                }}
+                className={`border-2 border-dashed rounded-xl min-h-[220px] py-16 px-12 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
+                  isDragging
+                    ? 'border-blue-500 bg-blue-50'
+                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
+                }`}
+              >
+                <Upload className="w-12 h-12 mx-auto mb-2 text-gray-400" />
+                <p className="text-sm text-gray-600">{t('tools.dragDropHint')}</p>
               </div>
               {selectedFile && (
                 <div className="text-sm text-gray-600">
@@ -1686,10 +1804,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               </button>
               <button
                 onClick={handleUpload}
-                disabled={!selectedFile || createMaterial.isPending}
+                disabled={!selectedFile || createMaterial.isPending || uploadVideo.isPending}
                 className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
               >
-                {createMaterial.isPending ? '上传中...' : '上传'}
+                {(createMaterial.isPending || uploadVideo.isPending) ? '上传中...' : '上传'}
               </button>
             </div>
           </div>

@@ -148,6 +148,13 @@ export async function initDatabase() {
       console.warn('添加users.updatedAt时出错:', err?.message)
     }
   }
+  try {
+    await dbRun(`ALTER TABLE users ADD COLUMN language TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column')) {
+      console.warn('添加users.language时出错:', err?.message)
+    }
+  }
 
   // 创建用户会话表（用于长期记忆功能）
   await dbRun(`
@@ -376,6 +383,46 @@ export async function initDatabase() {
       FOREIGN KEY (storeId) REFERENCES stores(id)
     )
   `)
+
+  // 素材表扩展字段（直播录屏分析：优秀案例/问题片段）
+  const materialCols = ['userId', 'title', 'content', 'videoId', 'tags', 'rating', 'metadata']
+  for (const col of materialCols) {
+    try {
+      const def = col === 'userId' ? 'TEXT' : col === 'rating' ? 'REAL' : 'TEXT'
+      await dbRun(`ALTER TABLE materials ADD COLUMN ${col} ${def}`)
+    } catch (err: any) {
+      if (!err?.message?.includes('duplicate column')) {
+        console.warn(`添加 materials.${col} 时出错:`, err?.message)
+      }
+    }
+  }
+
+  // 直播录屏视频表
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS videos (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      shopId TEXT,
+      sessionId TEXT,
+      fileName TEXT NOT NULL,
+      fileKey TEXT NOT NULL,
+      videoUrl TEXT NOT NULL,
+      fileSize INTEGER DEFAULT 0,
+      contentType TEXT,
+      status TEXT NOT NULL DEFAULT 'active',
+      description TEXT,
+      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      deletedAt TEXT,
+      FOREIGN KEY (userId) REFERENCES users(id),
+      FOREIGN KEY (shopId) REFERENCES stores(id)
+    )
+  `)
+  try {
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_videos_userId ON videos(userId)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_videos_shopId ON videos(shopId)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_videos_status ON videos(status)')
+    await dbRun('CREATE INDEX IF NOT EXISTS idx_materials_videoId ON materials(videoId)')
+  } catch (_) {}
 
   // 创建统计数据表
   await dbRun(`

@@ -89,14 +89,14 @@ export async function getLlmTools(): Promise<{
   tools: Array<{ id: string; name: string; url: string; model: string | null; sort_order: number }>
   defaultToolId: string | null
   selectedToolId: string | null
-  featureMapping?: { script?: string; tasks?: string; anomaly?: string }
+  featureMapping?: { script?: string; tasks?: string; anomaly?: string; video?: string }
 }> {
   const data = await api.get('/ai/llm-tools')
   return data as unknown as Awaited<ReturnType<typeof getLlmTools>>
 }
 
 /** 设置功能→工具映射（PUT /api/ai/feature-llm-mapping），仅管理员 */
-export async function setFeatureLlmMapping(mapping: { script?: string; tasks?: string; anomaly?: string }): Promise<{ success: boolean; message?: string }> {
+export async function setFeatureLlmMapping(mapping: { script?: string; tasks?: string; anomaly?: string; video?: string }): Promise<{ success: boolean; message?: string }> {
   const data = await api.put('/ai/feature-llm-mapping', mapping)
   return data as unknown as { success: boolean; message?: string }
 }

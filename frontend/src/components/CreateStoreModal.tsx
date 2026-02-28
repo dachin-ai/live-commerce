@@ -49,6 +49,15 @@ const CURRENCY_I18N_KEYS: Record<string, string> = {
   PHP: 'currencyPHP', MMK: 'currencyMMK', KHR: 'currencyKHR', LAK: 'currencyLAK', BND: 'currencyBND',
 }
 
+/** 国家 → 当地语言名称（第三行「店铺名称（当地语）」的展示） */
+const COUNTRY_LOCAL_LANG: Record<string, string> = {
+  '中国': '中文', '中国香港': '繁体中文', '中国台湾': '繁体中文',
+  '泰国': '泰语', '越南': '越南语', '印度尼西亚': '印尼语',
+  '马来西亚': '马来语', '新加坡': '英语/马来语', '菲律宾': '菲律宾语',
+  '缅甸': '缅语', '柬埔寨': '高棉语', '老挝': '老挝语', '文莱': '马来语',
+  '其他': '当地语',
+}
+
 export default function CreateStoreModal({ isOpen, onClose, store: editStore }: CreateStoreModalProps) {
   const isEditMode = !!editStore
   const { data: fullStore } = useStoreById(editStore?.id ?? '')
@@ -339,14 +348,14 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t('createStore.storeNameTh')}
+                {t('createStore.storeNameLocal', { lang: COUNTRY_LOCAL_LANG[country] || '当地语' })}
               </label>
               <input
                 type="text"
                 value={formData.nameTh || ''}
                 onChange={(e) => setFormData({ ...formData, nameTh: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder={t('createStore.storeNameThPlaceholder')}
+                placeholder={t('createStore.storeNameLocalPlaceholder', { lang: COUNTRY_LOCAL_LANG[country] || '当地语' })}
               />
             </div>
 

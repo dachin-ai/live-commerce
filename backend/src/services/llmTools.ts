@@ -12,7 +12,7 @@ import { getScriptLLMConfigSync } from './scriptLLMConfig'
 const SYS_KEY_DEFAULT_TOOL_ID = 'llm_tool_default_id'
 const SYS_KEY_FEATURE_LLM_MAPPING = 'feature_llm_mapping'
 
-export type FeatureId = 'script' | 'tasks' | 'anomaly'
+export type FeatureId = 'script' | 'tasks' | 'anomaly' | 'video'
 
 export interface LlmToolRecord {
   id: string
@@ -206,7 +206,7 @@ export async function getFeatureLlmMapping(): Promise<FeatureLlmMapping> {
     const obj = JSON.parse(raw)
     if (obj && typeof obj === 'object') {
       const out: FeatureLlmMapping = {}
-      for (const k of ['script', 'tasks', 'anomaly']) {
+      for (const k of ['script', 'tasks', 'anomaly', 'video']) {
         const v = obj[k]
         if (typeof v === 'string' && v.trim()) out[k as FeatureId] = v.trim()
       }

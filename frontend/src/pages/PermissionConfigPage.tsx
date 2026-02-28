@@ -24,6 +24,7 @@ const ROLE_MATRIX = [
 const LLM_PERMISSION_FEATURES: { id: string; labelKey: string }[] = [
   { id: 'script', labelKey: 'admin.llmFeatureScript' },
   { id: 'tasks', labelKey: 'admin.llmFeatureTasks' },
+  { id: 'video', labelKey: 'admin.llmFeatureVideo' },
 ]
 
 type TabId = 'roles' | 'users' | 'stores' | 'llm'
@@ -247,7 +248,7 @@ export default function PermissionConfigPage() {
     queryFn: getLlmTools,
     staleTime: 60_000,
   })
-  const [featureMapping, setFeatureMapping] = useState<{ script?: string; tasks?: string; anomaly?: string }>({})
+  const [featureMapping, setFeatureMapping] = useState<{ script?: string; tasks?: string; anomaly?: string; video?: string }>({})
   useEffect(() => {
     if (llmToolsData?.featureMapping) setFeatureMapping(llmToolsData.featureMapping)
   }, [llmToolsData?.featureMapping])
@@ -653,6 +654,7 @@ export default function PermissionConfigPage() {
                       { key: 'script' as const, label: t('admin.llmFeatureScript') },
                       { key: 'tasks' as const, label: t('admin.llmFeatureTasks') },
                       { key: 'anomaly' as const, label: t('admin.llmFeatureAnomaly', { fallback: '异常分析' }) },
+                      { key: 'video' as const, label: t('admin.llmFeatureVideo', { fallback: '视频分析' }) },
                     ].map(({ key, label }) => (
                       <div key={key} className="flex items-center gap-3">
                         <label className="w-28 text-sm font-medium text-gray-700">{label}</label>
@@ -668,7 +670,7 @@ export default function PermissionConfigPage() {
                         </select>
                       </div>
                     ))}
-                    <button type="button" onClick={() => setFeatureMappingMutation.mutate({ script: featureMapping.script || undefined, tasks: featureMapping.tasks || undefined, anomaly: featureMapping.anomaly || undefined })} disabled={setFeatureMappingMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm">
+                    <button type="button" onClick={() => setFeatureMappingMutation.mutate({ script: featureMapping.script || undefined, tasks: featureMapping.tasks || undefined, anomaly: featureMapping.anomaly || undefined, video: featureMapping.video || undefined })} disabled={setFeatureMappingMutation.isPending} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:opacity-50 text-sm">
                       {setFeatureMappingMutation.isPending ? t('admin.saving') : t('admin.saveFeatureMapping', { fallback: '保存映射' })}
                     </button>
                   </div>

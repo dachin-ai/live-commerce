@@ -201,8 +201,11 @@ function parseNumber(value: any): number | undefined {
   }
   
   if (typeof value === 'string') {
-    // 移除千分位逗号、货币符号等（含 ฿ 泰铢）
-    const cleaned = value.replace(/[¥$€£฿,\s%]/g, '').trim()
+    // 先移除多字符货币前缀（马来西亚 RM、印尼 Rp、新加坡 S$ 等），支持 "RM 1,234" / "RM1234" 等格式
+    let cleaned = value.replace(/\bRM\s*/gi, '').replace(/\bRp\.?\s*/gi, '').replace(/\bS\$\s*/gi, '')
+      .replace(/\bHK\$\s*/gi, '').replace(/\bNT\$\s*/gi, '').replace(/\bB\$\s*/gi, '')
+    // 再移除单字符货币符号、千分位逗号等
+    cleaned = cleaned.replace(/[¥$€£฿₫₱₭៛,\s%]/g, '').trim()
     const num = parseFloat(cleaned)
     return isNaN(num) ? undefined : num
   }

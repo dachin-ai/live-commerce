@@ -4,18 +4,18 @@ import { generateTasks, getScriptLLMConfig, getLlmDiagnostic, type GenerateTasks
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useGenerateTasks } from '../contexts/GenerateTasksContext'
-import { CheckCircle2, Clock, AlertCircle, RefreshCw, ChevronDown, ChevronUp, ListTodo, ExternalLink } from 'lucide-react'
+import { CheckCircle2, Clock, AlertCircle, RefreshCw, ChevronDown, ChevronUp, ListTodo, ExternalLink, Target, ListOrdered, BarChart2 } from 'lucide-react'
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../contexts/ToastContext'
 import { Link } from 'react-router-dom'
 import type { Task } from '../services/tasks'
 
-/** aiFeature → 执行工具 ID 列表（用于快速跳转） */
+/** aiFeature → 执行工具 ID 列表（用于快速跳转，含未接入功能的预留入口） */
 const AI_FEATURE_TO_TOOLS: Record<string, string[]> = {
   event: ['speech', 'recommendations'],
-  script: ['speech'],
-  product_recommend: ['recommendations', 'stats', 'report'],
+  script: ['speech', 'screen-recording'],
+  product_recommend: ['recommendations', 'stats', 'report', 'market-analysis'],
   time_recommend: ['stats'],
   engagement: ['speech'],
   pricing: ['recommendations', 'market-analysis'],
@@ -23,11 +23,15 @@ const AI_FEATURE_TO_TOOLS: Record<string, string[]> = {
   marketing: ['market-analysis', 'speech'],
   content: ['speech', 'recommendations'],
   report: ['report'],
-  crm: ['report'],
+  crm: ['report', 'market-analysis'],
   brand: ['market-analysis', 'report'],
   supply_chain: ['market-analysis', 'report'],
+  positioning: ['market-analysis', 'report'],
+  comparison: ['compare', 'stats', 'report'],
+  image_analysis: ['image-analysis', 'recommendations'],
+  scene_scoring: ['screen-recording'],
 }
-/** 执行工具 ID → i18n key（展示名称由 useTranslation 提供） */
+/** 执行工具 ID → i18n key（展示名称由 useTranslation 提供，含未接入功能预留） */
 const TOOL_I18N_KEYS: Record<string, string> = {
   speech: 'tools.speech',
   report: 'tools.report',
@@ -37,6 +41,7 @@ const TOOL_I18N_KEYS: Record<string, string> = {
   compare: 'tools.compare',
   assistant: 'tools.assistant',
   'screen-recording': 'tools.screenRecording',
+  'image-analysis': 'tools.imageAnalysis',
 }
 
 /** 解析可能为 JSON 字符串的 i18n 字段 */
@@ -74,14 +79,83 @@ function getTaskDisplayDescription(task: Task, locale: string): string | undefin
   return raw ? stripToolsSection(raw) : undefined
 }
 
+/** 解析描述中的【目标】【步骤】【预期】等段落，便于分块展示 */
+function parseDescriptionSections(desc: string): {
+  target?: string
+  steps?: string
+  expected?: string
+  /** 未被上述结构匹配的正文（可能包含其他【xxx】段落） */
+  rest?: string
+} {
+  if (!desc || typeof desc !== 'string') return {}
+  const s = desc.trim()
+  if (!s) return {}
+
+  const result: { target?: string; steps?: string; expected?: string; rest?: string } = {}
+  // 匹配【目标】/【步骤】/【操作步骤】/【预期】/【预期效果】等，提取到下一【前或结尾
+  const targetMatch = s.match(/【目标】([\s\S]*?)(?=【|$)/)
+  if (targetMatch) result.target = targetMatch[1].trim()
+
+  const stepsMatch = s.match(/【(?:操作)?步骤】([\s\S]*?)(?=【|$)/)
+  if (stepsMatch) result.steps = stepsMatch[1].trim()
+
+  const expectedMatch = s.match(/【(?:预期效果|预期)】([\s\S]*?)(?=【|$)/)
+  if (expectedMatch) result.expected = expectedMatch[1].trim()
+
+  // 若没有任何结构化段落，整个作为 rest 展示
+  const hasStructured = result.target || result.steps || result.expected
+  if (!hasStructured) {
+    result.rest = s
+  } else {
+    // 提取剩余未匹配内容（开头无【目标/步骤/预期】的段落）
+    let rest = s
+    for (const re of [/【目标】[\s\S]*?(?=【|$)/g, /【(?:操作)?步骤】[\s\S]*?(?=【|$)/g, /【(?:预期效果|预期)】[\s\S]*?(?=【|$)/g]) {
+      rest = rest.replace(re, '')
+    }
+    rest = rest.replace(/\n{3,}/g, '\n\n').trim()
+    if (rest) result.rest = rest
+  }
+  return result
+}
+
+/** 渲染单个带图标的段落 */
+function DescriptionSection({
+  icon: Icon,
+  label,
+  content,
+  iconClassName,
+}: {
+  icon: React.ComponentType<{ className?: string }>
+  label: string
+  content: string
+  iconClassName?: string
+}) {
+  if (!content) return null
+  return (
+    <div className="flex gap-3 mt-3 first:mt-0">
+      <div className={`flex-shrink-0 mt-0.5 ${iconClassName || 'text-slate-500'}`}>
+        <Icon className="w-4 h-4" />
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-xs font-medium text-slate-600 mb-1">{label}</p>
+        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{content}</p>
+      </div>
+    </div>
+  )
+}
+
 function getQuickJumpTools(task: Task): string[] {
   const feat = task.aiFeature
   if (feat && AI_FEATURE_TO_TOOLS[feat]) {
     return AI_FEATURE_TO_TOOLS[feat]
   }
   if (/节日|倒计时|备货|大促|情人节|圣诞|宋干|水灯/.test(task.title || '')) return ['speech', 'recommendations']
-  if (/GMV|波动|选品|复盘/.test(task.title || '')) return ['stats', 'report', 'recommendations']
-  if (/转化率|话术/.test(task.title || '')) return ['speech']
+  if (/对比|同比|环比|店铺对比/.test(task.title || '')) return ['compare', 'stats', 'report']
+  if (/定位|品牌|供应链|粉丝运营|客户/.test(task.title || '')) return ['market-analysis', 'report']
+  if (/GMV|波动|选品|复盘|竞争力|竞品/.test(task.title || '')) return ['stats', 'report', 'recommendations', 'market-analysis']
+  if (/转化率|话术|考核|评估|打分/.test(task.title || '')) return ['speech', 'screen-recording']
+  if (/主图|图片分析|商品图|商品卡主图|直播场景/.test(task.title || '')) return ['image-analysis', 'recommendations']
+  if (/直播场景|场景打分|场景布置|录屏|视频分析/.test(task.title || '')) return ['screen-recording']
   return []
 }
 
@@ -117,6 +191,9 @@ export default function TaskList() {
   const pendingTasks = tasks
     .filter((t) => t.status === 'pending')
     .sort((a, b) => (a.priority === 'urgent' && b.priority !== 'urgent' ? -1 : a.priority !== 'urgent' && b.priority === 'urgent' ? 1 : 0))
+  const completedTasks = tasks
+    .filter((t) => t.status === 'completed')
+    .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || '')) // 最近完成的在前（沉底时视觉上靠上）
   const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
   const normalTasks = pendingTasks.filter((t) => t.priority !== 'urgent')
   const RULE_SOURCES = ['event', 'stage', 'anomaly', 'threshold']
@@ -201,10 +278,11 @@ export default function TaskList() {
     enabled: llmCount === 0 && pendingTasks.length > 0,
   })
 
+  /** 待办列表：紧急/普通仅展示未完成；全部 = 未完成 + 已完成（沉底） */
   const filteredTasks = 
     filter === 'urgent' ? urgentTasks :
     filter === 'normal' ? normalTasks :
-    pendingTasks
+    [...pendingTasks, ...completedTasks]
 
   const handleRefresh = async () => {
     if (!selectedStore) {
@@ -269,7 +347,7 @@ export default function TaskList() {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow-lg border border-slate-200">
+    <div className="w-full bg-white rounded-xl shadow-lg border border-slate-200">
       {/* 标题栏 - 始终显示（使用柔和灰蓝，避免高饱和橙红） */}
       <div 
         className="bg-gradient-to-r from-slate-600 to-slate-700 px-6 py-4 cursor-pointer"
@@ -284,6 +362,9 @@ export default function TaskList() {
               <h2 className="text-xl font-bold">{t('dashboard.pendingTasks')}</h2>
               <div className="flex items-center gap-3 text-sm text-white/90 mt-1 flex-wrap">
                 <span>{t('dashboard.totalTasks', { count: pendingTasks.length, urgent: urgentTasks.length })}</span>
+                {completedTasks.length > 0 && (
+                  <span className="text-white/80">{t('tasks.alreadyCompleted')} {completedTasks.length}</span>
+                )}
                 {(llmCount > 0 || ruleCount > 0) && (
                   <span className="text-white/95">
                     {t('tasks.llmRuleSummary', { llm: llmCount, rule: ruleCount })}
@@ -404,8 +485,8 @@ export default function TaskList() {
             </button>
           </div>
 
-          {/* 任务列表 */}
-          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+          {/* 任务列表：卡片按内容自适应高度，拓宽显示；全部时已完成沉底 */}
+          <div className="space-y-4 max-h-[720px] overflow-y-auto">
             {isLoading ? (
               <div className="text-center py-12 text-gray-500">
                 <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-slate-400" />
@@ -422,16 +503,27 @@ export default function TaskList() {
                 </p>
               </div>
             ) : (
-              filteredTasks.map((task) => (
+              <>
+              {(filter === 'all' ? pendingTasks : filteredTasks).map((task) => {
+                const desc = getTaskDisplayDescription(task, currentLocale)
+                const sections = desc ? parseDescriptionSections(desc) : null
+                const isCompleted = task.status === 'completed'
+                return (
                 <div
                   key={task.id}
-                  className={`flex items-start gap-4 p-4 rounded-xl border-2 transition-all hover:shadow-md ${
-                    task.priority === 'urgent'
-                      ? 'bg-rose-50 border-rose-200 hover:border-rose-300'
-                      : 'bg-white border-gray-200 hover:border-slate-300'
+                  className={`flex items-start gap-4 p-5 rounded-xl border-2 transition-all hover:shadow-md w-full min-w-0 ${
+                    isCompleted
+                      ? 'bg-gray-50 border-gray-200 opacity-90'
+                      : task.priority === 'urgent'
+                        ? 'bg-rose-50 border-rose-200 hover:border-rose-300'
+                        : 'bg-white border-gray-200 hover:border-slate-300'
                   }`}
                 >
-                  {task.priority === 'urgent' ? (
+                  {isCompleted ? (
+                    <div className="p-2 bg-emerald-100 rounded-lg shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    </div>
+                  ) : task.priority === 'urgent' ? (
                     <div className="p-2 bg-rose-100 rounded-lg shrink-0">
                       <AlertCircle className="w-5 h-5 text-rose-600" />
                     </div>
@@ -444,11 +536,14 @@ export default function TaskList() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <p className={`text-base font-semibold ${
-                            task.priority === 'urgent' ? 'text-rose-900' : 'text-gray-900'
-                          }`}>
+                          <p className={`text-base font-semibold ${isCompleted ? 'line-through text-gray-500' : task.priority === 'urgent' ? 'text-rose-900' : 'text-gray-900'}`}>
                             {getTaskDisplayTitle(task, currentLocale)}
                           </p>
+                          {isCompleted && (
+                            <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full shrink-0">
+                              ✓ {t('tasks.alreadyCompleted')}
+                            </span>
+                          )}
                           {task.storeName != null && String(task.storeName) && (
                             <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
                               {String(task.storeName)}
@@ -481,37 +576,62 @@ export default function TaskList() {
                                task.aiFeature === 'pricing' ? `💰 ${t('tasks.aiFeaturePricing')}` :
                                task.aiFeature === 'schedule' ? `📅 ${t('tasks.aiFeatureSchedule')}` :
                                task.aiFeature === 'marketing' ? `📣 ${t('tasks.aiFeatureMarketing')}` :
+                               task.aiFeature === 'image_analysis' ? `🖼️ ${t('tasks.aiFeatureImageAnalysis')}` :
+                               task.aiFeature === 'scene_scoring' ? `📺 ${t('tasks.aiFeatureSceneScoring')}` :
+                               task.aiFeature === 'event' ? `🎉 ${t('tasks.aiFeatureEvent')}` :
+                               task.aiFeature === 'comparison' ? `📊 ${t('tasks.aiFeatureComparison')}` :
+                               task.aiFeature === 'positioning' ? `🎯 ${t('tasks.aiFeaturePositioning')}` :
+                               task.aiFeature === 'brand' ? `🏷️ ${t('tasks.aiFeatureBrand')}` :
+                               task.aiFeature === 'supply_chain' ? `📦 ${t('tasks.aiFeatureSupplyChain')}` :
+                               task.aiFeature === 'crm' ? `👥 ${t('tasks.aiFeatureCrm')}` :
                                `🛠️ ${t('tasks.aiFeatureTools')}`}
                             </span>
                           )}
                         </div>
-                        {getTaskDisplayDescription(task, currentLocale) && (
-                          <p className="text-sm text-gray-600 leading-relaxed">
-                            {getTaskDisplayDescription(task, currentLocale)}
-                          </p>
+                        {sections && (sections.target || sections.steps || sections.expected || sections.rest) && (
+                          <div className="mt-2 text-sm">
+                            {sections.target && (
+                              <DescriptionSection icon={Target} label={t('tasks.sectionTarget')} content={sections.target} iconClassName="text-blue-600" />
+                            )}
+                            {sections.steps && (
+                              <DescriptionSection icon={ListOrdered} label={t('tasks.sectionSteps')} content={sections.steps} iconClassName="text-emerald-600" />
+                            )}
+                            {sections.expected && (
+                              <DescriptionSection icon={BarChart2} label={t('tasks.sectionExpected')} content={sections.expected} iconClassName="text-amber-600" />
+                            )}
+                            {sections.rest && (
+                              <p className="text-gray-600 leading-relaxed whitespace-pre-line mt-2">{sections.rest}</p>
+                            )}
+                          </div>
                         )}
                       </div>
-                      <button
-                        onClick={async () => {
-                          try {
-                            await updateTask.mutateAsync({ id: task.id, status: 'completed' })
-                            await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-                            await refetch()
-                            toast.success(t('tasks.taskCompleted'))
-                          } catch (e) {
-                            console.error('标记完成失败', e)
-                            toast.error(t('tasks.operationFailed'))
-                          }
-                        }}
-                        disabled={updateTask.isPending}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
-                          task.priority === 'urgent'
-                            ? 'bg-rose-600 text-white hover:bg-rose-700'
-                            : 'bg-slate-600 text-white hover:bg-slate-700'
-                        } disabled:opacity-50`}
-                      >
-                        ✓ {t('tasks.complete')}
-                      </button>
+                      {isCompleted ? (
+                        <span className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 shrink-0">
+                          ✓ {t('tasks.alreadyCompleted')}
+                        </span>
+                      ) : (
+                        <button
+                          onClick={async () => {
+                            try {
+                              await updateTask.mutateAsync({ id: task.id, status: 'completed' })
+                              await queryClient.invalidateQueries({ queryKey: ['tasks'] })
+                              await refetch()
+                              toast.success(t('tasks.taskCompleted'))
+                            } catch (e) {
+                              console.error('标记完成失败', e)
+                              toast.error(t('tasks.operationFailed'))
+                            }
+                          }}
+                          disabled={updateTask.isPending}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0 ${
+                            task.priority === 'urgent'
+                              ? 'bg-rose-600 text-white hover:bg-rose-700'
+                              : 'bg-slate-600 text-white hover:bg-slate-700'
+                          } disabled:opacity-50`}
+                        >
+                          ✓ {t('tasks.complete')}
+                        </button>
+                      )}
                     </div>
                     {getQuickJumpTools(task).length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
@@ -530,7 +650,91 @@ export default function TaskList() {
                     )}
                   </div>
                 </div>
-              ))
+              )
+              })}
+              {filter === 'all' && completedTasks.length > 0 && (
+                <>
+                  <div className="flex items-center gap-3 pt-2 pb-1">
+                    <span className="text-sm font-medium text-gray-500 shrink-0">
+                      {t('tasks.alreadyCompleted')} ({completedTasks.length})
+                    </span>
+                    <div className="flex-1 h-px bg-gray-200" />
+                  </div>
+                  {completedTasks.map((task) => {
+                    const desc = getTaskDisplayDescription(task, currentLocale)
+                    const sections = desc ? parseDescriptionSections(desc) : null
+                    return (
+                      <div
+                        key={task.id}
+                        className="flex items-start gap-4 p-5 rounded-xl border-2 bg-gray-50 border-gray-200 opacity-90 w-full min-w-0"
+                      >
+                        <div className="p-2 bg-emerald-100 rounded-lg shrink-0">
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <p className="text-base font-semibold line-through text-gray-500">
+                                  {getTaskDisplayTitle(task, currentLocale)}
+                                </p>
+                                <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full shrink-0">
+                                  ✓ {t('tasks.alreadyCompleted')}
+                                </span>
+                                {task.storeName != null && String(task.storeName) && (
+                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
+                                    {String(task.storeName)}
+                                  </span>
+                                )}
+                                {task.createdByName != null && String(task.createdByName) && (
+                                  <span className="px-2 py-0.5 bg-slate-100 text-slate-600 text-xs font-medium rounded-full shrink-0" title="创建该待办的账号">
+                                    👤 {String(task.createdByName)}
+                                  </span>
+                                )}
+                              </div>
+                              {sections && (sections.target || sections.steps || sections.expected || sections.rest) && (
+                                <div className="mt-2 text-sm">
+                                  {sections.target && (
+                                    <DescriptionSection icon={Target} label={t('tasks.sectionTarget')} content={sections.target} iconClassName="text-blue-600" />
+                                  )}
+                                  {sections.steps && (
+                                    <DescriptionSection icon={ListOrdered} label={t('tasks.sectionSteps')} content={sections.steps} iconClassName="text-emerald-600" />
+                                  )}
+                                  {sections.expected && (
+                                    <DescriptionSection icon={BarChart2} label={t('tasks.sectionExpected')} content={sections.expected} iconClassName="text-amber-600" />
+                                  )}
+                                  {sections.rest && (
+                                    <p className="text-gray-600 leading-relaxed whitespace-pre-line mt-2">{sections.rest}</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <span className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 shrink-0">
+                              ✓ {t('tasks.alreadyCompleted')}
+                            </span>
+                          </div>
+                          {getQuickJumpTools(task).length > 0 && (
+                            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-gray-500 shrink-0">{t('tasks.quickJump')}</span>
+                              {getQuickJumpTools(task).map((toolId) => (
+                                <Link
+                                  key={toolId}
+                                  to={`/tools/${toolId}`}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200 transition-colors"
+                                >
+                                  {TOOL_I18N_KEYS[toolId] ? t(TOOL_I18N_KEYS[toolId]) : toolId}
+                                  <ExternalLink className="w-3 h-3" />
+                                </Link>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </>
+              )}
+              </>
             )}
           </div>
 

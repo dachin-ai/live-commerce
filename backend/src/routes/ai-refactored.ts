@@ -459,11 +459,12 @@ router.get('/llm-tools', async (req: AuthRequest, res) => {
 /** PUT /api/ai/feature-llm-mapping：设置功能→工具映射（仅管理员） */
 router.put('/feature-llm-mapping', requireAdmin, async (req: AuthRequest, res) => {
   try {
-    const { script, tasks, anomaly } = req.body ?? {}
+    const { script, tasks, anomaly, video } = req.body ?? {}
     const mapping: FeatureLlmMapping = {}
     if (script != null && typeof script === 'string' && script.trim()) mapping.script = script.trim()
     if (tasks != null && typeof tasks === 'string' && tasks.trim()) mapping.tasks = tasks.trim()
     if (anomaly != null && typeof anomaly === 'string' && anomaly.trim()) mapping.anomaly = anomaly.trim()
+    if (video != null && typeof video === 'string' && video.trim()) mapping.video = video.trim()
     await setFeatureLlmMapping(mapping)
     res.json({ success: true, message: '功能映射已保存' })
   } catch (e) {
@@ -2153,10 +2154,26 @@ function autoTagTaskRoleAndTool(title: string, description: string): { assignedR
   // 执行工具识别规则（基于已有的 aiFeature 类型）
   let aiFeature: string | undefined = undefined
   
-  if (/话术|逼单|宠粉|开场.*话术|收尾.*话术|促单/.test(text)) {
-    aiFeature = 'script' // 话术生成
-  } else if (/选品|商品.*推荐|商品.*布局|商品.*组合|爆品/.test(text)) {
-    aiFeature = 'product_recommend' // 商品推荐
+  if (/节日|大促|备货|情人节|圣诞|宋干|水灯|倒计时/.test(text)) {
+    aiFeature = 'event' // 节日提醒
+  } else if (/对比|同比|环比|店铺对比|时期对比/.test(text)) {
+    aiFeature = 'comparison' // 店铺/时期对比
+  } else if (/定位|店铺定位|完善店铺|目标人群|品牌定位|价格区间/.test(text)) {
+    aiFeature = 'positioning' // 店铺定位
+  } else if (/品牌|品牌形象|品牌建设/.test(text)) {
+    aiFeature = 'brand' // 品牌
+  } else if (/供应链|供货|采购/.test(text)) {
+    aiFeature = 'supply_chain' // 供应链
+  } else if (/粉丝运营|客户维护|客户运营|crm|私域/.test(text)) {
+    aiFeature = 'crm' // 粉丝/客户运营
+  } else if (/主图|图片分析|主图优化|商品图|商品卡主图|直播场景.*(图|分析)/.test(text)) {
+    aiFeature = 'image_analysis' // 图片分析：商品卡主图、直播场景
+  } else if (/直播场景|场景打分|场景布置|直播间布置|录屏|视频分析/.test(text)) {
+    aiFeature = 'scene_scoring' // 直播场景打分、录屏分析
+  } else if (/话术|逼单|宠粉|开场.*话术|收尾.*话术|促单|话术考核|话术评估|话术打分/.test(text)) {
+    aiFeature = 'script' // 话术生成（含话术考核）
+  } else if (/选品|商品.*推荐|商品.*布局|商品.*组合|爆品|竞争力|竞品|竞争分析/.test(text)) {
+    aiFeature = 'product_recommend' // 商品推荐（含产品竞争力分析）
   } else if (/时段|时间.*选择|黄金.*时段|流量.*高峰/.test(text)) {
     aiFeature = 'time_recommend' // 时段推荐
   } else if (/互动|评论|私信|粉丝|关注|留存/.test(text)) {

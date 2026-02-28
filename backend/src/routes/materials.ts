@@ -25,10 +25,10 @@ if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true })
 }
 
-// 获取所有素材 - 普通用户只能看到自己商店的素材
+// 获取所有素材 - 普通用户只能看到自己商店的素材或自己创建的视频分析素材
 router.get('/', async (req: AuthRequest, res) => {
   try {
-    const { storeId } = req.query
+    const { storeId, videoId } = req.query
     const userId = req.user!.userId
     const isAdmin = req.user!.role === 'admin'
 
@@ -39,15 +39,20 @@ router.get('/', async (req: AuthRequest, res) => {
     `
     const params: any[] = []
 
-    // 普通用户只能看到自己商店的素材
+    // 普通用户：自己商店的素材 或 自己创建的视频分析素材（m.userId = userId）
     if (!isAdmin) {
-      query += ' AND s.userId = ?'
-      params.push(userId)
+      query += ` AND (s.userId = ? OR m.userId = ?)`
+      params.push(userId, userId)
     }
 
     if (storeId) {
       query += ' AND m.storeId = ?'
       params.push(storeId as string)
+    }
+
+    if (videoId) {
+      query += ' AND m.videoId = ?'
+      params.push(videoId as string)
     }
 
     query += ' ORDER BY m.createdAt DESC'

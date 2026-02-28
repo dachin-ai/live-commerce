@@ -20,6 +20,7 @@ import configRoutes from './routes/config'
 import translateRoutes from './routes/translate'
 import feedbackRoutes from './routes/feedback'
 import messagesRoutes from './routes/messages'
+import videosRoutes from './routes/videos'
 import { initDatabase } from './db'
 import { loadScriptLLMConfigCache } from './services/scriptLLMConfig'
 import { rateLimitMiddleware } from './middleware/rateLimit'
@@ -61,6 +62,7 @@ app.use('/api/config', configRoutes)
 app.use('/api/translate', translateRoutes)
 app.use('/api/feedback', feedbackRoutes)
 app.use('/api/messages', messagesRoutes)
+app.use('/api/videos', videosRoutes)
 
 // 错误处理
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
