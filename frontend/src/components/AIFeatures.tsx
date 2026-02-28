@@ -590,18 +590,21 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       formData.append('country', videoCountry)
       if (videoType) formData.append('videoType', videoType)
       if (videoAnalysisFocus.trim()) formData.append('analysisFocus', videoAnalysisFocus.trim())
-      try {
-        await uploadVideo.mutateAsync(formData)
-        setShowUploadModal(false)
-        setSelectedFile(null)
-        refetchVideos()
-        toast.success('视频上传成功，AI 分析正在进行中')
-      } catch (error: unknown) {
-        const err = error as { response?: { data?: { error?: string } }; message?: string }
-        console.error('上传失败:', error)
-        const errorMsg = err.response?.data?.error || err.message || '上传失败'
-        toast.error(errorMsg)
-      }
+      setShowUploadModal(false)
+      setSelectedFile(null)
+      toast.info('视频上传中，您可继续使用其他功能')
+      uploadVideo.mutate(formData, {
+        onSuccess: () => {
+          refetchVideos()
+          toast.success('视频上传成功，AI 分析正在进行中')
+        },
+        onError: (error: unknown) => {
+          const err = error as { response?: { data?: { error?: string } }; message?: string }
+          console.error('上传失败:', error)
+          const errorMsg = err.response?.data?.error || err.message || '上传失败'
+          toast.error(errorMsg)
+        },
+      })
       return
     }
 
