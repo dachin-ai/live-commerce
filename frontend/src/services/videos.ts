@@ -44,8 +44,7 @@ export const useUploadVideo = () => {
   return useMutation({
     mutationFn: async (formData: FormData) => {
       return await api.post('/videos/upload-video', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' },
-        timeout: 60000,
+        timeout: 300000, // 5 分钟，支持大视频上传
       })
     },
     onSuccess: () => {

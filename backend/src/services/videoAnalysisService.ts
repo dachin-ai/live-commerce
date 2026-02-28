@@ -6,6 +6,8 @@
 import crypto from 'crypto'
 import { dbGet, dbAll } from '../db'
 import { getLLMConfigForFeature } from './llmTools'
+import type { VideoAnalysisInputParams } from '../constants/videoAnalysisParams'
+import { isCozeVideoUrl, callCozeVideoAPI } from './cozeVideoClient'
 
 const VIDEO_LLM_MODEL = process.env.VIDEO_LLM_MODEL || process.env.LLM_VISION_MODEL || 'doubao-seed-1-6-vision-250815'
 const VIDEO_ANALYSIS_TIMEOUT_MS = Number(process.env.VIDEO_ANALYSIS_TIMEOUT_MS) || 120000
@@ -59,20 +61,40 @@ export interface VideoAnalysisResult {
   shopInsights?: ShopInsights
 }
 
+/** 按 LLM 入参文档构建标准化用户消息内容 */
+function buildUserMessageContent(
+  basePrompt: string,
+  videoUrl: string,
+  inputParams?: VideoAnalysisInputParams
+): string {
+  const parts: string[] = [basePrompt, '', `视频URL（请分析）: ${videoUrl}`]
+  if (inputParams) {
+    parts.push(`平台：${inputParams.platform}`)
+    parts.push(`国家/地区：${inputParams.country}`)
+    if (inputParams.videoType) {
+      parts.push(`视频类型：${inputParams.videoType}`)
+    }
+    if (inputParams.analysisFocus?.trim()) {
+      parts.push('', `重点关注：${inputParams.analysisFocus.trim()}`)
+    }
+  }
+  return parts.join('\n')
+}
+
 async function callVisionAPI(
   url: string,
   apiKey: string,
   model: string | undefined,
   systemPrompt: string,
   userMessage: string,
-  videoUrl: string
+  videoUrl: string,
+  inputParams?: VideoAnalysisInputParams
 ): Promise<string> {
   const effectiveModel = model || VIDEO_LLM_MODEL
   const base = url.replace(/\/$/, '').replace(/\/stream_run.*$/, '')
   const chatUrl = base.includes('/chat/completions') ? base : base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`
 
-  // 视频URL放入用户消息，Vision模型（如豆包 doubao-seed-1-6-vision）需能通过URL访问视频
-  const userContent = `${userMessage}\n\n视频URL（请分析）: ${videoUrl}`
+  const userContent = buildUserMessageContent(userMessage, videoUrl, inputParams)
 
   const body: Record<string, unknown> = {
     model: effectiveModel,
@@ -280,7 +302,8 @@ ${shopBlock ? '店铺上下文：\n' + shopBlock : ''}
     videoUrl: string,
     shopId?: string,
     language: 'zh-CN' | 'th-TH' | 'en-US' = 'zh-CN',
-    userId?: string
+    userId?: string,
+    inputParams?: VideoAnalysisInputParams
   ): Promise<VideoAnalysisResult> {
     const shopContext = shopId ? await this.getShopContext(shopId) : null
     const shopMetrics = shopId ? await this.getShopMetrics(shopId) : null
@@ -296,17 +319,25 @@ ${shopBlock ? '店铺上下文：\n' + shopBlock : ''}
 
     const llmConfig = await getLLMConfigForFeature('video')
     if (!llmConfig) {
-      throw new Error('视频分析需要配置 Vision 模型。管理员可在「LLM 配置」中为「视频分析」功能指定支持视觉的模型。')
+      throw new Error('视频分析需要配置 Vision 模型或 Coze Agent。管理员可在「LLM 配置」中为「视频分析」功能指定支持视觉的模型或 Coze 发布站点。')
     }
 
-    const content = await callVisionAPI(
-      llmConfig.url,
-      llmConfig.apiKey,
-      llmConfig.model,
-      systemPrompt,
-      userPrompt,
-      videoUrl
-    )
+    let content: string
+    if (isCozeVideoUrl(llmConfig.url)) {
+      const message = buildUserMessageContent(userPrompt, videoUrl, inputParams)
+      const fullMessage = systemPrompt ? `【系统指令】\n${systemPrompt}\n\n【用户请求】\n${message}` : message
+      content = await callCozeVideoAPI(llmConfig.url, llmConfig.apiKey, fullMessage)
+    } else {
+      content = await callVisionAPI(
+        llmConfig.url,
+        llmConfig.apiKey,
+        llmConfig.model,
+        systemPrompt,
+        userPrompt,
+        videoUrl,
+        inputParams
+      )
+    }
 
     const cleaned = content.trim()
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/)

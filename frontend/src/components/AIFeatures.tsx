@@ -59,6 +59,7 @@ import { useLanguage } from '../contexts/LanguageContext'
 import { useToast } from '../contexts/ToastContext'
 import { useTasks, useUpdateTask, useBatchCompleteTasks, useCompleteAllTasks, type Task } from '../services/tasks'
 import { useQueryClient } from '@tanstack/react-query'
+import { VIDEO_PLATFORMS, VIDEO_COUNTRIES, VIDEO_TYPES } from '../constants/videoAnalysisParams'
 
 const SCRIPT_FORM_STORAGE_KEY = 'lvbcsym_script_form_draft'
 const SCRIPT_RESULT_STORAGE_KEY = 'lvbcsym_script_last_result'
@@ -154,6 +155,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const [resultFullScreen, setResultFullScreen] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  // 视频分析标准化入参（参考 LLM 入参文档）
+  const [videoPlatform, setVideoPlatform] = useState('tiktok')
+  const [videoCountry, setVideoCountry] = useState('cn')
+  const [videoType, setVideoType] = useState('')
+  const [videoAnalysisFocus, setVideoAnalysisFocus] = useState('')
 
   type ToolResultData =
     | ({ type: 'script'; data: Record<string, unknown> })
@@ -580,6 +586,10 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       const formData = new FormData()
       formData.append('file', selectedFile)
       formData.append('storeId', selectedStore.id)
+      formData.append('platform', videoPlatform)
+      formData.append('country', videoCountry)
+      if (videoType) formData.append('videoType', videoType)
+      if (videoAnalysisFocus.trim()) formData.append('analysisFocus', videoAnalysisFocus.trim())
       try {
         await uploadVideo.mutateAsync(formData)
         setShowUploadModal(false)
@@ -1742,9 +1752,59 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       {/* 上传模态框（录屏分析页与素材上传共用） */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-semibold mb-4">{t('tools.uploadVideo')}</h3>
             <div className="space-y-4">
+              {propToolId === 'screen-recording' && (
+                <div className="space-y-3 pb-3 border-b border-gray-200">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoPlatform')}</label>
+                    <select
+                      value={videoPlatform}
+                      onChange={(e) => setVideoPlatform(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {VIDEO_PLATFORMS.map((p) => (
+                        <option key={p.code} value={p.code}>{p.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoCountry')}</label>
+                    <select
+                      value={videoCountry}
+                      onChange={(e) => setVideoCountry(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {VIDEO_COUNTRIES.map((c) => (
+                        <option key={c.code} value={c.code}>{c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoType')}</label>
+                    <select
+                      value={videoType}
+                      onChange={(e) => setVideoType(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    >
+                      {VIDEO_TYPES.map((vt) => (
+                        <option key={vt.code || '_auto'} value={vt.code}>{vt.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoAnalysisFocus')}</label>
+                    <textarea
+                      value={videoAnalysisFocus}
+                      onChange={(e) => setVideoAnalysisFocus(e.target.value)}
+                      placeholder={t('tools.videoAnalysisFocusPlaceholder')}
+                      rows={2}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
+                    />
+                  </div>
+                </div>
+              )}
               <input
                 ref={fileInputRef}
                 type="file"

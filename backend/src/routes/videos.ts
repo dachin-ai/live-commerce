@@ -15,6 +15,7 @@ import multer from 'multer'
 import path from 'path'
 import fs from 'fs'
 import { videoAnalysisService } from '../services/videoAnalysisService'
+import { normalizeVideoAnalysisParams } from '../constants/videoAnalysisParams'
 
 const router = express.Router()
 router.use(authenticate)
@@ -76,6 +77,14 @@ router.post('/upload-video', upload.single('file'), async (req: AuthRequest, res
     const storeId = (req.body.storeId as string)?.trim() || null
     const sessionId = (req.body.sessionId as string)?.trim() || null
 
+    // 标准化入参：platform、country、video_type、analysis_focus（参考 LLM 入参文档）
+    const inputParams = normalizeVideoAnalysisParams({
+      platform: req.body.platform,
+      country: req.body.country,
+      videoType: req.body.videoType,
+      analysisFocus: req.body.analysisFocus,
+    })
+
     const videoId = crypto.randomUUID()
     const fileKey = `videos/${file.filename}`
     const baseUrl = getVideoBaseUrl()
@@ -104,7 +113,7 @@ router.post('/upload-video', upload.single('file'), async (req: AuthRequest, res
           // 忽略，使用默认 zh-CN
         }
 
-        const result = await videoAnalysisService.analyzeVideo(videoUrl, storeId || undefined, lang, userId)
+        const result = await videoAnalysisService.analyzeVideo(videoUrl, storeId || undefined, lang, userId, inputParams)
 
         await dbRun(`UPDATE videos SET status = 'active', description = ? WHERE id = ?`, [
           result.overallSummary?.slice(0, 2000) || null,
