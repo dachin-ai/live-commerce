@@ -26,17 +26,25 @@ steps:
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: Deploy backend service
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - live-commerce-api
-      - --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
-      - --region=$_REGION
-      - --platform=managed
-      - --allow-unauthenticated
-      - --set-secrets=JWT_SECRET=jwt-secret:latest
-      - --set-env-vars=NODE_ENV=production,DATABASE_URL=$_DATABASE_URL,CORS_ORIGIN=$_CORS_ORIGIN
+      - -ceu
+      - |
+        for i in 1 2 3; do
+          gcloud run deploy live-commerce-api \
+            --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA \
+            --region=$_REGION \
+            --platform=managed \
+            --allow-unauthenticated \
+            --set-secrets=JWT_SECRET=jwt-secret:latest \
+            --set-env-vars=NODE_ENV=production,DATABASE_URL=$_DATABASE_URL,CORS_ORIGIN=$_CORS_ORIGIN && break
+          if [ "$i" -eq 3 ]; then
+            echo "Backend deploy failed after retries"
+            exit 1
+          fi
+          echo "Backend deploy conflict/transient error, retrying in 10s..."
+          sleep 10
+        done
 
   - name: gcr.io/cloud-builders/docker
     id: Build frontend image
@@ -58,15 +66,23 @@ steps:
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: Deploy frontend service
-    entrypoint: gcloud
+    entrypoint: bash
     args:
-      - run
-      - deploy
-      - live-commerce-web
-      - --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA
-      - --region=$_REGION
-      - --platform=managed
-      - --allow-unauthenticated
+      - -ceu
+      - |
+        for i in 1 2 3; do
+          gcloud run deploy live-commerce-web \
+            --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA \
+            --region=$_REGION \
+            --platform=managed \
+            --allow-unauthenticated && break
+          if [ "$i" -eq 3 ]; then
+            echo "Frontend deploy failed after retries"
+            exit 1
+          fi
+          echo "Frontend deploy conflict/transient error, retrying in 10s..."
+          sleep 10
+        done
 
 images:
   - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
