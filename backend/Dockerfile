@@ -14,9 +14,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=8080
 
-COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts
-
+COPY --from=builder /app/package*.json ./
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
 RUN mkdir -p uploads
 
