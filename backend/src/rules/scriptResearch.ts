@@ -29,6 +29,23 @@ export interface ScriptUserInput {
   style?: string
   /** 与 Coze 入参 custom_requirements 对齐；优先于 topic+style */
   customRequirements?: string
+  /** 售后信息，写入 Coze 范式括号 【after_sales_info】 */
+  afterSalesInfo?: string
+  /** 组套范式：为 true 时短提示词不传顶层 price/features，改用 combo / products */
+  isCombo?: boolean
+  comboTotalPrice?: string
+  comboOriginalPrice?: string
+  comboDiscountAmount?: string
+  /** 组套 products 数组的 JSON 字符串（范式字段名与 Coze 对齐） */
+  comboProductsJson?: string
+  /** 组套整体特点（表单多条合并后的短文本，供 OpenAI/市调摘要路径使用） */
+  bundleFeaturesNarrative?: string
+  /** 竞品参考：商品/店铺链接或用户填写的对比要点（价参、卖点、规格等，可多行）；模型通常无法实时打开链接 */
+  competitorLink?: string
+  /** 价格定位（低/中/高），与 Coze 弱塑品/强塑品路由对齐 */
+  priceLevel?: '低' | '中' | '高'
+  /** 产品角色（引流款/爆单款/利润款/战略款/普通款），与 Coze 话术模式对齐 */
+  productRole?: '引流款' | '爆单款' | '利润款' | '战略款' | '普通款'
 }
 
 export interface StoreContext {
@@ -166,6 +183,29 @@ function buildSummaryForLLM(
   if (userInput.price) parts.push(`价:${userInput.price}`)
   if (userInput.features) parts.push(`卖点:${userInput.features}`)
   if (userInput.targetAudience) parts.push(`人群:${userInput.targetAudience}`)
+  if (userInput.afterSalesInfo) parts.push(`售后:${userInput.afterSalesInfo.slice(0, 400)}${userInput.afterSalesInfo.length > 400 ? '…' : ''}`)
+  if (userInput.customRequirements?.trim()) {
+    const c = userInput.customRequirements.trim()
+    parts.push(`自定义:${c.slice(0, 500)}${c.length > 500 ? '…' : ''}`)
+  }
+  if (userInput.competitorLink?.trim()) {
+    const cl = userInput.competitorLink.trim()
+    parts.push(`竞品参考:${cl.slice(0, 600)}${cl.length > 600 ? '…' : ''}`)
+  }
+  if (userInput.isCombo) {
+    parts.push('组套:is_combo')
+    if (userInput.comboTotalPrice) parts.push(`组套总价:${userInput.comboTotalPrice}`)
+    if (userInput.comboOriginalPrice) parts.push(`原价:${userInput.comboOriginalPrice}`)
+    if (userInput.comboDiscountAmount) parts.push(`优惠额:${userInput.comboDiscountAmount}`)
+    if (userInput.bundleFeaturesNarrative) {
+      const b = userInput.bundleFeaturesNarrative
+      parts.push(`组套特点:${b.slice(0, 400)}${b.length > 400 ? '…' : ''}`)
+    }
+    if (userInput.comboProductsJson) {
+      const j = userInput.comboProductsJson
+      parts.push(`products(JSON):${j.length > 800 ? j.slice(0, 800) + '…' : j}`)
+    }
+  }
   parts.push(`称呼:${analyzedAudience.addressTerm} 痛点:${analyzedAudience.painPointsHint}`)
   parts.push(`类型:${userInput.scriptType} 语种:${userInput.language}`)
   if (userInput.duration) parts.push(`时长:约${userInput.duration}分钟`)
@@ -222,6 +262,7 @@ function getStoreCountry(storeContext: StoreContext, language: string): string {
   
   // region 匹配不到时才从 language 推导（注意：英语有歧义，默认美国）
   if (language === 'th-TH') return '泰国'
+  if (language === 'id-ID') return '印尼'
   if (language === 'zh-CN') return '中国'
   if (language === 'en-US') return '美国' // 英语默认美国，但建议店铺明确填写 region
   return '当地'
@@ -319,7 +360,7 @@ export function buildLLMSystemPrompt(research: ScriptResearchResult): string {
     : ''
   const locale = userInput.language || 'zh-CN'
   const countryCode = languageToCountryCode(locale)
-  return `【回复语言与地区】请使用以下语言输出话术正文：locale=${locale}，国家/地区代码（countryCode）=${countryCode}。zh-CN=简体中文，en-US=English，th-TH=ไทย。话术正文必须使用该语言。
+  return `【回复语言与地区】请使用以下语言输出话术正文：locale=${locale}，国家/地区代码（countryCode）=${countryCode}。zh-CN=简体中文，en-US=English，th-TH=ไทย，id-ID=Bahasa Indonesia。话术正文必须使用该语言。
 你是直播话术策划。
 ${typeBlock}
 通用规则:1)依摘要输入/店铺/合规/品类 2)禁词禁用慎词有据 3)语种与摘要一致 4)数字泛化 5)自然口语 6)紧扣产品与品类卖点 7)场景/痛点/故事带出卖点 ${frameworkRule}`
@@ -336,300 +377,4 @@ export function buildLLMUserMessage(research: ScriptResearchResult): string {
     ? '请先出框架再出可念稿。'
     : '请依上生成。'
   return `【用户界面语言/地区】locale=${locale}，countryCode=${countryCode}\n\n` + taskLine + '\n\n' + research.summaryForLLM + '\n\n' + tail
-}
-
-/** 话术类型配置（Coze 风格） */
-interface CozeScriptTypeConfig {
-  script_type_name: string
-  script_type: string
-  script_type_description: string
-  script_type_key_elements: string
-  typical_length: string
-  cta_requirement: string
-  use_promotion_info: boolean
-}
-
-const COZE_SCRIPT_TYPE_MAPPING: Record<ScriptType, CozeScriptTypeConfig> = {
-  'full-sales': {
-    script_type_name: '完整销售流程话术',
-    script_type: 'full_process',
-    script_type_description: '完整的直播销售流程（圈人群、塑品、打消顾虑、利益点、售后、逼单）',
-    script_type_key_elements: '1) 圈人群 2) 塑品 3) 打消顾虑 4) 利益点 5) 售后 6) 逼单',
-    typical_length: '5-10分钟',
-    cta_requirement: '每个环节都要有明确的引导，最后环节必须包含强力CTA',
-    use_promotion_info: true,
-  },
-  'segment-audience': {
-    script_type_name: '圈人群部分话术',
-    script_type: 'segment_audience',
-    script_type_description: '聚焦识别目标人群并建立痛点共鸣',
-    script_type_key_elements: '1) 目标人群识别 2) 痛点共鸣 3) 场景代入 4) 承接到产品',
-    typical_length: '60-90秒',
-    cta_requirement: '可含轻量互动引导，重点是完成圈人群与承接',
-    use_promotion_info: false,
-  },
-  'segment-product': {
-    script_type_name: '塑品部分话术',
-    script_type: 'segment_product',
-    script_type_description: '聚焦产品价值塑造与卖点展开',
-    script_type_key_elements: '1) 核心卖点 2) 使用场景 3) 差异化价值 4) 过渡到答疑',
-    typical_length: '90-120秒',
-    cta_requirement: '行动召唤可选，重点是塑造价值',
-    use_promotion_info: false,
-  },
-  'segment-concerns': {
-    script_type_name: '打消顾虑部分话术',
-    script_type: 'segment_concerns',
-    script_type_description: '聚焦回答疑虑并降低决策阻力',
-    script_type_key_elements: '1) 高频疑问 2) 风险消除 3) 信任背书 4) 过渡到利益点',
-    typical_length: '60-90秒',
-    cta_requirement: '可含轻量引导，重点是答疑解虑',
-    use_promotion_info: false,
-  },
-  'segment-benefits': {
-    script_type_name: '利益点部分话术',
-    script_type: 'segment_benefits',
-    script_type_description: '聚焦价格价值与福利展示',
-    script_type_key_elements: '1) 价格价值 2) 促销福利 3) 对比感知 4) 过渡到售后',
-    typical_length: '90-120秒',
-    cta_requirement: '建议包含明确行动引导',
-    use_promotion_info: true,
-  },
-  'segment-after-sales': {
-    script_type_name: '售后部分话术',
-    script_type: 'segment_after_sales',
-    script_type_description: '聚焦售后政策与保障承诺',
-    script_type_key_elements: '1) 退换政策 2) 发货时效 3) 客服支持 4) 承接逼单',
-    typical_length: '60-90秒',
-    cta_requirement: '以建立信任为主，CTA 可选',
-    use_promotion_info: false,
-  },
-  'segment-closing': {
-    script_type_name: '逼单部分话术',
-    script_type: 'segment_closing',
-    script_type_description: '聚焦紧迫感与最终成交动作',
-    script_type_key_elements: '1) 限时限量 2) 最终价值 3) 强行动召唤 4) 倒计时催单',
-    typical_length: '60-90秒',
-    cta_requirement: '必须包含强行动召唤与紧迫感',
-    use_promotion_info: true,
-  },
-}
-
-/** 国家/地区代码 → 中文国家名（请求体传了 countryCode 时，提示词中的「国家」用此表，与用户选择一致） */
-const COUNTRY_CODE_TO_NAME: Record<string, string> = {
-  CN: '中国', TH: '泰国', VN: '越南', US: '美国', MY: '马来西亚', SG: '新加坡', ID: '印尼', PH: '菲律宾', GB: '英国',
-}
-
-/** 国家/地区代码 → 货币信息映射（供 Coze 明确货币符号与表达习惯） */
-const COUNTRY_CURRENCY_MAP: Record<string, { currency: string; symbol: string; name: string; culturalNote: string }> = {
-  CN: { 
-    currency: 'CNY', 
-    symbol: '¥', 
-    name: '人民币',
-    culturalNote: '使用「元」作单位，价格可用「X元X角」或「XX块」等口语化表达；强调性价比、品质、实用性'
-  },
-  TH: { 
-    currency: 'THB', 
-    symbol: '฿', 
-    name: '泰铢',
-    culturalNote: '使用「บาท」（泰铢）作单位，价格用「X บาท」表达；泰国文化重视礼貌、微笑、sanuk（快乐）氛围'
-  },
-  VN: { 
-    currency: 'VND', 
-    symbol: '₫', 
-    name: '越南盾',
-    culturalNote: '使用「đồng」作单位，价格通常为大数字（如 299,000₫）；越南文化重视家庭、实用、性价比'
-  },
-  US: { 
-    currency: 'USD', 
-    symbol: '$', 
-    name: '美元',
-    culturalNote: '使用「dollar」或「buck」，价格用「$X.XX」表达；美国文化偏好直接、热情、高效的销售风格'
-  },
-  MY: { 
-    currency: 'MYR', 
-    symbol: 'RM', 
-    name: '马来西亚令吉',
-    culturalNote: '使用「ringgit」，价格用「RM X」表达；马来西亚多元文化，需兼顾不同族群习惯'
-  },
-  SG: { 
-    currency: 'SGD', 
-    symbol: 'S$', 
-    name: '新加坡元',
-    culturalNote: '使用「Singapore dollar」，价格用「S$X」表达；新加坡文化重视效率、品质、实用'
-  },
-  ID: { 
-    currency: 'IDR', 
-    symbol: 'Rp', 
-    name: '印尼盾',
-    culturalNote: '使用「rupiah」，价格通常为大数字（如 Rp 299,000）；印尼文化重视礼貌、尊重、社区'
-  },
-  PH: { 
-    currency: 'PHP', 
-    symbol: '₱', 
-    name: '菲律宾比索',
-    culturalNote: '使用「piso」，价格用「₱X」表达；菲律宾文化热情、友好、重视家庭'
-  },
-}
-
-/**
- * 方案1：仅构建单条消息，不维护长提示词。
- * 供 Coze Agent 模式使用：直接请求生成话术，入参为 userInput + storeContext；Bot 在回复中直接输出话术即可。
- * @param explicitCountryCode 前端明确传入的国家代码（优先级最高）
- */
-export function buildScriptToolCallMessage(
-  userInput: ScriptUserInput,
-  storeContext: StoreContext,
-  promotionInfo?: string,
-  explicitCountryCode?: string
-): string {
-  const countryCode = explicitCountryCode || deriveCountryCode(storeContext.region, userInput.language)
-  const countryName =
-    (explicitCountryCode && COUNTRY_CODE_TO_NAME[explicitCountryCode])
-      ? COUNTRY_CODE_TO_NAME[explicitCountryCode]
-      : getStoreCountry(storeContext, userInput.language)
-  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['full-sales']
-  const parts: string[] = [
-    `请根据以下信息生成一款${userInput.productName}的${scriptTypeConfig.script_type_name}。`,
-    `产品名称：${userInput.productName}`,
-    `国家：${countryName}`,
-    `话术类型：${scriptTypeConfig.script_type}`,
-    '输出语言：仅中文',
-  ]
-  if (userInput.price) parts.push(`价格：${userInput.price}`)
-  if (userInput.features) parts.push(`产品特点：${userInput.features}`)
-  if (userInput.targetAudience) parts.push(`目标人群：${userInput.targetAudience}`)
-  if (promotionInfo && scriptTypeConfig.use_promotion_info) parts.push(`促销活动：${promotionInfo}`)
-  if (userInput.productSku) parts.push(`SKU信息：${userInput.productSku}`)
-  return parts.join('，')
-}
-
-/**
- * 构建 Coze 风格的话术生成提示词（system + user）
- * 与项目现有 LLM 完全解耦，专用于 Coze 智能体或其他需要此格式的 LLM
- * @param explicitCountryCode 前端明确传入的国家代码（优先级最高），解决英语等多国语言歧义
- */
-export function buildCozeScriptPrompts(
-  research: ScriptResearchResult, 
-  promotionInfo?: string,
-  explicitCountryCode?: string
-): {
-  systemPrompt: string
-  userPrompt: string
-} {
-  const { userInput, storeContext } = research
-  const languageNameMap: Record<string, string> = {
-    'th-TH': '泰语',
-    'zh-CN': '中文',
-    'en-US': '英语',
-  }
-  const languageName = languageNameMap[userInput.language] || userInput.language
-  
-  // 国家代码推导优先级：前端明确传入 > store.region 精确匹配 > language 推导
-  const countryCode = explicitCountryCode || deriveCountryCode(storeContext.region, userInput.language)
-  const currencyInfo = COUNTRY_CURRENCY_MAP[countryCode] || COUNTRY_CURRENCY_MAP['CN']
-  // 请求体传了国家/代码时，提示词中的国家名与用户选择一致；否则从店铺/语言推导
-  const countryName =
-    (explicitCountryCode && COUNTRY_CODE_TO_NAME[explicitCountryCode])
-      ? COUNTRY_CODE_TO_NAME[explicitCountryCode]
-      : getStoreCountry(storeContext, userInput.language)
-
-  // 仅保留与用户入参相关的信息，不注入环节/格式/输出要求等规则，由 Coze 内置逻辑生成
-  const systemPrompt = '你是TikTok直播电商话术专家。'
-
-  // User Prompt: 产品信息、话术类型、要求
-  const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['full-sales']
-  
-  // 与话术入参约定对齐：product_name, price, features, target_audience, sku_info
-  const productSection = `## 产品信息（入参）
-- 产品名称（product_name）：${userInput.productName}
-${userInput.productSku ? `- SKU信息（sku_info）：${userInput.productSku}\n  （格式参考：S码(尺寸,适用场景);M码(...)）` : ''}
-${userInput.price ? `- 价格（price）：${userInput.price}` : ''}
-${userInput.features ? `- 产品特点（features）：${userInput.features}` : ''}
-${userInput.targetAudience ? `- 目标人群（target_audience）：${userInput.targetAudience}` : ''}`
-
-  const countrySection = `## 国家/地区（country 必填）
-- 国家（country）：${countryName}
-- 国家代码：${countryCode}
-- 货币：${currencyInfo.name} (${currencyInfo.currency})
-- 货币符号：${currencyInfo.symbol}
-- 文化表达：${currencyInfo.culturalNote}`
-
-  const promotionSection = promotionInfo && scriptTypeConfig.use_promotion_info
-    ? `
-
-## 促销活动（promotion_info）
-${promotionInfo}`
-    : ''
-
-  // 与 Coze 入参 custom_requirements 对齐：优先使用 customRequirements，否则由 topic、style 合并
-  let customRequirementsSection = ''
-  if (userInput.customRequirements && String(userInput.customRequirements).trim()) {
-    customRequirementsSection = `
-
-## 自定义要求（custom_requirements）
-${String(userInput.customRequirements).trim()}`
-  } else {
-    const customParts: string[] = []
-    if (userInput.topic && String(userInput.topic).trim()) customParts.push(String(userInput.topic).trim())
-    if (userInput.style && String(userInput.style).trim()) customParts.push(`风格：${userInput.style.trim()}`)
-    if (customParts.length > 0) {
-      customRequirementsSection = `
-
-## 自定义要求（custom_requirements）
-${customParts.join('\n')}`
-    }
-  }
-
-  const storeSection = research.dataHint 
-    ? `
-
-## 店铺数据参考
-${research.dataHint}
-${research.storeContext.storeName ? `店铺：${research.storeContext.storeName}` : ''}`
-    : ''
-
-  // 首句为请求摘要，请直接在回复中输出话术（与《Coze对接说明》一致）
-  const requestSummaryParts = [
-    `请根据以下信息生成一款${userInput.productName}的${scriptTypeConfig.script_type_name}。`,
-    `产品名称：${userInput.productName}`,
-    `国家：${countryName}`,
-    `话术类型：${scriptTypeConfig.script_type}`,
-  ]
-  if (userInput.price) requestSummaryParts.push(`价格：${userInput.price}`)
-  if (userInput.features) requestSummaryParts.push(`产品特点：${userInput.features}`)
-  if (userInput.targetAudience) requestSummaryParts.push(`目标人群：${userInput.targetAudience}`)
-  if (promotionInfo && scriptTypeConfig.use_promotion_info) requestSummaryParts.push(`促销活动：${promotionInfo}`)
-  if (userInput.productSku) requestSummaryParts.push(`SKU信息：${userInput.productSku}`)
-  const requestSummaryLine = requestSummaryParts.join('，')
-
-  const userPrompt = `${requestSummaryLine}
-
----
-
-请为以下产品生成{{script_type_name}}类型的直播话术。仅输出纯中文话术（由终端系统负责翻译为目标语言）。
-
-${productSection}
-
-${countrySection}
-${promotionSection}
-${customRequirementsSection}
-${storeSection}
-
-## 话术类型（script_type）
-{{script_type}}
-{{script_type_description}}
-
-请生成话术：`
-
-  // 仅替换与用户选择话术类型相关的占位符，不注入格式/长度/CTA 等规则
-  const userPromptFilled = userPrompt
-    .replace(/\{\{script_type_name\}\}/g, scriptTypeConfig.script_type_name)
-    .replace(/\{\{script_type\}\}/g, scriptTypeConfig.script_type)
-    .replace(/\{\{script_type_description\}\}/g, scriptTypeConfig.script_type_description)
-
-  return {
-    systemPrompt,
-    userPrompt: userPromptFilled,
-  }
 }

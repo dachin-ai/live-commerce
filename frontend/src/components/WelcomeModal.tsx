@@ -31,18 +31,18 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="absolute right-4 top-4 p-1 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           aria-label="关闭"
         >
           <X className="w-5 h-5" />
         </button>
         <div className="flex items-center gap-3 mb-4">
-          <div className="p-2 bg-blue-100 rounded-xl">
-            <Sparkles className="w-6 h-6 text-blue-600" />
+          <div className="p-2 bg-primary-100 rounded-xl">
+            <Sparkles className="w-6 h-6 text-primary-600" />
           </div>
-          <h2 className="text-xl font-bold text-gray-900">{WELCOME_CONTENT.title}</h2>
+          <h2 className="text-xl font-bold text-slate-900">{WELCOME_CONTENT.title}</h2>
         </div>
-        <div className="space-y-2 text-gray-600">
+        <div className="space-y-2 text-slate-600">
           {WELCOME_CONTENT.lines.map((line, i) => (
             <p key={i} className="text-sm leading-relaxed">
               {line}
@@ -52,7 +52,7 @@ export default function WelcomeModal({ onClose }: WelcomeModalProps) {
         <button
           type="button"
           onClick={onClose}
-          className="mt-6 w-full py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+          className="mt-6 w-full py-2.5 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium"
         >
           知道了
         </button>

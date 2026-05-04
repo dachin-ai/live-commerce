@@ -24,7 +24,6 @@ export interface RegisterData {
 }
 
 export interface AuthResponse {
-  token: string
   user: User
   /** 账号首次登录（仅首次会为 true，用于展示欢迎语） */
   firstLoginEver?: boolean
@@ -40,11 +39,10 @@ export const useLogin = () => {
       const data = await api.post('/auth/login', credentials)
       const response = data as unknown as AuthResponse
       // 防御：确保后端返回格式正确
-      if (!response?.token || !response?.user?.id) {
+      if (!response?.user?.id) {
         throw new Error('登录响应格式错误，请确认后端服务正常')
       }
-      // 保存token和用户信息
-      localStorage.setItem('token', response.token)
+      // Token 由 httpOnly Cookie 自动管理，前端只存 UI 状态
       localStorage.setItem('userId', response.user.id)
       localStorage.setItem('userRole', response.user.role ?? 'user')
       localStorage.setItem('userName', response.user.name ?? '')
@@ -76,7 +74,7 @@ export const useLogout = () => {
       return await api.post('/auth/logout')
     },
     onSuccess: () => {
-      localStorage.removeItem('token')
+      // Cookie 由后端 clearCookie 管理
       localStorage.removeItem('userId')
       localStorage.removeItem('userRole')
       localStorage.removeItem('userName')
@@ -107,7 +105,7 @@ export const useCurrentUser = () => {
 
 // 检查是否已登录
 export const isAuthenticated = (): boolean => {
-  return !!localStorage.getItem('token')
+  return !!localStorage.getItem('userId')  // Cookie 由浏览器管理，前端用 userId 判断
 }
 
 // 获取当前用户角色（与后端 users.role 一致，含 operator/manager）

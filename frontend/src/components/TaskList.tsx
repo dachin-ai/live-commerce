@@ -4,12 +4,28 @@ import { generateTasks, getScriptLLMConfig, getLlmDiagnostic, type GenerateTasks
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useGenerateTasks } from '../contexts/GenerateTasksContext'
-import { CheckCircle2, Clock, AlertCircle, RefreshCw, ChevronDown, ChevronUp, ListTodo, ExternalLink, Target, ListOrdered, BarChart2 } from 'lucide-react'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import {
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  ListTodo,
+  ExternalLink,
+  Target,
+  ListOrdered,
+  BarChart2,
+  Database,
+  Sliders,
+  ClipboardCheck,
+  Briefcase,
+} from 'lucide-react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useToast } from '../contexts/ToastContext'
 import { Link } from 'react-router-dom'
 import type { Task } from '../services/tasks'
+import TaskWeekPickerPopover from './TaskWeekPickerPopover'
+import { formatLocalYMD, getWeekMondayFromDate } from '../utils/calendarLocal'
 
 /** aiFeature → 执行工具 ID 列表（用于快速跳转，含未接入功能的预留入口） */
 const AI_FEATURE_TO_TOOLS: Record<string, string[]> = {
@@ -62,13 +78,9 @@ function getTaskDisplayTitle(task: Task, locale: string): string {
   const i18n = parseTaskI18n(task.title_i18n)
   return i18n[key] || task.title
 }
-/** 展示时去掉【工具】段落，工具信息仅通过快速跳转体现 */
+/** A 方案：与 Coze 内测一致，保留原始【工具】段落 */
 function stripToolsSection(desc: string): string {
-  if (!desc || !desc.includes('【工具】')) return desc
   return desc
-    .replace(/\n*【工具】[^\n]*(?:\n(?!【)[^\n]*)*/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 }
 
 function getTaskDisplayDescription(task: Task, locale: string): string | undefined {
@@ -79,43 +91,129 @@ function getTaskDisplayDescription(task: Task, locale: string): string | undefin
   return raw ? stripToolsSection(raw) : undefined
 }
 
-/** 解析描述中的【目标】【步骤】【预期】等段落，便于分块展示 */
-function parseDescriptionSections(desc: string): {
+/** Coze 五级结构 + 旧版【步骤】【预期】兼容 */
+type TaskDescriptionSections = {
   target?: string
+  dataSource?: string
   steps?: string
+  params?: string
+  validation?: string
+  resources?: string
   expected?: string
-  /** 未被上述结构匹配的正文（可能包含其他【xxx】段落） */
   rest?: string
-} {
+}
+
+const DESCRIPTION_STRIP_RES: RegExp[] = [
+  /【目标】[\s\S]*?(?=【|$)/g,
+  /【数据来源】[\s\S]*?(?=【|$)/g,
+  /【(?:执行步骤|操作步骤|步骤)】[\s\S]*?(?=【|$)/g,
+  /【参数配置】[\s\S]*?(?=【|$)/g,
+  /【验证方案】[\s\S]*?(?=【|$)/g,
+  /【资源需求】[\s\S]*?(?=【|$)/g,
+  /【(?:预期效果|预期)】[\s\S]*?(?=【|$)/g,
+]
+
+/** 解析描述中的【目标】【数据来源】【执行步骤】等段落，与 Coze 出参对齐 */
+function parseDescriptionSections(desc: string): TaskDescriptionSections {
   if (!desc || typeof desc !== 'string') return {}
   const s = desc.trim()
   if (!s) return {}
 
-  const result: { target?: string; steps?: string; expected?: string; rest?: string } = {}
-  // 匹配【目标】/【步骤】/【操作步骤】/【预期】/【预期效果】等，提取到下一【前或结尾
-  const targetMatch = s.match(/【目标】([\s\S]*?)(?=【|$)/)
-  if (targetMatch) result.target = targetMatch[1].trim()
+  const result: TaskDescriptionSections = {}
 
-  const stepsMatch = s.match(/【(?:操作)?步骤】([\s\S]*?)(?=【|$)/)
-  if (stepsMatch) result.steps = stepsMatch[1].trim()
+  const mTarget = s.match(/【目标】([\s\S]*?)(?=【|$)/)
+  if (mTarget) result.target = mTarget[1].trim()
 
-  const expectedMatch = s.match(/【(?:预期效果|预期)】([\s\S]*?)(?=【|$)/)
-  if (expectedMatch) result.expected = expectedMatch[1].trim()
+  const mData = s.match(/【数据来源】([\s\S]*?)(?=【|$)/)
+  if (mData) result.dataSource = mData[1].trim()
 
-  // 若没有任何结构化段落，整个作为 rest 展示
-  const hasStructured = result.target || result.steps || result.expected
+  const mSteps = s.match(/【(?:执行步骤|操作步骤|步骤)】([\s\S]*?)(?=【|$)/)
+  if (mSteps) result.steps = mSteps[1].trim()
+
+  const mParams = s.match(/【参数配置】([\s\S]*?)(?=【|$)/)
+  if (mParams) result.params = mParams[1].trim()
+
+  const mVal = s.match(/【验证方案】([\s\S]*?)(?=【|$)/)
+  if (mVal) result.validation = mVal[1].trim()
+
+  const mRes = s.match(/【资源需求】([\s\S]*?)(?=【|$)/)
+  if (mRes) result.resources = mRes[1].trim()
+
+  const mExp = s.match(/【(?:预期效果|预期)】([\s\S]*?)(?=【|$)/)
+  if (mExp) result.expected = mExp[1].trim()
+
+  const hasStructured = !!(
+    result.target ||
+    result.dataSource ||
+    result.steps ||
+    result.params ||
+    result.validation ||
+    result.resources ||
+    result.expected
+  )
   if (!hasStructured) {
     result.rest = s
   } else {
-    // 提取剩余未匹配内容（开头无【目标/步骤/预期】的段落）
     let rest = s
-    for (const re of [/【目标】[\s\S]*?(?=【|$)/g, /【(?:操作)?步骤】[\s\S]*?(?=【|$)/g, /【(?:预期效果|预期)】[\s\S]*?(?=【|$)/g]) {
+    for (const re of DESCRIPTION_STRIP_RES) {
       rest = rest.replace(re, '')
     }
     rest = rest.replace(/\n{3,}/g, '\n\n').trim()
     if (rest) result.rest = rest
   }
   return result
+}
+
+function descriptionSectionsHaveContent(s: TaskDescriptionSections | null): boolean {
+  if (!s) return false
+  return !!(
+    s.target ||
+    s.dataSource ||
+    s.steps ||
+    s.params ||
+    s.validation ||
+    s.resources ||
+    s.expected ||
+    s.rest
+  )
+}
+
+/** 待办正文：分块展示（与 parseDescriptionSections 字段一致） */
+function TaskDescriptionSectionsView({ sections, t }: { sections: TaskDescriptionSections; t: (key: string) => string }) {
+  if (!descriptionSectionsHaveContent(sections)) return null
+  return (
+    <div className="mt-2 text-sm">
+      {sections.target && (
+        <DescriptionSection icon={Target} label={t('tasks.sectionTarget')} content={sections.target} iconClassName="text-primary-600" />
+      )}
+      {sections.dataSource && (
+        <DescriptionSection icon={Database} label={t('tasks.sectionDataSource')} content={sections.dataSource} iconClassName="text-cyan-600" />
+      )}
+      {sections.steps && (
+        <DescriptionSection icon={ListOrdered} label={t('tasks.sectionSteps')} content={sections.steps} iconClassName="text-emerald-600" />
+      )}
+      {sections.params && (
+        <DescriptionSection icon={Sliders} label={t('tasks.sectionParams')} content={sections.params} iconClassName="text-violet-600" />
+      )}
+      {sections.validation && (
+        <DescriptionSection
+          icon={ClipboardCheck}
+          label={t('tasks.sectionValidation')}
+          content={sections.validation}
+          iconClassName="text-amber-600"
+        />
+      )}
+      {sections.resources && (
+        <DescriptionSection icon={Briefcase} label={t('tasks.sectionResources')} content={sections.resources} iconClassName="text-slate-600" />
+      )}
+      {sections.expected && (
+        <DescriptionSection icon={BarChart2} label={t('tasks.sectionExpected')} content={sections.expected} iconClassName="text-orange-600" />
+      )}
+      {sections.rest && (
+        <p className="text-slate-600 leading-relaxed whitespace-pre-line mt-3 pt-2 border-t border-slate-100">{sections.rest}</p>
+      )}
+    </div>
+  )
 }
 
 /** 渲染单个带图标的段落 */
@@ -138,9 +236,43 @@ function DescriptionSection({
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-xs font-medium text-slate-600 mb-1">{label}</p>
-        <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{content}</p>
+        <p className="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{content}</p>
       </div>
     </div>
+  )
+}
+
+/** Coze 出参：预计周期、类型、责任人（与后端 tasks 表扩展字段对应） */
+function TaskCozeMetaBadges({ task, t }: { task: Task; t: (key: string, options?: { defaultValue?: string }) => string }) {
+  const est = task.estimatedDays != null && String(task.estimatedDays).trim()
+  const cat = task.category != null && String(task.category).trim()
+  const resp = task.responsible != null && String(task.responsible).trim()
+  if (!est && !cat && !resp) return null
+  const chip =
+    'px-2 py-0.5 text-xs font-medium rounded-full shrink-0 border border-slate-200 bg-white text-slate-700'
+  return (
+    <>
+      {est ? (
+        <span className={chip} title={t('tasks.metaEstimatedDays')}>
+          ⏱ {String(task.estimatedDays).trim()}
+        </span>
+      ) : null}
+      {cat ? (
+        <span
+          className={`${chip} bg-indigo-50 text-indigo-800 border-indigo-100`}
+          title={t('tasks.metaCategory')}
+        >
+          {t(`tasks.cozeCategory.${String(task.category).trim().toLowerCase()}`, {
+            defaultValue: String(task.category).trim(),
+          })}
+        </span>
+      ) : null}
+      {resp ? (
+        <span className={chip} title={t('tasks.metaResponsible')}>
+          👥 {String(task.responsible).trim()}
+        </span>
+      ) : null}
+    </>
   )
 }
 
@@ -165,10 +297,28 @@ export default function TaskList() {
   const { t } = useTranslation()
   const { locale } = useLanguage()
   const toast = useToast()
-  const { selectedStore, stores } = useStore()
-  const { data: tasks = [], isLoading, refetch } = useTasks(selectedStore?.id)
-  /** 当前店铺无数据时，用该店铺的 stats 生成（任务仍归属当前店铺）。空字符串表示仅用当前店铺。 */
-  const [useStatsFromStoreId, setUseStatsFromStoreId] = useState<string>('')
+  const { selectedStore } = useStore()
+  const [rangeHintByKey, setRangeHintByKey] = useState<Record<string, { dateFrom: string; dateTo: string; reason?: string }>>({})
+  const getWeekStart = (d: Date) => formatLocalYMD(getWeekMondayFromDate(d))
+  const formatRange = (weekStartStr: string) => {
+    const start = new Date(`${weekStartStr}T00:00:00.000Z`)
+    const end = new Date(start)
+    end.setUTCDate(end.getUTCDate() + 6)
+    const mmdd = (x: Date) => `${String(x.getUTCMonth() + 1).padStart(2, '0')}-${String(x.getUTCDate()).padStart(2, '0')}`
+    const y = (x: Date) => x.getUTCFullYear()
+    if (y(start) !== y(end)) {
+      return `${y(start)}-${mmdd(start)}～${y(end)}-${mmdd(end)}`
+    }
+    return `${mmdd(start)}～${mmdd(end)}`
+  }
+  const [tasksTimeScope, setTasksTimeScope] = useState<'week' | 'all'>('week')
+  const [weekStart, setWeekStart] = useState<string>(() => getWeekStart(new Date()))
+  const thisWeekMonday = getWeekStart(new Date())
+
+  const { data: tasks = [], isLoading, refetch } = useTasks(
+    selectedStore?.id,
+    tasksTimeScope === 'week' ? { weekStart } : {}
+  )
   const { data: scriptLlmConfig } = useQuery({
     queryKey: ['script-llm-config'],
     queryFn: getScriptLLMConfig,
@@ -181,7 +331,6 @@ export default function TaskList() {
   const refreshing = generatingStoreId === selectedStore?.id
   const [translating, setTranslating] = useState(false)
   const translatingRef = useRef(false)
-  const [isExpanded, setIsExpanded] = useState(true)
   const [filter, setFilter] = useState<TaskFilter>('all')
   const llmConfigured = scriptLlmConfig?.configured ?? null
   /** 与话术共用：须在允许用户列表且「智能生成待办」功能已开放；后端返回 hasAccessForTasks 时优先使用 */
@@ -199,7 +348,14 @@ export default function TaskList() {
   const RULE_SOURCES = ['event', 'stage', 'anomaly', 'threshold']
   const llmCount = pendingTasks.filter((t) => t.source === 'llm_intelligent' || t.source === 'llm_anomaly').length
   const ruleCount = pendingTasks.filter((t) => t.source && RULE_SOURCES.includes(t.source)).length
-  const needsTranslate = currentLocale !== 'zh-CN' && pendingTasks.length > 0 && pendingTasks.some((task) => !parseTaskI18n(task.title_i18n)[currentLocale])
+  const needsTranslate =
+    currentLocale !== 'zh-CN' &&
+    tasks.length > 0 &&
+    tasks.some((task) => {
+      const titleOk = !!parseTaskI18n(task.title_i18n)[currentLocale]
+      const descOk = !!parseTaskI18n(task.description_i18n)[currentLocale]
+      return !(titleOk && descOk)
+    })
 
   const handleTranslateToCurrentLanguage = useCallback(async () => {
     if (!selectedStore || !currentLocale || currentLocale === 'zh-CN') return
@@ -240,36 +396,15 @@ export default function TaskList() {
     }
   }, [selectedStore, currentLocale, queryClient, refetch, toast, t])
 
-  const lastAutoTranslateLocaleRef = useRef<string | null>(null)
+  const lastAutoTranslateKeyRef = useRef<string | null>(null)
   useEffect(() => {
-    console.log('[翻译待办 useEffect] 检查条件', { 
-      needsTranslate, 
-      hasStore: !!selectedStore?.id, 
-      currentLocale, 
-      lastAuto: lastAutoTranslateLocaleRef.current,
-      pendingTasksCount: pendingTasks.length,
-      sampleTask: pendingTasks[0] ? {
-        title: pendingTasks[0].title.slice(0, 20),
-        title_i18n: pendingTasks[0].title_i18n,
-        hasCurrentLocale: !!parseTaskI18n(pendingTasks[0].title_i18n)[currentLocale]
-      } : null
-    })
-    if (!needsTranslate) {
-      console.log('[翻译待办 useEffect] needsTranslate=false，跳过')
-      return
-    }
-    if (!selectedStore?.id) {
-      console.log('[翻译待办 useEffect] 无店铺，跳过')
-      return
-    }
-    if (lastAutoTranslateLocaleRef.current === currentLocale) {
-      console.log('[翻译待办 useEffect] 已为此 locale 自动翻译过，跳过')
-      return
-    }
-    console.log('[翻译待办 useEffect] ✅ 触发自动翻译 for locale:', currentLocale)
-    lastAutoTranslateLocaleRef.current = currentLocale
+    if (!needsTranslate) return
+    if (!selectedStore?.id) return
+    const key = `${selectedStore.id}:${currentLocale}`
+    if (lastAutoTranslateKeyRef.current === key) return
+    lastAutoTranslateKeyRef.current = key
     handleTranslateToCurrentLanguage()
-  }, [currentLocale, needsTranslate, selectedStore?.id, handleTranslateToCurrentLanguage, pendingTasks])
+  }, [currentLocale, needsTranslate, selectedStore?.id, handleTranslateToCurrentLanguage])
 
   const { data: llmDiagnostic } = useQuery({
     queryKey: ['llm-diagnostic'],
@@ -284,6 +419,16 @@ export default function TaskList() {
     filter === 'normal' ? normalTasks :
     [...pendingTasks, ...completedTasks]
 
+  /** 缓存描述解析结果，避免每次渲染对所有任务重跑正则（任务列表或语言变化才重算） */
+  const parsedSectionsMap = useMemo(() => {
+    const map: Record<string, ReturnType<typeof parseDescriptionSections> | null> = {}
+    for (const task of [...pendingTasks, ...completedTasks]) {
+      const desc = getTaskDisplayDescription(task, currentLocale)
+      map[task.id] = desc ? parseDescriptionSections(desc) : null
+    }
+    return map
+  }, [pendingTasks, completedTasks, currentLocale])
+
   const handleRefresh = async () => {
     if (!selectedStore) {
       toast.warning(t('tasks.selectStoreFirst'))
@@ -291,10 +436,12 @@ export default function TaskList() {
     }
     setGenerating(selectedStore.id)
     try {
+      const reqWeekStart = tasksTimeScope === 'week' ? weekStart : thisWeekMonday
+      // 生成阶段统一用中文，生成后再用 Google Translate 翻译到当前界面语言（对齐旧行为）
       const res = await generateTasks({
         storeId: selectedStore.id,
-        useStatsFromStoreId: useStatsFromStoreId || undefined,
-        locale,
+        locale: 'zh-CN',
+        weekStart: reqWeekStart,
       })
       await queryClient.invalidateQueries({ queryKey: ['tasks'] })
       await refetch()
@@ -306,20 +453,29 @@ export default function TaskList() {
       const generated = meta.generatedCount ?? 0
       const llmStatusMessage = meta?.llmStatusMessage
       const rangeUsed = meta?.statsDateRangeUsed as { dateFrom: string; dateTo: string } | undefined
+      const rangeReason = typeof meta?.statsDateRangeReason === 'string' ? meta.statsDateRangeReason : undefined
+      if (rangeUsed?.dateFrom && rangeUsed?.dateTo) {
+        const k = `${selectedStore.id}:${reqWeekStart}`
+        setRangeHintByKey((prev) => ({ ...prev, [k]: { dateFrom: rangeUsed.dateFrom, dateTo: rangeUsed.dateTo, reason: rangeReason } }))
+      }
       if (llmStatusMessage && meta?.llmStatus !== 'used') {
         const msg = rangeUsed
-          ? `${llmStatusMessage} 本次数据区间：${rangeUsed.dateFrom}～${rangeUsed.dateTo}`
+          ? `${llmStatusMessage}${rangeReason ? `（${rangeReason}）` : ''} 本次数据区间：${rangeUsed.dateFrom}～${rangeUsed.dateTo}`
           : llmStatusMessage
         toast.info(msg)
       }
       if (total === 0) {
         if (skipped > 0 && generated > 0) {
-          toast.info(`本次生成了 ${generated} 条建议，均与当前待办重复，未添加新任务。可先完成或关闭部分待办后再试。`)
+          toast.info(t('tasks.generateDuplicateAll', { generated }))
         } else if (!llmStatusMessage) {
-          toast.info('已刷新，当前无新任务。若刚点过「智能生成」且列表里已有待办，多半是本次建议与已有重复，可先完成或关闭部分待办后再试。')
+          toast.info(t('tasks.generateNoNewHint'))
         }
       } else {
-        toast.success(`成功生成 ${total} 个任务（LLM ${llmCount} 条，规则 ${ruleCount} 条）`)
+        toast.success(t('tasks.generateSuccessBreakdown', { total, llm: llmCount, rule: ruleCount }))
+      }
+      // 生成完成后：若界面不是中文，自动触发翻译（旧逻辑）
+      if (currentLocale !== 'zh-CN') {
+        handleTranslateToCurrentLanguage()
       }
     } catch (error) {
       console.error('生成任务失败:', error)
@@ -331,8 +487,8 @@ export default function TaskList() {
         if (res?.status === 403) {
           const fallback =
             res?.data?.code === 'GENERATE_TASKS_FEATURE_DISABLED'
-              ? '当前未开放智能生成待办功能，请联系管理员在「权限配置」中勾选「智能生成待办」。'
-              : '您暂无智能生成待办权限，请联系管理员在「管理员」-「权限配置」中为您勾选用户并勾选「智能生成待办」后保存。'
+              ? t('tasks.generate403FeatureDisabled')
+              : t('tasks.generate403NoUserPermission')
           toast.warning(errorMsg || fallback)
           return
         }
@@ -340,7 +496,7 @@ export default function TaskList() {
       if (!errorMsg && error && typeof error === 'object' && 'message' in error && typeof (error as { message?: unknown }).message === 'string') {
         errorMsg = (error as { message?: string }).message
       }
-      toast.error(errorMsg || '生成任务失败，请检查网络连接或登录状态')
+      toast.error(errorMsg || t('tasks.generateFailedGeneric'))
     } finally {
       setGenerating(null)
     }
@@ -350,8 +506,7 @@ export default function TaskList() {
     <div className="w-full bg-white rounded-xl shadow-lg border border-slate-200">
       {/* 标题栏 - 始终显示（使用柔和灰蓝，避免高饱和橙红） */}
       <div 
-        className="bg-gradient-to-r from-slate-600 to-slate-700 px-6 py-4 cursor-pointer"
-        onClick={() => setIsExpanded(!isExpanded)}
+        className="bg-gradient-to-r from-slate-600 to-slate-700 px-6 py-4"
       >
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-3">
@@ -362,6 +517,17 @@ export default function TaskList() {
               <h2 className="text-xl font-bold">{t('dashboard.pendingTasks')}</h2>
               <div className="flex items-center gap-3 text-sm text-white/90 mt-1 flex-wrap">
                 <span>{t('dashboard.totalTasks', { count: pendingTasks.length, urgent: urgentTasks.length })}</span>
+                {selectedStore?.id && tasksTimeScope === 'week' && (() => {
+                  const k = `${selectedStore.id}:${weekStart}`
+                  const r = rangeHintByKey[k]
+                  if (!r) return null
+                  return (
+                    <span className="text-white/85 text-xs">
+                      {t('tasks.dataRangeUsedHint', { defaultValue: '数据参考周期' })}：{r.dateFrom}～{r.dateTo}
+                      {r.reason ? <span className="ml-2 text-white/75">（{r.reason}）</span> : null}
+                    </span>
+                  )
+                })()}
                 {completedTasks.length > 0 && (
                   <span className="text-white/80">{t('tasks.alreadyCompleted')} {completedTasks.length}</span>
                 )}
@@ -381,37 +547,75 @@ export default function TaskList() {
                   </span>
                 )}
               </div>
+              {translating && (
+                <div className="mt-2 px-3 py-2 rounded-lg bg-amber-50/95 border border-amber-200 text-amber-800 text-xs flex items-center gap-2 w-fit">
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  <span>{t('tasks.translatingLong')}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-3 flex-wrap">
-            {stores.length > 1 && (
-              <select
-                value={useStatsFromStoreId}
-                onChange={(e) => setUseStatsFromStoreId(e.target.value)}
-                className="text-sm rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-gray-700 focus:ring-2 focus:ring-slate-400"
-                title={t('tasks.dataSourceSelectTitle')}
-              >
-                <option value="">{t('tasks.dataSourceCurrent')}</option>
-                {stores
-                  .filter((s) => s.id !== selectedStore?.id)
-                  .map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {t('tasks.noDataUseStore', { name: s.name || s.id })}
-                    </option>
-                  ))}
-              </select>
+            {tasksTimeScope === 'week' ? (
+              <div className="flex items-center gap-2 flex-wrap">
+                <TaskWeekPickerPopover
+                  weekStart={weekStart}
+                  maxWeekStart={thisWeekMonday}
+                  locale={currentLocale}
+                  summary={`${formatRange(weekStart)}${
+                    weekStart === thisWeekMonday ? ` · ${t('dashboard.thisWeek')}` : ''
+                  }`}
+                  onWeekStartChange={(ws) => {
+                    setTasksTimeScope('week')
+                    setWeekStart(ws)
+                  }}
+                  onToday={() => setWeekStart(thisWeekMonday)}
+                  onClear={() => setTasksTimeScope('all')}
+                />
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTasksTimeScope('all')
+                  }}
+                  className="text-xs font-medium px-2 py-1.5 rounded-lg border border-white/35 bg-white/10 hover:bg-white/20 text-white/95 whitespace-nowrap"
+                >
+                  {t('tasks.viewAllTime')}
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm text-white/90">{t('tasks.viewingAllTime')}</span>
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setTasksTimeScope('week')
+                    setWeekStart(getWeekStart(new Date()))
+                  }}
+                  className="text-xs font-medium px-2 py-1.5 rounded-lg border border-white/35 bg-white/15 hover:bg-white/25 text-white"
+                >
+                  {t('tasks.viewByWeek')}
+                </button>
+              </div>
             )}
             <button
               onClick={(e) => {
                 e.stopPropagation()
                 if (!canGenerateTasks) {
-                  toast.warning('您暂无智能生成待办权限，请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。')
+                  toast.warning(t('tasks.smartGenerateNoPermissionLlmConfig'))
                   return
                 }
                 handleRefresh()
               }}
               disabled={refreshing}
-              title={!canGenerateTasks ? '您暂无智能生成待办权限，请联系管理员开通' : undefined}
+              title={
+                !canGenerateTasks
+                  ? t('tasks.smartGenerateAskAdminShort')
+                  : refreshing
+                    ? t('tasks.generatingTitle')
+                    : undefined
+              }
               className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 rounded-lg transition-colors disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
@@ -429,36 +633,30 @@ export default function TaskList() {
               >
                 <RefreshCw className={`w-4 h-4 ${translating ? 'animate-spin' : ''}`} />
                 <span className="text-sm font-medium whitespace-nowrap">
-                  {translating ? t('tasks.translatingLong') : t('tasks.translateToCurrent')}
+                  {translating ? t('tasks.translating') : t('tasks.translateToCurrent')}
                 </span>
               </button>
-            )}
-            {isExpanded ? (
-              <ChevronUp className="w-5 h-5" />
-            ) : (
-              <ChevronDown className="w-5 h-5" />
             )}
           </div>
         </div>
       </div>
 
-      {/* 内容区 - 可展开/收起 */}
-      {isExpanded && (
-        <div className="p-6">
+      {/* 内容区 - 始终展开 */}
+      <div className="p-6">
           {!canGenerateTasks && (
             <div className="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-              <p className="font-medium">您暂无智能生成待办权限</p>
-              <p className="mt-1">请联系管理员在「管理员」-「LLM 配置」中为您勾选开通（与话术生成共用同一权限配置）。</p>
+              <p className="font-medium">{t('tasks.smartGenerateNoAccessTitle')}</p>
+              <p className="mt-1">{t('tasks.smartGenerateNoAccessSubtitle')}</p>
             </div>
           )}
           {/* 筛选标签 */}
-          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-200">
+          <div className="flex items-center gap-2 mb-4 pb-4 border-b border-slate-200">
             <button
               onClick={() => setFilter('all')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filter === 'all'
                   ? 'bg-slate-100 text-slate-700 border-2 border-slate-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {t('dashboard.allTab', { count: pendingTasks.length })}
@@ -468,7 +666,7 @@ export default function TaskList() {
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filter === 'urgent'
                   ? 'bg-rose-100 text-rose-700 border-2 border-rose-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {t('dashboard.urgentTab', { count: urgentTasks.length })}
@@ -477,8 +675,8 @@ export default function TaskList() {
               onClick={() => setFilter('normal')}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                 filter === 'normal'
-                  ? 'bg-blue-100 text-blue-700 border-2 border-blue-300'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-primary-100 text-primary-700 border-2 border-primary-300'
+                  : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
               }`}
             >
               {t('dashboard.normalTab', { count: normalTasks.length })}
@@ -488,35 +686,34 @@ export default function TaskList() {
           {/* 任务列表：卡片按内容自适应高度，拓宽显示；全部时已完成沉底 */}
           <div className="space-y-4 max-h-[720px] overflow-y-auto">
             {isLoading ? (
-              <div className="text-center py-12 text-gray-500">
+              <div className="text-center py-12 text-slate-500">
                 <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-3 text-slate-400" />
                 <p>{t('common.loading')}</p>
               </div>
             ) : filteredTasks.length === 0 ? (
               <div className="text-center py-12">
-                <Clock className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-                <p className="text-gray-600 font-medium mb-2">
+                <Clock className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+                <p className="text-slate-600 font-medium mb-2">
                   {filter === 'urgent' ? t('tasks.noUrgentTasks') : filter === 'normal' ? t('tasks.noNormalTasks') : t('tasks.noTasksYet')}
                 </p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-slate-400">
                   {t('tasks.taskListDescription')}
                 </p>
               </div>
             ) : (
               <>
               {(filter === 'all' ? pendingTasks : filteredTasks).map((task) => {
-                const desc = getTaskDisplayDescription(task, currentLocale)
-                const sections = desc ? parseDescriptionSections(desc) : null
+                const sections = parsedSectionsMap[task.id] ?? null
                 const isCompleted = task.status === 'completed'
                 return (
                 <div
                   key={task.id}
                   className={`flex items-start gap-4 p-5 rounded-xl border-2 transition-all hover:shadow-md w-full min-w-0 ${
                     isCompleted
-                      ? 'bg-gray-50 border-gray-200 opacity-90'
+                      ? 'bg-slate-50 border-slate-200 opacity-90'
                       : task.priority === 'urgent'
                         ? 'bg-rose-50 border-rose-200 hover:border-rose-300'
-                        : 'bg-white border-gray-200 hover:border-slate-300'
+                        : 'bg-white border-slate-200 hover:border-slate-300'
                   }`}
                 >
                   {isCompleted ? (
@@ -528,15 +725,15 @@ export default function TaskList() {
                       <AlertCircle className="w-5 h-5 text-rose-600" />
                     </div>
                   ) : (
-                    <div className="p-2 bg-gray-100 rounded-lg shrink-0">
-                      <CheckCircle2 className="w-5 h-5 text-gray-500" />
+                    <div className="p-2 bg-slate-100 rounded-lg shrink-0">
+                      <CheckCircle2 className="w-5 h-5 text-slate-500" />
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <p className={`text-base font-semibold ${isCompleted ? 'line-through text-gray-500' : task.priority === 'urgent' ? 'text-rose-900' : 'text-gray-900'}`}>
+                          <p className={`text-base font-semibold ${isCompleted ? 'line-through text-slate-500' : task.priority === 'urgent' ? 'text-rose-900' : 'text-slate-900'}`}>
                             {getTaskDisplayTitle(task, currentLocale)}
                           </p>
                           {isCompleted && (
@@ -545,7 +742,7 @@ export default function TaskList() {
                             </span>
                           )}
                           {task.storeName != null && String(task.storeName) && (
-                            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
+                            <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full shrink-0">
                               {String(task.storeName)}
                             </span>
                           )}
@@ -587,22 +784,10 @@ export default function TaskList() {
                                `🛠️ ${t('tasks.aiFeatureTools')}`}
                             </span>
                           )}
+                          <TaskCozeMetaBadges task={task} t={t} />
                         </div>
-                        {sections && (sections.target || sections.steps || sections.expected || sections.rest) && (
-                          <div className="mt-2 text-sm">
-                            {sections.target && (
-                              <DescriptionSection icon={Target} label={t('tasks.sectionTarget')} content={sections.target} iconClassName="text-blue-600" />
-                            )}
-                            {sections.steps && (
-                              <DescriptionSection icon={ListOrdered} label={t('tasks.sectionSteps')} content={sections.steps} iconClassName="text-emerald-600" />
-                            )}
-                            {sections.expected && (
-                              <DescriptionSection icon={BarChart2} label={t('tasks.sectionExpected')} content={sections.expected} iconClassName="text-amber-600" />
-                            )}
-                            {sections.rest && (
-                              <p className="text-gray-600 leading-relaxed whitespace-pre-line mt-2">{sections.rest}</p>
-                            )}
-                          </div>
+                        {sections && descriptionSectionsHaveContent(sections) && (
+                          <TaskDescriptionSectionsView sections={sections} t={t} />
                         )}
                       </div>
                       {isCompleted ? (
@@ -634,8 +819,8 @@ export default function TaskList() {
                       )}
                     </div>
                     {getQuickJumpTools(task).length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                        <span className="text-xs text-gray-500 shrink-0">{t('tasks.quickJump')}</span>
+                      <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                        <span className="text-xs text-slate-500 shrink-0">{t('tasks.quickJump')}</span>
                         {getQuickJumpTools(task).map((toolId) => (
                           <Link
                             key={toolId}
@@ -655,18 +840,17 @@ export default function TaskList() {
               {filter === 'all' && completedTasks.length > 0 && (
                 <>
                   <div className="flex items-center gap-3 pt-2 pb-1">
-                    <span className="text-sm font-medium text-gray-500 shrink-0">
+                    <span className="text-sm font-medium text-slate-500 shrink-0">
                       {t('tasks.alreadyCompleted')} ({completedTasks.length})
                     </span>
-                    <div className="flex-1 h-px bg-gray-200" />
+                    <div className="flex-1 h-px bg-slate-200" />
                   </div>
                   {completedTasks.map((task) => {
-                    const desc = getTaskDisplayDescription(task, currentLocale)
-                    const sections = desc ? parseDescriptionSections(desc) : null
+                    const sections = parsedSectionsMap[task.id] ?? null
                     return (
                       <div
                         key={task.id}
-                        className="flex items-start gap-4 p-5 rounded-xl border-2 bg-gray-50 border-gray-200 opacity-90 w-full min-w-0"
+                        className="flex items-start gap-4 p-5 rounded-xl border-2 bg-slate-50 border-slate-200 opacity-90 w-full min-w-0"
                       >
                         <div className="p-2 bg-emerald-100 rounded-lg shrink-0">
                           <CheckCircle2 className="w-5 h-5 text-emerald-600" />
@@ -675,14 +859,14 @@ export default function TaskList() {
                           <div className="flex items-start justify-between gap-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                <p className="text-base font-semibold line-through text-gray-500">
+                                <p className="text-base font-semibold line-through text-slate-500">
                                   {getTaskDisplayTitle(task, currentLocale)}
                                 </p>
                                 <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full shrink-0">
                                   ✓ {t('tasks.alreadyCompleted')}
                                 </span>
                                 {task.storeName != null && String(task.storeName) && (
-                                  <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded-full shrink-0">
+                                  <span className="px-2 py-0.5 bg-primary-100 text-primary-700 text-xs font-medium rounded-full shrink-0">
                                     {String(task.storeName)}
                                   </span>
                                 )}
@@ -691,31 +875,35 @@ export default function TaskList() {
                                     👤 {String(task.createdByName)}
                                   </span>
                                 )}
+                                <TaskCozeMetaBadges task={task} t={t} />
                               </div>
-                              {sections && (sections.target || sections.steps || sections.expected || sections.rest) && (
-                                <div className="mt-2 text-sm">
-                                  {sections.target && (
-                                    <DescriptionSection icon={Target} label={t('tasks.sectionTarget')} content={sections.target} iconClassName="text-blue-600" />
-                                  )}
-                                  {sections.steps && (
-                                    <DescriptionSection icon={ListOrdered} label={t('tasks.sectionSteps')} content={sections.steps} iconClassName="text-emerald-600" />
-                                  )}
-                                  {sections.expected && (
-                                    <DescriptionSection icon={BarChart2} label={t('tasks.sectionExpected')} content={sections.expected} iconClassName="text-amber-600" />
-                                  )}
-                                  {sections.rest && (
-                                    <p className="text-gray-600 leading-relaxed whitespace-pre-line mt-2">{sections.rest}</p>
-                                  )}
-                                </div>
+                              {sections && descriptionSectionsHaveContent(sections) && (
+                                <TaskDescriptionSectionsView sections={sections} t={t} />
                               )}
                             </div>
-                            <span className="px-3 py-1.5 rounded-lg text-xs font-medium text-emerald-700 bg-emerald-50 shrink-0">
-                              ✓ {t('tasks.alreadyCompleted')}
-                            </span>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                try {
+                                  await updateTask.mutateAsync({ id: task.id, status: 'pending' })
+                                  await queryClient.invalidateQueries({ queryKey: ['tasks'] })
+                                  await refetch()
+                                  toast.success(t('tasks.taskRestored'))
+                                } catch (e) {
+                                  console.error('恢复待办失败', e)
+                                  toast.error(t('tasks.operationFailed'))
+                                }
+                              }}
+                              disabled={updateTask.isPending}
+                              className="px-3 py-1.5 rounded-lg text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-50 transition-colors shrink-0 disabled:opacity-50"
+                              title={t('tasks.restore')}
+                            >
+                              ↩ {t('tasks.restore')}
+                            </button>
                           </div>
                           {getQuickJumpTools(task).length > 0 && (
-                            <div className="mt-3 pt-3 border-t border-gray-100 flex flex-wrap items-center gap-2">
-                              <span className="text-xs text-gray-500 shrink-0">{t('tasks.quickJump')}</span>
+                            <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-2">
+                              <span className="text-xs text-slate-500 shrink-0">{t('tasks.quickJump')}</span>
                               {getQuickJumpTools(task).map((toolId) => (
                                 <Link
                                   key={toolId}
@@ -739,15 +927,15 @@ export default function TaskList() {
           </div>
 
           {/* 底部提示：LLM 0 条时给出明确指引与后端诊断 */}
-          <div className="mt-6 pt-4 border-t border-gray-200">
+          <div className="mt-6 pt-4 border-t border-slate-200">
             {llmCount === 0 && pendingTasks.length > 0 ? (
               <div className="text-xs rounded-lg p-3 space-y-2">
                 {llmDiagnostic ? (
                   <>
-                    <p className={llmDiagnostic.configured ? 'text-gray-700' : 'text-amber-700 bg-amber-50 rounded p-2'}>
+                    <p className={llmDiagnostic.configured ? 'text-slate-700' : 'text-amber-700 bg-amber-50 rounded p-2'}>
                       {llmDiagnostic.hint}
                     </p>
-                    <p className="text-gray-500 text-center">
+                    <p className="text-slate-500 text-center">
                       前往 <Link to="/llm" className="font-medium text-orange-600 underline">LLM 调用方式</Link> 查看配置与调用方式；点击「智能生成」后请留意本次返回的提示。
                     </p>
                   </>
@@ -760,13 +948,12 @@ export default function TaskList() {
                 )}
               </div>
             ) : (
-              <p className="text-xs text-gray-500 text-center">
+              <p className="text-xs text-slate-500 text-center">
                 💡 {t('tasks.footerTip')}
               </p>
             )}
           </div>
-        </div>
-      )}
+      </div>
     </div>
   )
 }

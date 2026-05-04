@@ -161,9 +161,8 @@ const BUILTIN_DEFAULT_PHRASES: Required<DefaultScriptPhrasesConfig> = {
 }
 
 /** 按语言取默认话术用语（配置优先，缺省用内置），确保不输出虚假具体数字 */
-export function getDefaultScriptPhrasesForLang(lang: string): Required<DefaultScriptPhrasesConfig> {
+export function getDefaultScriptPhrasesForLang(_lang: string): Required<DefaultScriptPhrasesConfig> {
   const config = loadDefaultScriptPhrases()
-  const norm = lang === 'zh-CN' || lang === 'en-US' || lang === 'th-TH' ? lang : 'zh-CN'
   const pick = <K extends keyof DefaultScriptPhrasesConfig>(key: K): Record<string, string> =>
     (config?.[key] as Record<string, string> | undefined) ?? BUILTIN_DEFAULT_PHRASES[key]
   return {
@@ -178,7 +177,8 @@ export function getDefaultScriptPhrasesForLang(lang: string): Required<DefaultSc
 /** 取当前语言下某 key 的文案 */
 export function getDefaultScriptPhrase(key: keyof DefaultScriptPhrasesConfig, lang: string): string {
   const phrases = getDefaultScriptPhrasesForLang(lang)
-  const norm = lang === 'zh-CN' || lang === 'en-US' || lang === 'th-TH' ? lang : 'zh-CN'
+  const norm =
+    lang === 'id-ID' ? 'en-US' : lang === 'zh-CN' || lang === 'en-US' || lang === 'th-TH' ? lang : 'zh-CN'
   return (phrases[key] as Record<string, string>)[norm] ?? (phrases[key] as Record<string, string>)['zh-CN'] ?? ''
 }
 

@@ -35,7 +35,7 @@
 - ✅ 设置适当的缓存头
 
 ### 2. 数据库优化
-- ✅ 使用 SQLite WAL 模式提高并发性能
+- ✅ 使用 PostgreSQL 连接池（max: 20）提高并发性能
 - ✅ 创建索引优化查询性能
   - `idx_tasks_status`
   - `idx_tasks_priority`

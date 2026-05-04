@@ -65,7 +65,7 @@ router.put('/:id/store-access', authenticate, requireAdmin, async (req: AuthRequ
     const now = new Date().toISOString()
     for (const storeId of toAdd) {
       await dbRun(
-        'INSERT OR IGNORE INTO user_store_access (id, userId, storeId, createdAt) VALUES (?, ?, ?, ?)',
+        'INSERT INTO user_store_access (id, userId, storeId, createdAt) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING',
         [crypto.randomUUID(), id, storeId, now]
       )
     }

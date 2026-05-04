@@ -33,12 +33,24 @@ export type FeedbackStatus = 'pending' | 'read' | 'replied'
 
 /** 反馈图片访问（须在 /:id 之前定义） */
 router.get('/uploads/:filename', (req, res) => {
-  const filename = path.basename(req.params.filename)
-  if (!filename || filename.includes('..')) return res.status(400).end()
-  const filePath = path.join(feedbackUploadDir, filename)
+  // 取纯文件名，防止路径组件注入
+  const filename = path.basename(req.params.filename || '')
+  if (!filename) return res.status(400).end()
+
+  // 绝对路径边界断言：无论文件名如何编码，解析路径必须在上传目录内
+  const filePath = path.resolve(feedbackUploadDir, filename)
+  if (!filePath.startsWith(feedbackUploadDir + path.sep) && filePath !== feedbackUploadDir) {
+    return res.status(400).end()
+  }
+
   if (!fs.existsSync(filePath)) return res.status(404).end()
+
+  // 在响应头中明确设置安全的 Content-Type，防止 MIME 嗅探攻击
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Content-Security-Policy', "default-src 'none'")
   res.sendFile(filePath)
 })
+
 
 /** 上传反馈图片（需登录），返回可用于提交反馈的 url 列表 */
 router.post('/upload-image', authenticate, feedbackUpload.single('file'), (req: AuthRequest, res) => {

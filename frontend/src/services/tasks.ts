@@ -6,7 +6,7 @@ export interface Task {
   title: string
   /** 与后端一致：可选，空时列表不展示描述区 */
   description?: string
-  /** 多语言缓存：由内置翻译按需填充，key 为 zh-CN、en-US、th-TH */
+  /** 多语言缓存：由内置翻译按需填充，key 为 zh-CN、en-US、th-TH、id-ID 等 */
   title_i18n?: Record<string, string>
   description_i18n?: Record<string, string>
   priority: 'urgent' | 'normal'
@@ -23,13 +23,21 @@ export interface Task {
   assignedRole?: string | null
   /** 列表接口 JOIN 返回的创建人姓名（管理员/经理查看时便于区分不同账号生成的历史待办） */
   createdByName?: string | null
+  /** Coze/LLM：预计周期，如「3天」 */
+  estimatedDays?: string | null
+  /** Coze/LLM：分类 analysis | core | strategy 等 */
+  category?: string | null
+  /** Coze/LLM：责任人说明 */
+  responsible?: string | null
 }
 
-export const useTasks = (storeId?: string) => {
+export const useTasks = (storeId?: string, options?: { weekStart?: string }) => {
+  const scopeKey = options?.weekStart ? options.weekStart : 'all'
   return useQuery<Task[]>({
-    queryKey: ['tasks', storeId],
+    queryKey: ['tasks', storeId, scopeKey],
     queryFn: async () => {
-      const params = storeId ? { storeId } : {}
+      const params: Record<string, unknown> = storeId ? { storeId } : {}
+      if (options?.weekStart) params.weekStart = options.weekStart
       const data = await api.get('/tasks', { params })
       return data as unknown as Task[]
     },
@@ -75,8 +83,8 @@ export const useDeleteTask = () => {
   })
 }
 
-/** 翻译接口超时：多条待办逐条调用外部 API，预留 2 分钟避免前端报错 */
-const TRANSLATE_FOR_LOCALE_TIMEOUT_MS = 120000
+/** 翻译接口超时：待办可能较多，预留 5 分钟避免前端过早超时 */
+const TRANSLATE_FOR_LOCALE_TIMEOUT_MS = 300000
 
 /** 额度不足时展示的硬编码提示（与后端一致，不依赖 i18n） */
 export const TRANSLATE_QUOTA_MESSAGE = '额度不足，请前往https://translate.google.com/'
@@ -85,14 +93,14 @@ export const TRANSLATE_QUOTA_MESSAGE = '额度不足，请前往https://translat
 export async function translateTasksForLocale(
   storeId: string | undefined,
   locale: string
-): Promise<{ translated: number; total: number; error?: 'QUOTA_EXCEEDED'; message?: string }> {
+): Promise<{ translated: number; total: number; error?: 'QUOTA_EXCEEDED' | 'TRANSLATE_UNAVAILABLE'; message?: string }> {
   try {
     const data = await api.post(
       '/tasks/translate-for-locale',
       { storeId, locale },
       { timeout: TRANSLATE_FOR_LOCALE_TIMEOUT_MS }
     )
-    return data as unknown as { translated: number; total: number; error?: 'QUOTA_EXCEEDED'; message?: string }
+    return data as unknown as { translated: number; total: number; error?: 'QUOTA_EXCEEDED' | 'TRANSLATE_UNAVAILABLE'; message?: string }
   } catch (e: unknown) {
     const error = e as { code?: string; message?: string }
     const isTimeout = error.code === 'ECONNABORTED' || /timeout/i.test(String(error.message))

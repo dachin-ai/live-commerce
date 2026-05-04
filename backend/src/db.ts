@@ -1,60 +1,18 @@
-import sqlite3 from 'sqlite3'
-import path from 'path'
+/**
+ * db.ts — Schema + Seed + Audit 层
+ * 连接层已迁移至 ./database/connection.ts
+ * 此文件保持向后兼容，所有现有 import 路径无需修改。
+ */
 import crypto from 'crypto'
+import {
+  getDatabase,
+  dbRun,
+  dbGet,
+  dbAll,
+  dbTransaction,
+} from './database/connection'
 
-let db: sqlite3.Database | null = null
 
-// 使用绝对路径，避免因启动目录不同而指向错误的 data.db
-function getDbPath(): string {
-  return path.resolve(path.join(__dirname, '..', 'data.db'))
-}
-
-export function getDatabase(): sqlite3.Database {
-  if (!db) {
-    const dbPath = getDbPath()
-    console.log('📂 数据库文件:', dbPath)
-    db = new sqlite3.Database(dbPath, (err) => {
-      if (err) {
-        console.error('数据库连接失败:', err)
-      }
-    })
-    // 对标淘宝/字节等：WAL 模式提升并发读、busy_timeout 降低锁等待失败
-    db.run('PRAGMA journal_mode=WAL;', () => {})
-    db.run('PRAGMA busy_timeout=5000;', () => {})
-  }
-  return db
-}
-
-// 将回调风格的数据库操作转换为 Promise
-function dbRun(sql: string, params: any[] = []): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const database = getDatabase()
-    database.run(sql, params, (err) => {
-      if (err) reject(err)
-      else resolve()
-    })
-  })
-}
-
-function dbGet<T = any>(sql: string, params: any[] = []): Promise<T | undefined> {
-  return new Promise((resolve, reject) => {
-    const database = getDatabase()
-    database.get(sql, params, (err, row) => {
-      if (err) reject(err)
-      else resolve(row as T)
-    })
-  })
-}
-
-function dbAll<T = any>(sql: string, params: any[] = []): Promise<T[]> {
-  return new Promise((resolve, reject) => {
-    const database = getDatabase()
-    database.all(sql, params, (err, rows) => {
-      if (err) reject(err)
-      else resolve(rows as T[])
-    })
-  })
-}
 
 export async function initDatabase() {
   // 创建任务表
@@ -65,7 +23,7 @@ export async function initDatabase() {
       description TEXT,
       priority TEXT NOT NULL DEFAULT 'normal',
       status TEXT NOT NULL DEFAULT 'pending',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      createdAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
   
@@ -73,58 +31,120 @@ export async function initDatabase() {
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN userId TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加userId字段时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN storeId TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加storeId字段时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN aiFeature TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加aiFeature字段时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN source TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加source字段时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN updatedAt TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加tasks.updatedAt时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN title_i18n TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加tasks.title_i18n时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN description_i18n TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加tasks.description_i18n时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE tasks ADD COLUMN assignedRole TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加tasks.assignedRole时出错:', err?.message)
     }
+  }
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN estimatedDays TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
+      console.warn('添加tasks.estimatedDays时出错:', err?.message)
+    }
+  }
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN category TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
+      console.warn('添加tasks.category时出错:', err?.message)
+    }
+  }
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN responsible TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
+      console.warn('添加tasks.responsible时出错:', err?.message)
+    }
+  }
+  try {
+    await dbRun(`ALTER TABLE tasks ADD COLUMN weekStart TEXT`)
+  } catch (err: any) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
+      console.warn('添加tasks.weekStart时出错:', err?.message)
+    }
+  }
+
+  // 回填历史任务 weekStart（避免按周筛选时“查不到旧数据”）
+  // weekStart 定义：自然周周一（UTC）YYYY-MM-DD
+  try {
+    const rows = await dbAll<{ id: string; createdAt: string | null; weekStart?: string | null }>(
+      `SELECT id, createdAt, weekStart FROM tasks WHERE weekStart IS NULL OR weekStart = ''`
+    )
+    if (Array.isArray(rows) && rows.length > 0) {
+      const toWeekStartUtcMonday = (iso: string) => {
+        const d = new Date(iso)
+        if (Number.isNaN(d.getTime())) return null
+        // getUTCDay(): 0=Sun..6=Sat. Monday start.
+        const day = d.getUTCDay()
+        const diffToMonday = day === 0 ? -6 : 1 - day
+        d.setUTCDate(d.getUTCDate() + diffToMonday)
+        const y = d.getUTCFullYear()
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0')
+        const dd = String(d.getUTCDate()).padStart(2, '0')
+        return `${y}-${m}-${dd}`
+      }
+      let updated = 0
+      for (const r of rows) {
+        const createdAt = r.createdAt ? String(r.createdAt) : ''
+        const ws = createdAt ? toWeekStartUtcMonday(createdAt) : null
+        if (!ws) continue
+        await dbRun(`UPDATE tasks SET weekStart = ? WHERE id = ?`, [ws, r.id])
+        updated++
+      }
+      if (updated > 0) console.log(`🗓️ 已回填 tasks.weekStart: ${updated} 条`)
+    }
+  } catch (err: any) {
+    // 不阻断启动：例如 tasks 表尚不存在、或旧库不支持该查询
+    console.warn('回填tasks.weekStart失败(可忽略):', err?.message)
   }
 
   // 创建用户表
@@ -136,7 +156,7 @@ export async function initDatabase() {
       password TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
       status TEXT NOT NULL DEFAULT 'active',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       updatedAt TEXT,
       lastLoginAt TEXT
     )
@@ -144,14 +164,14 @@ export async function initDatabase() {
   try {
     await dbRun(`ALTER TABLE users ADD COLUMN updatedAt TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加users.updatedAt时出错:', err?.message)
     }
   }
   try {
     await dbRun(`ALTER TABLE users ADD COLUMN language TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加users.language时出错:', err?.message)
     }
   }
@@ -163,7 +183,7 @@ export async function initDatabase() {
       userId TEXT NOT NULL,
       token TEXT NOT NULL UNIQUE,
       expiresAt TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
@@ -175,7 +195,7 @@ export async function initDatabase() {
       userId TEXT NOT NULL,
       email TEXT NOT NULL,
       expiresAt TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
@@ -186,7 +206,7 @@ export async function initDatabase() {
       email TEXT NOT NULL,
       code TEXT NOT NULL,
       expiresAt TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      createdAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
   try {
@@ -197,7 +217,7 @@ export async function initDatabase() {
   await dbRun(`
     CREATE TABLE IF NOT EXISTS tutorial_seen_ips (
       ipHash TEXT PRIMARY KEY,
-      seenAt TEXT NOT NULL DEFAULT (datetime('now'))
+      seenAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
 
@@ -207,7 +227,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL UNIQUE,
       preferences TEXT NOT NULL DEFAULT '{}',
-      updatedAt TEXT NOT NULL DEFAULT (datetime('now')),
+      updatedAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
@@ -222,7 +242,7 @@ export async function initDatabase() {
       content TEXT NOT NULL,
       contact TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       updatedAt TEXT,
       replyContent TEXT,
       replyAt TEXT,
@@ -253,7 +273,7 @@ export async function initDatabase() {
       title TEXT NOT NULL,
       content TEXT NOT NULL,
       type TEXT NOT NULL DEFAULT 'feature',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now'))
+      createdAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
 
@@ -267,7 +287,7 @@ export async function initDatabase() {
       content TEXT NOT NULL,
       linkUrl TEXT,
       readAt TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       extra TEXT,
       FOREIGN KEY (userId) REFERENCES users(id)
     )
@@ -308,7 +328,7 @@ export async function initDatabase() {
       level INTEGER NOT NULL DEFAULT 1,
       parentId TEXT,
       sortOrder INTEGER DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (parentId) REFERENCES categories(id)
     )
   `)
@@ -331,7 +351,7 @@ export async function initDatabase() {
       brandPositioning TEXT,
       brandStrategy TEXT,
       status TEXT NOT NULL DEFAULT 'active',
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       updatedAt TEXT,
       FOREIGN KEY (userId) REFERENCES users(id)
     )
@@ -339,7 +359,7 @@ export async function initDatabase() {
   try {
     await dbRun(`ALTER TABLE stores ADD COLUMN updatedAt TEXT`)
   } catch (err: any) {
-    if (!err?.message?.includes('duplicate column')) {
+    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
       console.warn('添加stores.updatedAt时出错:', err?.message)
     }
   }
@@ -350,7 +370,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,
       storeId TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (userId) REFERENCES users(id),
       FOREIGN KEY (storeId) REFERENCES stores(id),
       UNIQUE(userId, storeId)
@@ -363,7 +383,7 @@ export async function initDatabase() {
       id TEXT PRIMARY KEY,
       storeId TEXT NOT NULL,
       categoryId TEXT NOT NULL,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (storeId) REFERENCES stores(id),
       FOREIGN KEY (categoryId) REFERENCES categories(id),
       UNIQUE(storeId, categoryId)
@@ -379,7 +399,7 @@ export async function initDatabase() {
       url TEXT,
       storeId TEXT,
       description TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (storeId) REFERENCES stores(id)
     )
   `)
@@ -391,7 +411,7 @@ export async function initDatabase() {
       const def = col === 'userId' ? 'TEXT' : col === 'rating' ? 'REAL' : 'TEXT'
       await dbRun(`ALTER TABLE materials ADD COLUMN ${col} ${def}`)
     } catch (err: any) {
-      if (!err?.message?.includes('duplicate column')) {
+      if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
         console.warn(`添加 materials.${col} 时出错:`, err?.message)
       }
     }
@@ -411,7 +431,7 @@ export async function initDatabase() {
       contentType TEXT,
       status TEXT NOT NULL DEFAULT 'active',
       description TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       deletedAt TEXT,
       FOREIGN KEY (userId) REFERENCES users(id),
       FOREIGN KEY (shopId) REFERENCES stores(id)
@@ -453,7 +473,7 @@ export async function initDatabase() {
       clickThroughRate REAL DEFAULT 0,
       interactionRate REAL DEFAULT 0,
       updatedAt TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (storeId) REFERENCES stores(id)
     )
   `)
@@ -475,7 +495,7 @@ export async function initDatabase() {
         await dbRun(`ALTER TABLE stats ADD COLUMN ${col} REAL DEFAULT 0`)
       }
     } catch (err: any) {
-      if (!err?.message?.includes('duplicate column')) {
+      if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
         console.warn(`添加stats表字段${col}时出错:`, err?.message)
       }
     }
@@ -490,30 +510,279 @@ export async function initDatabase() {
       fileName TEXT NOT NULL,
       recordCount INTEGER DEFAULT 0,
       statsId TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (storeId) REFERENCES stores(id),
       FOREIGN KEY (statsId) REFERENCES stats(id)
     )
   `)
 
-  // 创建索引
+  // ── TikTok / TT 数据导入体系 ────────────────────────────────────────────
+
+  // 导入批次记录表
   await dbRun(`
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority);
-    CREATE INDEX IF NOT EXISTS idx_tasks_userId ON tasks(userId);
-    CREATE INDEX IF NOT EXISTS idx_tasks_storeId ON tasks(storeId);
-    CREATE INDEX IF NOT EXISTS idx_stores_status ON stores(status);
-    CREATE INDEX IF NOT EXISTS idx_stores_userId ON stores(userId);
-    CREATE INDEX IF NOT EXISTS idx_materials_storeId ON materials(storeId);
-    CREATE INDEX IF NOT EXISTS idx_stats_storeId ON stats(storeId);
-    CREATE INDEX IF NOT EXISTS idx_stats_date ON stats(date);
-    CREATE INDEX IF NOT EXISTS idx_stats_storeId_date ON stats(storeId, date);
-    CREATE INDEX IF NOT EXISTS idx_categories_parentId ON categories(parentId);
-    CREATE INDEX IF NOT EXISTS idx_store_categories_storeId ON store_categories(storeId);
-    CREATE INDEX IF NOT EXISTS idx_store_categories_categoryId ON store_categories(categoryId);
-    CREATE INDEX IF NOT EXISTS idx_user_store_access_userId ON user_store_access(userId);
-    CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId);
+    CREATE TABLE IF NOT EXISTS tt_imports (
+      id          TEXT PRIMARY KEY,
+      storeId     TEXT NOT NULL,
+      dataType    TEXT NOT NULL,  -- live_sessions | ad_sessions | store_products | product_details
+      dateFrom    TEXT,
+      dateTo      TEXT,
+      fileName    TEXT NOT NULL,
+      recordCount INTEGER DEFAULT 0,
+      currency    TEXT DEFAULT 'IDR',
+      importedBy  TEXT NOT NULL,
+      importedAt  TEXT NOT NULL DEFAULT NOW(),
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
   `)
+
+  // 直播数据明细
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_live_sessions (
+      id                  TEXT PRIMARY KEY,
+      importId            TEXT NOT NULL,
+      storeId             TEXT NOT NULL,
+      dateFrom            TEXT,
+      dateTo              TEXT,
+      name                TEXT,
+      startTime           TEXT,
+      durationSeconds     INTEGER DEFAULT 0,
+      grossRevenue        REAL DEFAULT 0,
+      directGmv           REAL DEFAULT 0,
+      itemsSold           INTEGER DEFAULT 0,
+      customers           INTEGER DEFAULT 0,
+      avgPrice            REAL DEFAULT 0,
+      ordersPaid          INTEGER DEFAULT 0,
+      gmvPer1kShows       REAL DEFAULT 0,
+      gmvPer1kViews       REAL DEFAULT 0,
+      views               INTEGER DEFAULT 0,
+      viewers             INTEGER DEFAULT 0,
+      peakViewers         INTEGER DEFAULT 0,
+      newFollowers        INTEGER DEFAULT 0,
+      avgViewDurationSec  INTEGER DEFAULT 0,
+      likes               INTEGER DEFAULT 0,
+      comments            INTEGER DEFAULT 0,
+      shares              INTEGER DEFAULT 0,
+      productImpressions  INTEGER DEFAULT 0,
+      productClicks       INTEGER DEFAULT 0,
+      ctr                 REAL DEFAULT 0,
+      ctor                REAL DEFAULT 0,
+      currency            TEXT DEFAULT 'IDR',
+      -- 衍生指标（导入时自动计算）
+      gmvPerHour          REAL DEFAULT 0,    -- 时效：每小时成交额
+      revenuePerViewer    REAL DEFAULT 0,    -- 人均贡献 GMV
+      orderCvr            REAL DEFAULT 0,    -- 下单转化率（百分比）
+      engagementRate      REAL DEFAULT 0,    -- 互动率（百分比）
+      FOREIGN KEY (importId) REFERENCES tt_imports(id) ON DELETE CASCADE,
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+
+  // 迁移: 为已存在的 tt_live_sessions 表补充衍生列（IF NOT EXISTS 防止重复添加）
+  const liveColumns: Record<string, string> = {
+    gmvPerHour: 'REAL DEFAULT 0',
+    revenuePerViewer: 'REAL DEFAULT 0',
+    orderCvr: 'REAL DEFAULT 0',
+    engagementRate: 'REAL DEFAULT 0',
+  }
+  const existingLiveCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_live_sessions'`, [])
+  const existingLiveColNames = existingLiveCols.map(c => c.name)
+  for (const [col, def] of Object.entries(liveColumns)) {
+    if (!existingLiveColNames.includes(col)) {
+      await dbRun(`ALTER TABLE tt_live_sessions ADD COLUMN ${col} ${def}`).catch(() => {})
+    }
+  }
+
+  // 直播广告消耗明细
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_ad_sessions (
+      id                  TEXT PRIMARY KEY,
+      importId            TEXT NOT NULL,
+      storeId             TEXT NOT NULL,
+      dateFrom            TEXT,
+      dateTo              TEXT,
+      liveName            TEXT,
+      launchedTime        TEXT,
+      status              TEXT,
+      campaignName        TEXT,
+      campaignId          TEXT,
+      adType              TEXT DEFAULT 'live',        -- live | video
+      advertiserType      TEXT DEFAULT 'self',        -- self | influencer
+      contentType         TEXT DEFAULT 'live_room',   -- live_room | short_video
+      cost                REAL DEFAULT 0,
+      netCost             REAL DEFAULT 0,
+      skuOrders           INTEGER DEFAULT 0,
+      skuOrdersShop       INTEGER DEFAULT 0,
+      costPerOrder        REAL DEFAULT 0,
+      grossRevenue        REAL DEFAULT 0,
+      grossRevenueShop    REAL DEFAULT 0,
+      roi                 REAL DEFAULT 0,
+      liveViews           INTEGER DEFAULT 0,
+      costPerLiveView     REAL DEFAULT 0,
+      views10s            INTEGER DEFAULT 0,
+      costPer10sView      REAL DEFAULT 0,
+      liveFollows         INTEGER DEFAULT 0,
+      currency            TEXT DEFAULT 'IDR',
+      FOREIGN KEY (importId) REFERENCES tt_imports(id) ON DELETE CASCADE,
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+
+  // TikTok 短视频数据明细
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_video_sessions (
+      id                  TEXT PRIMARY KEY,
+      importId            TEXT NOT NULL,
+      storeId             TEXT NOT NULL,
+      dateFrom            TEXT,
+      dateTo              TEXT,
+      creatorName         TEXT,
+      creatorId           TEXT,
+      videoInfo           TEXT,
+      videoId             TEXT,
+      publishedAt         TEXT,
+      products            TEXT,
+      videoViews          INTEGER DEFAULT 0,
+      likes               INTEGER DEFAULT 0,
+      comments            INTEGER DEFAULT 0,
+      shares              INTEGER DEFAULT 0,
+      newFollowers        INTEGER DEFAULT 0,
+      videoToLiveClicks   INTEGER DEFAULT 0,
+      productImpressions  INTEGER DEFAULT 0,
+      productClicks       INTEGER DEFAULT 0,
+      uniqueCustomers     INTEGER DEFAULT 0,
+      orders              INTEGER DEFAULT 0,
+      itemsSold           INTEGER DEFAULT 0,
+      grossRevenue        REAL DEFAULT 0,
+      gpm                 REAL DEFAULT 0,
+      attributedGmv       REAL DEFAULT 0,
+      ctr                 REAL DEFAULT 0,
+      videoToLiveRate     REAL DEFAULT 0,
+      videoFinishRate     REAL DEFAULT 0,
+      clickToOrderRate    REAL DEFAULT 0,
+      mark                TEXT,
+      currency            TEXT DEFAULT 'IDR',
+      FOREIGN KEY (importId) REFERENCES tt_imports(id) ON DELETE CASCADE,
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+
+  // 店铺商品数据（汇总，含曝光/点击/转化漏斗）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_store_products (
+      id                TEXT PRIMARY KEY,
+      importId          TEXT NOT NULL,
+      storeId           TEXT NOT NULL,
+      dateFrom          TEXT,
+      dateTo            TEXT,
+      productId         TEXT,
+      productName       TEXT,
+      viewers           INTEGER DEFAULT 0,
+      views             INTEGER DEFAULT 0,
+      uniqueClicks      INTEGER DEFAULT 0,
+      clicks            INTEGER DEFAULT 0,
+      skuOrders         INTEGER DEFAULT 0,
+      customers         INTEGER DEFAULT 0,
+      addToCartUsers    INTEGER DEFAULT 0,
+      clicksAddToCart   INTEGER DEFAULT 0,
+      gmv               REAL DEFAULT 0,
+      viewToPaidRate    REAL DEFAULT 0,
+      viewToClickRate   REAL DEFAULT 0,
+      clickToCartRate   REAL DEFAULT 0,
+      clickToPaidRate   REAL DEFAULT 0,
+      cartToPaidRate    REAL DEFAULT 0,
+      contentGmv        REAL DEFAULT 0,
+      currency          TEXT DEFAULT 'IDR',
+      FOREIGN KEY (importId) REFERENCES tt_imports(id) ON DELETE CASCADE,
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+
+  // 产品销售明细（按产品成交汇总，无漏斗数据）
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_product_details (
+      id            TEXT PRIMARY KEY,
+      importId      TEXT NOT NULL,
+      storeId       TEXT NOT NULL,
+      dateFrom      TEXT,
+      dateTo        TEXT,
+      productId     TEXT,
+      productName   TEXT,
+      totalRevenue  REAL DEFAULT 0,
+      commission    REAL DEFAULT 0,
+      unitsSold     INTEGER DEFAULT 0,
+      currency      TEXT DEFAULT 'IDR',
+      FOREIGN KEY (importId) REFERENCES tt_imports(id) ON DELETE CASCADE,
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+
+  // TT 数据表索引（逐条执行，node-pg 不支持多语句）
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_live_storeId ON tt_live_sessions(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_live_date ON tt_live_sessions(dateFrom, dateTo)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_live_importId ON tt_live_sessions(importId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_ad_storeId ON tt_ad_sessions(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_ad_date ON tt_ad_sessions(dateFrom, dateTo)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_sp_storeId ON tt_store_products(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_sp_productId ON tt_store_products(productId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_pd_storeId ON tt_product_details(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_pd_productId ON tt_product_details(productId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_imports_storeId ON tt_imports(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_vs_storeId ON tt_video_sessions(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_vs_date ON tt_video_sessions(dateFrom, dateTo)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_vs_videoId ON tt_video_sessions(videoId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_vs_importId ON tt_video_sessions(importId)`)
+
+  // 目标管理表 (BI 模块)
+  await dbRun(`
+    CREATE TABLE IF NOT EXISTS tt_targets (
+      id          TEXT PRIMARY KEY,
+      storeId     TEXT NOT NULL,
+      month       TEXT NOT NULL,         -- YYYY-MM
+      metric      TEXT NOT NULL,         -- 'gmv' | 'orders' | 'adSpend' | 'roi' | 'sessions'
+      targetValue REAL DEFAULT 0,
+      isAiGenerated INTEGER DEFAULT 0,  -- 1=AI一键生成基线
+      note        TEXT,
+      createdAt   TEXT NOT NULL DEFAULT NOW(),
+      UNIQUE(storeId, month, metric),
+      FOREIGN KEY (storeId) REFERENCES stores(id)
+    )
+  `)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_targets_store_month ON tt_targets(storeId, month);`)
+
+  // 迁移: tt_store_products 增加 weekTag（自然周标记）和 channelType（渠道预留）
+  const spCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_store_products'`, [])
+  const spColNames = spCols.map(c => c.name)
+  if (!spColNames.includes('weekTag')) {
+    await dbRun(`ALTER TABLE tt_store_products ADD COLUMN weekTag TEXT`).catch(() => {})
+  }
+  if (!spColNames.includes('channelType')) {
+    await dbRun(`ALTER TABLE tt_store_products ADD COLUMN channelType TEXT DEFAULT 'ALL'`).catch(() => {})
+  }
+
+  // 迁移: tt_product_details 增加 channelType（与 store_products 保持一致，支持渠道归属标注）
+  const pdMigCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_product_details'`, [])
+  const pdMigColNames = pdMigCols.map(c => c.name)
+  if (!pdMigColNames.includes('channelType')) {
+    await dbRun(`ALTER TABLE tt_product_details ADD COLUMN channelType TEXT DEFAULT 'ALL'`).catch(() => {})
+  }
+
+
+  // 创建索引（逐条执行，node-pg 不支持多语句）
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tasks_userId ON tasks(userId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_tasks_storeId ON tasks(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_stores_status ON stores(status)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_stores_userId ON stores(userId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_materials_storeId ON materials(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_stats_storeId ON stats(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_stats_date ON stats(date)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_stats_storeId_date ON stats(storeId, date)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_categories_parentId ON categories(parentId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_store_categories_storeId ON store_categories(storeId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_store_categories_categoryId ON store_categories(categoryId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_user_store_access_userId ON user_store_access(userId)`)
+  await dbRun(`CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId)`)
 
   // 创建复合索引用于加速去重查询（title + status + userId + storeId）
   // 注意：不使用UNIQUE约束，因为SQLite对NULL的处理比较特殊，多个NULL被认为是不同的
@@ -530,7 +799,7 @@ export async function initDatabase() {
 
   // 插入示例用户（带密码）
   const existingUsers = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM users')
-  if (existingUsers && existingUsers.count === 0) {
+  if (existingUsers && existingUsers.count == 0) {
     // 默认密码都是 123456，实际使用时应该让用户首次登录修改
     const bcrypt = require('bcryptjs')
     const adminPassword = bcrypt.hashSync('123456', 10)
@@ -563,7 +832,7 @@ export async function initDatabase() {
 
   // 插入示例版本日志
   const existingLogs = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM version_logs')
-  if (existingLogs && existingLogs.count === 0) {
+  if (existingLogs && existingLogs.count == 0) {
     const sampleLogs = [
       ['v1.0.0', '初始版本发布', '系统初始版本，包含基础功能', 'release'],
       ['v1.1.0', '新增AI功能', '添加AI生成脚本、报告等功能', 'feature'],
@@ -581,7 +850,7 @@ export async function initDatabase() {
 
   // 插入抖音电商三级分类（对标抖店/抖音电商官方类目：一级=行业大类，二三级=细分类目，与抖店后台「行业资质」类目体系一致）
   const existingCategories = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM categories')
-  if (existingCategories && existingCategories.count === 0) {
+  if (existingCategories && existingCategories.count == 0) {
     // 一级分类（对标抖店/抖音电商，覆盖八大行业及常见一级类目，尽量全面）
     const level1Categories = [
       ['cat-1-1', '服饰鞋包', 'เสื้อผ้าและกระเป๋า', 1, null, 1],
@@ -763,6 +1032,17 @@ export async function initDatabase() {
       ['cat-3-40', '大家电', 'เครื่องใช้ไฟฟ้าขนาดใหญ่', 3, 'cat-2-24', 1],
       ['cat-3-41', '生活电器', 'เครื่องใช้ในชีวิตประจำวัน', 3, 'cat-2-24', 2],
       ['cat-3-42', '厨房电器', 'เครื่องใช้ในครัว', 3, 'cat-2-24', 3],
+      // 厨具（补齐三级类目：支持常见厨具细分，便于选到“厨具”下三级）
+      ['cat-3-80', '锅具', 'เครื่องครัวประเภทหม้อ/กระทะ', 3, 'cat-2-26', 1],
+      ['cat-3-81', '刀具', 'มีดทำครัว', 3, 'cat-2-26', 2],
+      ['cat-3-82', '砧板', 'เขียง', 3, 'cat-2-26', 3],
+      ['cat-3-83', '餐具', 'ช้อนส้อม/จานชาม', 3, 'cat-2-26', 4],
+      ['cat-3-84', '厨房收纳', 'ที่เก็บของในครัว', 3, 'cat-2-26', 5],
+      ['cat-3-85', '保鲜存储', 'กล่องถนอมอาหาร/เก็บรักษา', 3, 'cat-2-26', 6],
+      ['cat-3-86', '烘焙工具', 'อุปกรณ์อบ', 3, 'cat-2-26', 7],
+      ['cat-3-87', '厨房小工具', 'อุปกรณ์ครัวชิ้นเล็ก', 3, 'cat-2-26', 8],
+      ['cat-3-88', '清洁工具', 'อุปกรณ์ทำความสะอาดครัว', 3, 'cat-2-26', 9],
+      ['cat-3-89', '一次性用品', 'ของใช้แบบใช้ครั้งเดียวในครัว', 3, 'cat-2-26', 10],
       // 手机
       ['cat-3-43', '智能手机', 'สมาร์ทโฟน', 3, 'cat-2-27', 1],
       ['cat-3-44', '手机壳', 'เคสโทรศัพท์', 3, 'cat-2-27', 2],
@@ -824,7 +1104,7 @@ export async function initDatabase() {
 
   // 插入示例商店
   const existingStores = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM stores')
-  if (existingStores && existingStores.count === 0) {
+  if (existingStores && existingStores.count == 0) {
     const sampleStores = [
       {
         id: 'store-1',
@@ -888,7 +1168,7 @@ export async function initDatabase() {
 
   // 插入示例任务
   const existingTasks = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM tasks')
-  if (existingTasks && existingTasks.count === 0) {
+  if (existingTasks && existingTasks.count == 0) {
     const sampleTasks = [
       {
         id: crypto.randomUUID(),
@@ -937,7 +1217,7 @@ export async function initDatabase() {
       entityId TEXT,
       details TEXT,
       ipAddress TEXT,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+      createdAt TEXT NOT NULL DEFAULT NOW(),
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
@@ -952,7 +1232,7 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS system_config (
       key TEXT PRIMARY KEY,
       value TEXT NOT NULL,
-      updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+      updatedAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
 
@@ -961,17 +1241,24 @@ export async function initDatabase() {
     CREATE TABLE IF NOT EXISTS llm_tools (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      type TEXT NOT NULL DEFAULT 'coze_agent',
       url TEXT NOT NULL,
       api_key TEXT NOT NULL,
       model TEXT,
+      features TEXT,
+      isActive INTEGER NOT NULL DEFAULT 1,
       sort_order INTEGER NOT NULL DEFAULT 0,
-      createdAt TEXT NOT NULL DEFAULT (datetime('now')),
-      updatedAt TEXT NOT NULL DEFAULT (datetime('now'))
+      createdAt TEXT NOT NULL DEFAULT NOW(),
+      updatedAt TEXT NOT NULL DEFAULT NOW()
     )
   `)
+  // 为已有表补齐新增列（兼容已有数据库）
+  try { await dbRun(`ALTER TABLE llm_tools ADD COLUMN IF NOT EXISTS type TEXT NOT NULL DEFAULT 'coze_agent'`) } catch (_) {}
+  try { await dbRun(`ALTER TABLE llm_tools ADD COLUMN IF NOT EXISTS features TEXT`) } catch (_) {}
+  try { await dbRun(`ALTER TABLE llm_tools ADD COLUMN IF NOT EXISTS isActive INTEGER NOT NULL DEFAULT 1`) } catch (_) {}
   // 若表为空且存在旧版单套配置，迁移为第一套工具
   const countRow = await dbGet<{ c: number }>('SELECT COUNT(*) as c FROM llm_tools')
-  if (countRow && countRow.c === 0) {
+  if (countRow && countRow.c == 0) {
     const urlRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', ['script_llm_url'])
     const keyRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', ['script_llm_api_key'])
     const modelRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', ['script_llm_model'])
@@ -1020,5 +1307,6 @@ export async function logAudit(params: {
   )
 }
 
-// 导出 Promise 版本的数据库操作方法供路由使用
-export { dbRun, dbGet, dbAll }
+// 导出 Promise 版本的数据库操作方法，兼容所有现有 import 路径
+// 连接层实现已移至 ./database/connection.ts
+export { getDatabase, dbRun, dbGet, dbAll, dbTransaction } from './database/connection'

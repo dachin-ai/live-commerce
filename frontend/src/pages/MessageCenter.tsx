@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ArrowLeft, Mail, FileText, MessageCircle, Bell, Sparkles, Bug, Rocket } from 'lucide-react'
+import { Mail, FileText, MessageCircle, Bell, Sparkles, Bug, Rocket } from 'lucide-react'
 import { useVersionLogs, type VersionLog } from '../services/version-logs'
 import { useMessages, useMarkMessageRead, useMarkAllMessagesRead, useUnreadCount, type InAppMessage } from '../services/messages'
 import { useToast } from '../contexts/ToastContext'
+import AppLayout from '../components/AppLayout'
+import { GlassButton } from '../components/ui/GlassButton'
 
 type Tab = 'all' | 'version' | 'feedback_reply' | 'system'
 
@@ -24,7 +25,6 @@ type MessageListItemWithSort = MessageListItemBase & { _sort: number }
 
 export default function MessageCenter() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const toast = useToast()
   const [tab, setTab] = useState<Tab>('all')
 
@@ -124,14 +124,14 @@ export default function MessageCenter() {
   const getColor = (type: string, versionType?: string) => {
     if (type === 'version') {
       switch (versionType) {
-        case 'feature': return 'bg-blue-100 text-blue-600'
+        case 'feature': return 'bg-primary-100 text-primary-600'
         case 'bugfix': return 'bg-red-100 text-red-600'
         case 'release': return 'bg-green-100 text-green-600'
-        default: return 'bg-gray-100 text-gray-600'
+        default: return 'bg-slate-100 text-slate-600'
       }
     }
     if (type === 'feedback_reply') return 'bg-green-100 text-green-600'
-    return 'bg-gray-100 text-gray-600'
+    return 'bg-slate-100 text-slate-600'
   }
 
   const tabs: { key: Tab; labelKey: string }[] = [
@@ -142,37 +142,24 @@ export default function MessageCenter() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-2xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-200 rounded-lg"
-              aria-label={t('common.back')}
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <Mail className="w-8 h-8 text-gray-600" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t('messageCenter.title')}</h1>
-              <p className="text-sm text-gray-500">{t('messageCenter.subtitle')}</p>
-            </div>
-          </div>
-          {unreadCount > 0 && (
-            <button
-              type="button"
-              onClick={handleMarkAllRead}
-              disabled={markAllRead.isPending}
-              className="px-3 py-1.5 text-sm rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-            >
-              {markAllRead.isPending ? t('common.loading') : t('messageCenter.markAllRead')}
-            </button>
-          )}
-        </div>
-
-        <div className="flex gap-2 mb-6 border-b border-gray-200">
+    <AppLayout
+      title={t('messageCenter.title')}
+      subtitle={t('messageCenter.subtitle')}
+      headerExtra={
+        unreadCount > 0 ? (
+          <GlassButton
+            variant="outline"
+            size="sm"
+            onClick={handleMarkAllRead}
+            disabled={markAllRead.isPending}
+          >
+            {markAllRead.isPending ? t('common.loading') : t('messageCenter.markAllRead')}
+          </GlassButton>
+        ) : undefined
+      }
+    >
+      <div className="max-w-5xl mx-auto">
+        <div className="flex gap-2 mb-6 border-b border-slate-200">
           {tabs.map(({ key, labelKey }) => (
             <button
               key={key}
@@ -180,8 +167,8 @@ export default function MessageCenter() {
               onClick={() => setTab(key)}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 tab === key
-                  ? 'border-blue-600 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-primary-600 text-primary-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
               }`}
             >
               {t(labelKey)}
@@ -189,23 +176,23 @@ export default function MessageCenter() {
           ))}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 min-h-[300px]">
+        <div className="card min-h-[300px] !p-0">
           {isLoading ? (
-            <div className="flex items-center justify-center py-20 text-gray-500">{t('common.loading')}</div>
+            <div className="flex items-center justify-center py-20 text-slate-500">{t('common.loading')}</div>
           ) : mergedList.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-              <Mail className="w-16 h-16 text-gray-300 mb-4" />
+            <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+              <Mail className="w-16 h-16 text-slate-300 mb-4" />
               <p>{t('messageCenter.noMessages')}</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-slate-100">
               {mergedList.map((item) => {
                 const Icon = getIcon(item.type, item.versionType)
                 const isUnread = item.readAt == null && item.type !== 'version'
                 return (
                   <li
                     key={item.id}
-                    className={`p-4 ${isUnread ? 'bg-blue-50/50' : ''} hover:bg-gray-50/50`}
+                    className={`p-4 ${isUnread ? 'bg-primary-50/50' : ''} hover:bg-slate-50/50 transition-colors`}
                   >
                     <div className="flex items-start gap-3">
                       <div className={`p-2 rounded-lg shrink-0 ${getColor(item.type, item.versionType)}`}>
@@ -214,19 +201,19 @@ export default function MessageCenter() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap mb-1">
                           {item.version && (
-                            <span className="text-xs font-medium text-gray-500">{item.version}</span>
+                            <span className="text-xs font-medium text-slate-500">{item.version}</span>
                           )}
-                          <h3 className="font-medium text-gray-900">{item.title}</h3>
+                          <h3 className="font-medium text-slate-900">{item.title}</h3>
                         </div>
-                        <p className="text-sm text-gray-600 whitespace-pre-wrap">{item.content}</p>
-                        <p className="text-xs text-gray-400 mt-2">
+                        <p className="text-sm text-slate-600 whitespace-pre-wrap">{item.content}</p>
+                        <p className="text-xs text-slate-400 mt-2">
                           {new Date(item.createdAt).toLocaleString()}
                         </p>
                         {isUnread && (
                           <button
                             type="button"
                             onClick={() => markRead.mutate(item.id)}
-                            className="mt-2 text-xs text-blue-600 hover:underline"
+                            className="mt-2 text-xs text-primary-600 hover:underline"
                           >
                             {t('messageCenter.markRead')}
                           </button>
@@ -240,6 +227,6 @@ export default function MessageCenter() {
           )}
         </div>
       </div>
-    </div>
+    </AppLayout>
   )
 }

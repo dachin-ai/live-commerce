@@ -5,17 +5,22 @@ import { useLiveStats, type LiveStats } from '../services/stats'
 import { useCurrentUser } from '../services/auth'
 import { useStore } from '../contexts/StoreContext'
 import StatCard, { type StatCardProps } from '../components/StatCard'
-import StoreList from '../components/StoreList'
+import StoreWorkbench from '../components/StoreWorkbench'
 import TaskList from '../components/TaskList'
-import Sidebar from '../components/Sidebar'
+import AppLayout from '../components/AppLayout'
 import StoreSelector from '../components/StoreSelector'
 import LayoutSettings from '../components/LayoutSettings'
 import CreateStoreModal from '../components/CreateStoreModal'
 import DataImportModal from '../components/DataImportModal'
+import CustomSelect from '../components/CustomSelect'
 import { downloadDataExport } from '../services/dataImport'
 import { useLayoutPreferences } from '../hooks/useLayoutPreferences'
 import { usePreferences, useUpdatePreferences } from '../services/preferences'
 import { useToast } from '../contexts/ToastContext'
+import { useLanguage } from '../contexts/LanguageContext'
+import DateRangePickerPopover from '../components/DateRangePickerPopover'
+import MonthPickerPopover from '../components/MonthPickerPopover'
+import { formatLocalYMD } from '../utils/calendarLocal'
 import {
   DollarSign,
   Clock,
@@ -30,7 +35,6 @@ import {
   Plus,
   FileUp,
   FileDown,
-  HelpCircle,
   ChevronDown,
   GripVertical,
   Video,
@@ -67,6 +71,7 @@ const MONTH_PICKER_MIN = '2020-01'
 
 export default function Dashboard() {
   const { t } = useTranslation()
+  const { locale } = useLanguage()
   const queryClient = useQueryClient()
   const { selectedStore, setSelectedStore } = useStore()
   const toast = useToast()
@@ -80,7 +85,7 @@ export default function Dashboard() {
   /** 显示货币：'store'=店铺货币，'CNY'/'USD'/'THB' 等=人民币对多国 */
   const [displayCurrency, setDisplayCurrency] = useState<string>('store')
   /** 左侧 Sidebar 展开/收起状态（默认展开） */
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+
   /** 当前拖拽中的数据项索引（用于拖拽态样式，卡片与筛选区标签共用） */
   const [draggingDataItemIndex, setDraggingDataItemIndex] = useState<number | null>(null)
 
@@ -92,6 +97,9 @@ export default function Dashboard() {
         : timePeriod === 'yearPick'
           ? { year: selectedYear }
           : undefined
+
+  const maxCustomDate = formatLocalYMD(new Date())
+  const minCustomDate = '2020-01-01'
 
   const { data: stats, isLoading, isError: statsError } = useLiveStats(
     selectedStore?.id,
@@ -387,7 +395,7 @@ export default function Dashboard() {
     }
 
     return selectedDataItems.map(item => statsMap[item]).filter(Boolean)
-  }, [stats, selectedDataItems, displayCurrency, storeCurrencyCode, displaySymbol, t])
+  }, [stats, selectedDataItems, displayCurrency, storeCurrencyCode, displaySymbol, t, yoy])
 
   const dataItemLabels: Record<DataItemType, { label: string; title?: string }> = useMemo(() => ({
     gmv: { label: t('stats.gmvShort'), title: undefined },
@@ -485,169 +493,146 @@ export default function Dashboard() {
     return Math.max(1, Math.min(12, calculated))
   }, [preferences.showStoreList, preferences.storeListCols])
 
-  return (
-    <div className="h-screen min-h-0 bg-gray-50 flex overflow-hidden">
-      {/* 左侧导航栏：占满左侧高度，无下方留白 */}
-      <Sidebar
-        isExpanded={sidebarExpanded}
-        onToggle={setSidebarExpanded}
-      />
-
-      {/* 主内容区 */}
-      <div className="flex-1 flex flex-col min-h-0 transition-all duration-300">
-        {/* 顶部导航栏 */}
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">{t('dashboard.title')}</h1>
-                <p className="text-sm text-gray-500 mt-1">{t('dashboard.subtitle')}</p>
-              </div>
-              <button
-                type="button"
-                className="p-1.5 text-gray-400 hover:text-blue-600 rounded-full transition-colors"
-                title={t('dashboard.howToImport')}
-                aria-label="帮助"
-              >
-                <HelpCircle className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="flex items-center gap-4">
-              <StoreSelector />
-              {selectedStore && (selectedStore.platform === 'TikTok' || selectedStore.platform === '抖音') && (
+  const dashboardHeaderExtra = (
+    <>
+      <StoreSelector />
+      {selectedStore && (selectedStore.platform === 'TikTok' || selectedStore.platform === '抖音') && (
+        <button
+          type="button"
+          onClick={() => {
+            setImportTargetStore({ id: selectedStore.id, name: selectedStore.name, platform: selectedStore.platform })
+            setShowDataImportModal(true)
+          }}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
+        >
+          <FileUp className="w-4 h-4" />
+          {t('dashboard.importData')}
+        </button>
+      )}
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setExportDropdownOpen((v) => !v)}
+          onBlur={() => setTimeout(() => setExportDropdownOpen(false), 180)}
+          disabled={exporting}
+          className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-slate-700 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-60"
+        >
+          <FileDown className="w-4 h-4" />
+          {t('dashboard.exportData')}
+          <ChevronDown className="w-4 h-4" />
+        </button>
+        {exportDropdownOpen && (
+          <div className="absolute right-0 mt-1 py-1 w-48 bg-white border border-slate-200 rounded-lg shadow-lg z-20">
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={async () => {
+                setExporting(true)
+                try {
+                  await downloadDataExport('csv')
+                  toast.success(t('dashboard.exportStartedCSV'))
+                } catch (e: unknown) {
+                  const err = e as { response?: { data?: { error?: string } }; message?: string }
+                  const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
+                  toast.error(msg)
+                } finally {
+                  setExporting(false)
+                  setExportDropdownOpen(false)
+                }
+              }}
+            >
+              {t('dashboard.exportCSV')}
+            </button>
+            <button
+              type="button"
+              className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+              onClick={async () => {
+                setExporting(true)
+                try {
+                  await downloadDataExport('xlsx')
+                  toast.success(t('dashboard.exportStartedExcel'))
+                } catch (e: unknown) {
+                  const err = e as { response?: { data?: { error?: string } }; message?: string }
+                  const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
+                  toast.error(msg)
+                } finally {
+                  setExporting(false)
+                  setExportDropdownOpen(false)
+                }
+              }}
+            >
+              {t('dashboard.exportExcel')}
+            </button>
+            {selectedStore && (
+              <>
+                <div className="border-t border-slate-100 my-1" />
                 <button
                   type="button"
-                  onClick={() => {
-                    setImportTargetStore({ id: selectedStore.id, name: selectedStore.name, platform: selectedStore.platform })
-                    setShowDataImportModal(true)
+                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={async () => {
+                    setExporting(true)
+                    try {
+                      await downloadDataExport('csv', selectedStore.id)
+                      toast.success(t('dashboard.exportStartedCSVCurrent'))
+                    } catch (e: unknown) {
+                      const err = e as { response?: { data?: { error?: string } }; message?: string }
+                      const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
+                      toast.error(msg)
+                    } finally {
+                      setExporting(false)
+                      setExportDropdownOpen(false)
+                    }
                   }}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500"
                 >
-                  <FileUp className="w-4 h-4" />
-                  {t('dashboard.importData')}
+                  {t('dashboard.exportCSVCurrentStore')}
                 </button>
-              )}
-              <div className="relative">
                 <button
                   type="button"
-                  onClick={() => setExportDropdownOpen((v) => !v)}
-                  onBlur={() => setTimeout(() => setExportDropdownOpen(false), 180)}
-                  disabled={exporting}
-                  className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-60"
+                  className="w-full text-left px-3 py-2 text-sm text-slate-700 hover:bg-slate-100"
+                  onClick={async () => {
+                    setExporting(true)
+                    try {
+                      await downloadDataExport('xlsx', selectedStore.id)
+                      toast.success(t('dashboard.exportStartedExcelCurrent'))
+                    } catch (e: unknown) {
+                      const err = e as { response?: { data?: { error?: string } }; message?: string }
+                      const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
+                      toast.error(msg)
+                    } finally {
+                      setExporting(false)
+                      setExportDropdownOpen(false)
+                    }
+                  }}
                 >
-                  <FileDown className="w-4 h-4" />
-                  {t('dashboard.exportData')}
-                  <ChevronDown className="w-4 h-4" />
+                  {t('dashboard.exportExcelCurrentStore')}
                 </button>
-                {exportDropdownOpen && (
-                  <div className="absolute right-0 mt-1 py-1 w-48 bg-white border border-gray-200 rounded-lg shadow-lg z-20">
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={async () => {
-                        setExporting(true)
-                        try {
-                          await downloadDataExport('csv')
-                          toast.success(t('dashboard.exportStartedCSV'))
-                        } catch (e: unknown) {
-                          const err = e as { response?: { data?: { error?: string } }; message?: string }
-                          const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
-                          toast.error(msg)
-                        } finally {
-                          setExporting(false)
-                          setExportDropdownOpen(false)
-                        }
-                      }}
-                    >
-                      {t('dashboard.exportCSV')}
-                    </button>
-                    <button
-                      type="button"
-                      className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      onClick={async () => {
-                        setExporting(true)
-                        try {
-                          await downloadDataExport('xlsx')
-                          toast.success(t('dashboard.exportStartedExcel'))
-                        } catch (e: unknown) {
-                          const err = e as { response?: { data?: { error?: string } }; message?: string }
-                          const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
-                          toast.error(msg)
-                        } finally {
-                          setExporting(false)
-                          setExportDropdownOpen(false)
-                        }
-                      }}
-                    >
-                      {t('dashboard.exportExcel')}
-                    </button>
-                    {selectedStore && (
-                      <>
-                        <div className="border-t border-gray-100 my-1" />
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={async () => {
-                            setExporting(true)
-                            try {
-                              await downloadDataExport('csv', selectedStore.id)
-                              toast.success(t('dashboard.exportStartedCSVCurrent'))
-                            } catch (e: unknown) {
-                              const err = e as { response?: { data?: { error?: string } }; message?: string }
-                              const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
-                              toast.error(msg)
-                            } finally {
-                              setExporting(false)
-                              setExportDropdownOpen(false)
-                            }
-                          }}
-                        >
-                          {t('dashboard.exportCSVCurrentStore')}
-                        </button>
-                        <button
-                          type="button"
-                          className="w-full text-left px-3 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                          onClick={async () => {
-                            setExporting(true)
-                            try {
-                              await downloadDataExport('xlsx', selectedStore.id)
-                              toast.success(t('dashboard.exportStartedExcelCurrent'))
-                            } catch (e: unknown) {
-                              const err = e as { response?: { data?: { error?: string } }; message?: string }
-                              const msg = err.response?.data?.error || err.message || t('dashboard.exportFailed')
-                              toast.error(msg)
-                            } finally {
-                              setExporting(false)
-                              setExportDropdownOpen(false)
-                            }
-                          }}
-                        >
-                          {t('dashboard.exportExcelCurrentStore')}
-                        </button>
-                      </>
-                    )}
-                  </div>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={() => window.dispatchEvent(new CustomEvent('openCreateStoreModal'))}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <Plus className="w-4 h-4" />
-                {t('dashboard.createStore')}
-              </button>
-            </div>
+              </>
+            )}
           </div>
-        </header>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={() => window.dispatchEvent(new CustomEvent('openCreateStoreModal'))}
+        className="btn-primary flex items-center gap-2"
+      >
+        <Plus className="w-4 h-4" />
+        {t('dashboard.createStore')}
+      </button>
+    </>
+  )
 
-        {/* 主要内容 */}
-        <main className="flex-1 overflow-y-auto p-6 transition-all duration-300">
+  return (
+    <AppLayout
+      title={t('dashboard.title')}
+      subtitle={t('dashboard.subtitle')}
+      headerExtra={dashboardHeaderExtra}
+    >
               {!selectedStore ? (
             <div className="card text-center py-12">
-              <Store className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-gray-900 mb-2">{t('dashboard.selectStore')}</h2>
-              <p className="text-gray-500 mb-6">{t('dashboard.selectStoreHint')}</p>
+              <Store className="w-16 h-16 text-slate-300 mx-auto mb-4" />
+              <h2 className="text-xl font-semibold text-slate-900 mb-2">{t('dashboard.selectStore')}</h2>
+              <p className="text-slate-500 mb-6">{t('dashboard.selectStoreHint')}</p>
               <div className="flex justify-center gap-4">
                 <button
                   onClick={() => {
@@ -662,16 +647,16 @@ export default function Dashboard() {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-                {/* 左侧：商店列表 */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+                {/* 左侧：店铺渠道工作台 */}
                 {preferences.showStoreList && (
-                  <div 
-                    className="hidden lg:block"
-                    style={{ 
+                  <div
+                    className="hidden lg:block self-start sticky top-4"
+                    style={{
                       gridColumn: `span ${Math.max(1, Math.min(12, preferences.storeListCols))}`,
                     }}
                   >
-                    <StoreList
+                    <StoreWorkbench
                       onUploadStore={(store) => {
                         setSelectedStore(store)
                         setImportTargetStore({ id: store.id, name: store.name, platform: store.platform })
@@ -689,25 +674,25 @@ export default function Dashboard() {
                       gridColumn: `span ${statsCols}`,
                     }}
                   >
-                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-                      <div className="flex items-center justify-between mb-6 pb-4 border-b border-gray-200">
+                    <div className="card">
+                      <div className="relative z-30 flex items-center justify-between mb-6 pb-4 border-b border-slate-200/60">
                         <div className="flex items-center gap-3">
                           {preferences.showIcons && (
-                            <div className="p-2 bg-blue-50 rounded-lg">
-                              <BarChart3 className="w-5 h-5 text-blue-600" />
+                            <div className="p-2 bg-primary-50 rounded-lg">
+                              <BarChart3 className="w-5 h-5 text-primary-600" />
                             </div>
                           )}
                           <div>
-                            <h2 className="text-lg font-bold text-gray-900">{t('dashboard.liveDataStats')}</h2>
+                            <h2 className="text-lg font-bold text-slate-900">{t('dashboard.liveDataStats')}</h2>
                             <div className="flex flex-wrap items-center gap-2 mt-1.5">
                               <span
-                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200"
+                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-primary-100 text-primary-800 border border-primary-200"
                                 title={t('dashboard.periodTotal')}
                               >
                                 {t('dashboard.dataPeriodLabel')}: {dataPeriodLabel}
                               </span>
                               <span
-                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700 border border-gray-200"
+                                className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200"
                                 title={t('dashboard.comparisonPeriodHint', { fallback: '环比为当前周期与上一等长周期对比' })}
                               >
                                 {t('dashboard.comparisonPeriodLabel', { fallback: '环比' })}：{t('dashboard.vsPreviousPeriod', { fallback: '较' })}{comparisonPeriodLabel}
@@ -717,23 +702,20 @@ export default function Dashboard() {
                         </div>
                         <div className="flex items-center gap-3 flex-wrap">
                           <div className="flex items-center gap-2 text-xs">
-                            <label className="text-gray-600 font-medium">{t('dashboard.displayAs')}: </label>
-                            <select
-                              value={displayCurrency}
-                              onChange={(e) => setDisplayCurrency(e.target.value)}
-                              className="rounded-lg border border-gray-300 px-3 py-1.5 bg-white text-gray-700 text-xs font-medium shadow-sm hover:border-gray-400 transition-colors"
-                              aria-label="货币转换"
-                            >
-                              {getDisplayOptions(storeCurrencyCode).map((opt) => (
-                                <option key={opt.value} value={opt.value}>
-                                  {opt.value === 'store' ? `${t('dashboard.currencyStore')} (${displaySymbol} ${storeCurrencyCode})` : opt.label}
-                                </option>
-                              ))}
-                            </select>
+                            <div className="w-40 sm:w-48">
+                              <CustomSelect
+                                value={displayCurrency}
+                                onChange={setDisplayCurrency}
+                                options={getDisplayOptions(t, storeCurrencyCode).map((opt) => ({
+                                  value: opt.value,
+                                  label: opt.value === 'store' ? `${t('dashboard.currencyStore')} (${displaySymbol} ${storeCurrencyCode})` : opt.label
+                                }))}
+                              />
+                            </div>
                           </div>
                           <button
                             onClick={() => setShowFilters(!showFilters)}
-                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-blue-600 bg-blue-50 rounded-lg hover:bg-blue-100 transition-colors"
+                            className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-primary-600 bg-primary-50 rounded-lg hover:bg-primary-100 transition-all duration-200 active:scale-95"
                           >
                             {preferences.showIcons && <Filter className="w-4 h-4" />}
                             {showFilters ? t('dashboard.collapseFilters') : t('dashboard.filterData')}
@@ -743,11 +725,11 @@ export default function Dashboard() {
 
                       {/* 数据筛选工具栏 */}
                       {showFilters && (
-                        <div className="mb-6 p-4 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl border border-gray-200 shadow-sm">
+                        <div className="relative z-20 mb-6 p-4 bg-gradient-to-br from-slate-50/50 to-slate-100/50 backdrop-blur-sm rounded-xl border border-slate-200/50 shadow-sm transition-all duration-300">
                           <div className="space-y-3">
                             {/* 数据项目选择 */}
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1.5">
+                              <label className="block text-xs font-medium text-slate-700 mb-1.5">
                                 {t('dashboard.dataItemsLabel')}
                               </label>
                               <div className="flex flex-wrap gap-1.5">
@@ -759,8 +741,8 @@ export default function Dashboard() {
                                     onClick={() => handleDataItemToggle(option.value)}
                                     className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                                       selectedDataItems.includes(option.value)
-                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                        ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                                     }`}
                                   >
                                     {option.label}
@@ -771,7 +753,7 @@ export default function Dashboard() {
 
                             {/* 时间周期选择 */}
                             <div>
-                              <label className="block text-xs font-medium text-gray-700 mb-1.5 flex items-center gap-1.5">
+                              <label className="block text-xs font-medium text-slate-700 mb-1.5 flex items-center gap-1.5">
                                 {preferences.showIcons && <Calendar className="w-3.5 h-3.5" />}
                                 {t('dashboard.timePeriodSection')}
                               </label>
@@ -804,8 +786,8 @@ export default function Dashboard() {
                                     }}
                                     className={`px-2.5 py-1 rounded-md text-xs transition-colors ${
                                       timePeriod === option.value
-                                        ? 'bg-blue-100 text-blue-700 border border-blue-300'
-                                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                                        ? 'bg-primary-100 text-primary-700 border border-primary-300'
+                                        : 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-50'
                                     }`}
                                   >
                                     {option.label}
@@ -814,71 +796,64 @@ export default function Dashboard() {
                               </div>
                               {timePeriod === 'monthPick' && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <label className="text-xs text-gray-600">月份</label>
-                                  <input
-                                    type="month"
-                                    min={MONTH_PICKER_MIN}
-                                    max={getCurrentMonth()}
+                                  <label className="text-xs text-slate-600">{t('dashboard.monthLabel', { defaultValue: 'Month' })}</label>
+                                  <MonthPickerPopover
                                     value={selectedMonth}
-                                    onChange={(e) => {
-                                      const v = e.target.value
+                                    onChange={(v) => {
                                       setSelectedMonth(v)
                                       persistTimeFilter({ timePeriod, selectedMonth: v, selectedYear, customDateFrom, customDateTo })
                                     }}
-                                    className="rounded border border-gray-300 px-1.5 py-1 text-xs"
-                                    title="可选 2020年1月 至 当前月，含 2025 年"
+                                    min={MONTH_PICKER_MIN}
+                                    max={getCurrentMonth()}
+                                    locale={locale}
+                                    ariaLabel={t('dashboard.monthLabel', { defaultValue: 'Month' })}
+                                    hintTitle={t('dashboard.monthPickerHint', { defaultValue: 'Selectable from 2020-01 to current month' })}
                                   />
                                 </div>
                               )}
                               {timePeriod === 'yearPick' && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <label className="text-xs text-gray-600">年份</label>
-                                  <select
-                                    value={selectedYear}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      setSelectedYear(v)
-                                      persistTimeFilter({ timePeriod, selectedMonth, selectedYear: v, customDateFrom, customDateTo })
-                                    }}
-                                    className="rounded border border-gray-300 px-1.5 py-1 text-xs"
-                                    title="可选 2020 年至 当前年+1，含 2025 年"
-                                  >
-                                    {Array.from(
-                                      { length: 12 },
-                                      (_, i) => new Date().getFullYear() - 10 + i
-                                    )
-                                      .reverse()
-                                      .map((y) => (
-                                        <option key={y} value={String(y)}>
-                                          {y}年
-                                        </option>
-                                      ))}
-                                  </select>
+                                  <label className="text-xs text-slate-600">{t('dashboard.yearLabel', { defaultValue: 'Year' })}</label>
+                                  <div className="w-28">
+                                    <CustomSelect
+                                      value={selectedYear}
+                                      onChange={(val) => {
+                                        setSelectedYear(val)
+                                        persistTimeFilter({ timePeriod, selectedMonth, selectedYear: val, customDateFrom, customDateTo })
+                                      }}
+                                      options={Array.from(
+                                        { length: 12 },
+                                        (_, i) => new Date().getFullYear() - 10 + i
+                                      ).reverse().map((y) => ({
+                                        value: String(y),
+                                        label: String(t('dashboard.yearOption', { defaultValue: String(y), year: y } as Record<string, unknown>))
+                                      }))}
+                                    />
+                                  </div>
                                 </div>
                               )}
                               {timePeriod === 'custom' && (
                                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                                  <label className="text-xs text-gray-600">从</label>
-                                  <input
-                                    type="date"
-                                    value={customDateFrom}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      setCustomDateFrom(v)
-                                      persistTimeFilter({ timePeriod, selectedMonth, selectedYear, customDateFrom: v, customDateTo })
+                                  <label className="text-xs text-slate-600 shrink-0">
+                                    {t('dashboard.customRange', { defaultValue: '自定义日期区间' })}
+                                  </label>
+                                  <DateRangePickerPopover
+                                    dateFrom={customDateFrom}
+                                    dateTo={customDateTo}
+                                    onRangeChange={(from, to) => {
+                                      setCustomDateFrom(from)
+                                      setCustomDateTo(to)
+                                      persistTimeFilter({
+                                        timePeriod,
+                                        selectedMonth,
+                                        selectedYear,
+                                        customDateFrom: from,
+                                        customDateTo: to,
+                                      })
                                     }}
-                                    className="rounded border border-gray-300 px-1.5 py-1 text-xs"
-                                  />
-                                  <label className="text-xs text-gray-600">至</label>
-                                  <input
-                                    type="date"
-                                    value={customDateTo}
-                                    onChange={(e) => {
-                                      const v = e.target.value
-                                      setCustomDateTo(v)
-                                      persistTimeFilter({ timePeriod, selectedMonth, selectedYear, customDateFrom, customDateTo: v })
-                                    }}
-                                    className="rounded border border-gray-300 px-1.5 py-1 text-xs"
+                                    min={minCustomDate}
+                                    max={maxCustomDate}
+                                    locale={locale}
                                   />
                                 </div>
                               )}
@@ -888,20 +863,50 @@ export default function Dashboard() {
                       )}
 
                       {isLoading ? (
-                        <div className="text-center py-12 text-gray-500">加载中...</div>
+                        <div className="text-center py-12 text-slate-500">{t('common.loading')}</div>
                       ) : statsError ? (
                         <div className="text-center py-12 text-amber-600 bg-amber-50 rounded-lg border border-amber-200">
-                          统计数据加载失败，请检查网络或稍后重试
+                          {t('dashboard.statsLoadFailed', { defaultValue: 'Failed to load stats. Please check network and retry.' })}
                         </div>
                       ) : stats ? (
                         <>
-                            {timePeriod === 'custom' &&
-                            (stats.totalGMV ?? 0) === 0 &&
-                            (stats.totalDuration ?? 0) === 0 &&
-                            (stats.totalViewers ?? 0) === 0 &&
-                            (stats.totalOrders ?? 0) === 0 && (
+                            {(Number(stats?.meta?.inRangeCount ?? -1) === 0 ||
+                              ((stats.totalGMV ?? 0) === 0 &&
+                                (stats.totalDuration ?? 0) === 0 &&
+                                (stats.totalViewers ?? 0) === 0 &&
+                                (stats.totalOrders ?? 0) === 0)) && (
                               <div className="mb-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs flex flex-wrap items-center justify-between gap-2">
-                                <span>该时间段暂无数据，可尝试选择其他时间周期或导入该时间段的数据。</span>
+                                <span>
+                                  {t('dashboard.noDataInRange', { defaultValue: '该区间无数据，可切换周期或导入该区间数据。' })}
+                                  {stats?.meta?.available?.maxDate ? (
+                                    <span className="ml-2 text-amber-900/80">
+                                      （{t('dashboard.latestDataDate', { defaultValue: '本店最新数据日' })}：{String(stats.meta.available.maxDate)}）
+                                    </span>
+                                  ) : null}
+                                </span>
+                                {stats?.meta?.available?.maxDate ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const maxDate = String(stats.meta?.available?.maxDate || '')
+                                      const month = maxDate.slice(0, 7)
+                                      if (!/^\d{4}-\d{2}$/.test(month)) return
+                                      setTimePeriod('monthPick')
+                                      setSelectedMonth(month)
+                                      persistTimeFilter({
+                                        timePeriod: 'monthPick',
+                                        selectedMonth: month,
+                                        selectedYear,
+                                        customDateFrom,
+                                        customDateTo,
+                                      })
+                                    }}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 bg-amber-200 hover:bg-amber-300 rounded font-medium"
+                                    title={t('dashboard.jumpToLatestData', { defaultValue: '跳到最新有数据周期' })}
+                                  >
+                                    {t('dashboard.jumpToLatestData', { defaultValue: '跳到最新数据' })}
+                                  </button>
+                                ) : null}
                                 {(selectedStore?.platform === 'TikTok' || selectedStore?.platform === '抖音') && (
                                   <button
                                     type="button"
@@ -918,7 +923,7 @@ export default function Dashboard() {
                               </div>
                             )}
                           {filteredStats.length === 0 ? (
-                            <div className="text-center py-6 text-gray-500 text-sm">
+                            <div className="text-center py-6 text-slate-500 text-sm">
                               {t('dashboard.selectAtLeastOneInFilter')}
                             </div>
                           ) : (
@@ -953,11 +958,11 @@ export default function Dashboard() {
                                       setDraggingDataItemIndex(null)
                                     }}
                                     className={`relative transition-opacity cursor-grab active:cursor-grabbing rounded-lg ${
-                                      isDraggingCard ? 'opacity-60 ring-2 ring-blue-400 ring-offset-1' : ''
+                                      isDraggingCard ? 'opacity-60 ring-2 ring-primary-400 ring-offset-1' : ''
                                     }`}
-                                    title="拖拽可调整卡片顺序"
+                                    title={t('dashboard.dragToReorder', { defaultValue: 'Drag to reorder cards' })}
                                   >
-                                    <div className="absolute top-1.5 right-1.5 z-10 text-gray-400 hover:text-gray-500 pointer-events-none" aria-hidden>
+                                    <div className="absolute top-1.5 right-1.5 z-10 text-slate-400 hover:text-slate-500 pointer-events-none" aria-hidden>
                                       <GripVertical className="w-3.5 h-3.5" />
                                     </div>
                                     <StatCard
@@ -977,7 +982,7 @@ export default function Dashboard() {
                           )}
                         </>
                       ) : (
-                        <div className="text-center py-12 text-gray-500">
+                        <div className="text-center py-12 text-slate-500">
                           暂无数据
                         </div>
                       )}
@@ -995,9 +1000,6 @@ export default function Dashboard() {
               )}
             </>
           )}
-        </main>
-
-      </div>
       
       {/* 创建/编辑店铺模态框 */}
       <CreateStoreModal
@@ -1027,6 +1029,6 @@ export default function Dashboard() {
 
       {/* 布局设置 */}
       <LayoutSettings />
-    </div>
+    </AppLayout>
   )
 }

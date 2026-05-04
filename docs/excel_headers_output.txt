@@ -1,0 +1,41 @@
+
+====== 4.13最近28天直播数据.xlsx ======
+Sheets: Sheet1
+R0: ["2026-03-16 ~ 2026-04-12","","","","","","","","","","","","","","","","","","","","","",""]
+R2: ["Livestream","Start time","Duration","Gross revenue","Direct GMV","Items sold","Customers","Avg. price","Orders paid for","GMV/1K shows","GMV/1K views","Views","Viewers","Peak viewers","New followers","Avg. view duration","Likes","Comments","Shares","Product impressions","Product clicks","CTR","CTOR (SKU orders)"]
+R3: ["GUNCANG PROMO SPECIAL LIVE🔥🔥🔥",46124.6284722222,10521,"Rp9.467.316","Rp8.956.092",39,34,"Rp248.780",36,"Rp105.939","Rp1.577.054",5679,4587,181,49,34,3067,224,2,32780,2007,0.353407,0.017937]
+R4: ["GUNCANG PROMO SPECIAL LIVE🔥🔥🔥",46124.5104166667,9907,"Rp8.948.926","Rp7.816.919",44,37,"Rp211.268",37,"Rp90.353","Rp1.145.001",6827,5495,206,56,33,4084,303,6,34790,2239,0.327963,0.016525]
+R5: ["GUNCANG PROMO SPECIAL LIVE🔥🔥🔥",46124.3958333333,9045,"Rp7.297.920","Rp6.467.185",44,38,"Rp165.825",39,"Rp85.405","Rp1.123.946",5754,4782,209,43,37,3439,293,0,35320,2128,0.36983,0.018327]
+
+====== 4月6-12号全店产品数据范式product_list.xlsx ======
+Sheets: Sheet1
+R0: ["2026-04-06 ~ 2026-04-12","","","","","","","","","","","","","","","","","","","","","","","",""]
+R2: ["ID","Product","Status","GMV","Items sold","Orders","Shop tab GMV","Shop Tab items sold","Shop tab listing impressions","Shop tab page views","Shop tab unique page views","Shop tab unique product customers","Shop tab clickthrough rate","Shop tab conversion rate","LIVE GMV","LIVE items sold","LIVE impressions","Page views from LIVE","Unique page views from LIVE","LIVE unique product customers","LIVE click-through rate","LIVE conversion rate","Video GMV","Video items sold","Video impressions"]
+R3: ["1733447356508964124","[XCLSV Kokopanci] feemir Smart Rice Cooker 1.5L Slow Cooker 400W Low Sugar MPASI Baby Food Grade Aman Untuk Baby Lebih Sehat Kitchenware","Active","Rp279.940.892","510","510","Rp24.494.305","45","48957","1345","852","44","2.75%","5.16%","Rp269.877.834","494","391024","20222","12471","463","5.17%","3.71%","Rp6.047.056","9","28460"]
+R4: ["1732079642443941148","[XCSLV Kokopanci] freemir Panci Aesthetic Mini Beige Gemoy MPASI 12 Cm Bahan Batu Granit Cekung Wajan Anti Lengket Peralatan Aman untuk MPASI Bayi Dapur Kitchenware Cookware","Active","Rp238.022.879","1777","1773","Rp16.046.051","124","54654","1683","1060","122","3.08%","11.51%","Rp235.490.470","1760","430635","24854","13976","1668","5.77%","11.93%","Rp937.306","6","2870"]
+R5: ["1733006039740024092","[XCLSV Kokopanci] freemir Panci Kukus 3 Susun Stainless Steel 304 Lapisan Anti Lengket Kapasitas Besar Kukusan 2 Tingkat Kukus Multifungsi Kitchenware","Active","Rp222.535.449","985","985","Rp15.515.005","71","34037","1219","730","68","3.58%","9.32%","Rp221.568.776","981","357252","17082","10137","933","4.78%","9.20%","Rp0","0","407"]
+
+====== 4月6-12号直播产品数据明细.xlsx ======
+Sheets: Sheet 1
+R0: ["Date Start: 2026-04-04 - Date End: 2026-04-11","","","",""]
+R2: ["商品信息","商品信息","总成交额","佣金","成交件数"]
+R3: ["1733433942955754780","[Special Live] freemir Set Wajan 4 Pcs 16/20/20/26 Cm Paket Komplit Sultan Alat Masak Anti Lengket Wajan Panci Tutup Kaca Premium Beige","Rp140.334.601","Rp0","214"]
+R4: ["1733439399686276380","[Special Live] freemir Wajan Penggorengan 24 Cm Teflon Anti Lengket Coating Granit Hitam Tebal Kuat Tahan Lama Deep Wood Series Gagang Kayu Kitchenware","Rp58.317.857","Rp0","423"]
+R5: ["1730899853179979036","[NEW] freemir Low Carbo Rice Cooker 1.5 L Kontrol Gula Nasi Smart Healthy Magic Com Daya 400W Multifungsi Kitchenware","Rp27.336.008","Rp0","34"]
+
+====== 4月6-12号视频数据范式.xlsx ======
+Sheets: Sheet1
+R0: ["[Date Range]: 2026-04-06 ~ 2026-04-12\n","","","","","","","","","","","","","","","","","","","","","","","",""]
+R2: ["Creator name","Creator ID","Video Info","Video ID","Time","Products","VV","Likes","Comments","Shares","New followers","V-to-L clicks","Product Impressions","Product Clicks","Unique customers","Orders","Video items sold","Gross merchandise value (Video) (Rp)","GPM (Rp)","Shoppable video attributed GMV (Rp)","Click-through rate (Video)","V-to-L rate","Video Finish Rate","Click-to-order rate (Video)","Mark"]
+R3: ["freemirindonesia","6888837392742499330","kesehatan nomor satu! makanya aku pakai rice cooker low carbo ini 😍 #freemir #ricecooker #ricecookermultifungsi #ricecookerlowcarbo","7541244821080378631","2025/08/22 16:00:00","[NEW] freemir Low Carbo Rice Cooker 1.5 L Kontrol Gula Nasi Smart Healthy Magic Com Daya 400W Multifungsi Kitchenware(1730899853179979036)",160376,724,10,96,72,114,158776,13072,"",18,18,14752937,91990,16419225,0.0815,0.002,0.0521,0.0014,"GA"]
+R4: ["freemirindonesia","6888837392742499330","siapaa nih yang lagi kontrol gula, yuk deh bun ganti rice cooker bunda ke rice cooker kita ini yaaa. yuk langsung cek keranjang kuning #fyp ##ramadhan ##lebaranextrasale ##ricecooker","7483053510217551122","2025/03/18 18:00:00","[NEW] freemir Low Carbo Rice Cooker 1.5 L Kontrol Gula Nasi Smart Healthy Magic Com Daya 400W Multifungsi Kitchenware(1730899853179979036)",25777,176,3,26,9,8,26356,2290,"",5,5,4074015,158048,4074015,0.0888,0.0015,0.0551,0.0022,"GAV"]
+R5: ["freemirindonesia","6888837392742499330","Teflon yang bisa kamu pake buat numis, goreng sampai panggang-panggang! #freemir #teflon #teflongranit #teflonantilengket","7598022981691985173","2026/01/22 12:00:00","[Special Live] freemir Wajan Penggorengan 24 Cm Teflon Anti Lengket Coating Granit Hitam Tebal Kuat Tahan Lama Deep Wood Series Gagang Kayu Kitchenware(1733439399686276380)",20952,102,1,13,10,114,25035,2199,"",20,20,3013636,143835,3828887,0.105,0.0129,0.0286,0.0091,"GA"]
+
+====== 广告消耗 2026-04-06 00 ~ 2026-04-12 23.xlsx ======
+Sheets: Data
+R0: ["LIVE name","Launched time","Status","Campaign name","Campaign ID","Cost","Net Cost","SKU orders","SKU orders (Current shop)","Cost per order (Current shop)","Gross revenue","Gross revenue (Current shop)","ROI (Current shop)","LIVE views","Cost per LIVE view","10-second LIVE views","Cost per 10-second LIVE view","LIVE follows","Currency"]
+R1: ["FREEMIR DISC EXCLUSIVE 🔥",46122.3525925926,"Ended","KOKOPANCI NEW 10/04/2026",1862046336917810,11782782,11782782,1237,1237,9525.289,292366638.864,292366638.864,24.81,82182,143.374,31805,370.469,980,"IDR"]
+R2: ["FREEMIR DISC EXCLUSIVE 🔥",46122.3525925926,"Ended","KOKOPANC 10/04/2026",1862046095439880,3817895,3817895,686,686,5565.445,160988192.953,160988192.953,42.17,40383,94.542,14256,267.81,440,"IDR"]
+R3: ["FREEMIR DISC EXCLUSIVE 🔥",46122.3525925926,"Ended","kokopanci live new 10/4",1862057764403480,2357307,2357307,494,494,4771.877,142673332.601,142673332.601,60.52,42048,56.062,13651,172.684,421,"IDR"]
+R4: ["Guncang 4.4",46121.547037037,"Ended","INDAHPUTRI 09/04/2026",1861962016563210,146206,146124,592,481,303.963,151010470.675,135399276.223,926.09,60307,2.424,15541,9.408,411,"IDR"]
+R5: ["FREEMIR DISC EXCLUSIVE 🔥",46122.3525925926,"Ended","KOKOPANCI_10/04/2026",1861998816036160,6699048,6699048,631,631,10616.558,123716716.642,123716716.642,18.47,47856,139.983,18104,370.031,445,"IDR"]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import {
@@ -13,22 +13,12 @@ import {
   Image,
   X,
   Download,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
   RefreshCw,
   ChevronRight,
   ArrowLeft,
-  Copy,
-  Maximize2,
-  Minimize2,
-  ChevronDown,
-  ChevronUp,
   BookOpen,
   Activity,
 } from 'lucide-react'
-import { getCurrentUserRole } from '../services/auth'
-import { copyToClipboard } from '../utils/clipboard'
 import {
   generateScript,
   generateScriptStream,
@@ -39,17 +29,11 @@ import {
   compareStores,
   generateStats,
   compareStoreEfficiency,
-  generateTasks,
-  translateLongTextForDisplay,
-  type GenerateTasksMetadata,
   type ScriptType,
   type ScriptLanguage,
-  type ReportResult,
   type MarketAnalysisResult,
-  type RecommendationsResult,
   type StoreComparisonResult,
   type StatsResult,
-  type MarketResearchResult,
 } from '../services/ai'
 import { useMaterials, useCreateMaterial } from '../services/materials'
 import { useVideos, useUploadVideo, useDeleteVideo } from '../services/videos'
@@ -57,85 +41,20 @@ import { useStores } from '../services/stores'
 import { useStore } from '../contexts/StoreContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import { useToast } from '../contexts/ToastContext'
-import { useTasks, useUpdateTask, useBatchCompleteTasks, useCompleteAllTasks, type Task } from '../services/tasks'
-import { useQueryClient } from '@tanstack/react-query'
-import { VIDEO_PLATFORMS, VIDEO_COUNTRIES, VIDEO_TYPES } from '../constants/videoAnalysisParams'
+import { useTasks, type Task } from '../services/tasks'
 
-const SCRIPT_FORM_STORAGE_KEY = 'lvbcsym_script_form_draft'
-const SCRIPT_RESULT_STORAGE_KEY = 'lvbcsym_script_last_result'
-const TOOLS_RESULTS_STORAGE_KEY = 'lvbcsym_tools_results'
-
-function loadScriptFormDraft(): Partial<{
-  productName: string
-  productSku: string
-  price: string
-  features: string
-  targetAudience: string
-  country: string
-  scriptType: ScriptType
-  language: ScriptLanguage
-  promoCopy: string
-}> {
-  try {
-    const raw = localStorage.getItem(SCRIPT_FORM_STORAGE_KEY)
-    if (!raw) return {}
-    const parsed = JSON.parse(raw) as Record<string, unknown>
-    const allowed: (keyof ReturnType<typeof loadScriptFormDraft>)[] = [
-      'productName', 'productSku', 'price', 'features', 'targetAudience', 'country', 'scriptType', 'promoCopy',
-    ]
-    const out: Record<string, string> = {}
-    for (const key of allowed) {
-      if (parsed[key] != null && typeof parsed[key] === 'string') out[key] = parsed[key] as string
-    }
-    if (
-      parsed.scriptType &&
-      ![
-        'full-sales',
-        'segment-audience',
-        'segment-product',
-        'segment-concerns',
-        'segment-benefits',
-        'segment-after-sales',
-        'segment-closing',
-      ].includes(parsed.scriptType as string)
-    ) delete out.scriptType
-    return out as Partial<ReturnType<typeof loadScriptFormDraft>>
-  } catch {
-    return {}
-  }
-}
-
-function saveScriptFormDraft(form: {
-  productName: string
-  productSku: string
-  price: string
-  features: string
-  targetAudience: string
-  country: string
-  scriptType: ScriptType
-  language: ScriptLanguage
-  promoCopy: string
-}) {
-  try {
-    localStorage.setItem(SCRIPT_FORM_STORAGE_KEY, JSON.stringify(form))
-  } catch {
-    // ignore
-  }
-}
-
-/** 话术生成使用全局界面语言（与侧边栏一致），仅支持 zh-CN / en-US / th-TH */
-function scriptLanguageFromLocale(locale: string): ScriptLanguage {
-  const l = (locale || '').toLowerCase()
-  if (l.startsWith('th')) return 'th-TH'
-  if (l.startsWith('en')) return 'en-US'
-  return 'zh-CN'
-}
-
+import { loadScriptFormDraft, saveScriptFormDraft, scriptLanguageFromLocale, parsePriceToNumber } from '../utils/scriptDraft'
+import { useToolResults } from '../hooks/useToolResults'
+import type { ToolResultData, BundleItem, BundleItemRole } from './ai/types'
+import { SCRIPT_RESULT_STORAGE_KEY, BUNDLE_ITEMS_MAX } from './ai/types'
+import UploadModal from './ai/UploadModal'
+import ToolResultDisplay from './ai/ToolResultDisplay'
+import GuideModal from './ai/GuideModal'
+import ParseProductModal from './ai/ParseProductModal'
 export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) {
   const { t } = useTranslation()
   const { locale } = useLanguage()
   const toast = useToast()
-  const queryClient = useQueryClient()
   const { selectedStore } = useStore()
   const { data: storesData } = useStores()
   const stores = storesData?.items ?? []
@@ -146,87 +65,34 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
   const deleteVideo = useDeleteVideo()
   const { data: tasks = [], refetch: refetchTasks } = useTasks(selectedStore?.id)
   const createMaterial = useCreateMaterial()
-  const updateTask = useUpdateTask()
-  useBatchCompleteTasks()
-  const completeAllTasks = useCompleteAllTasks()
 
   const [loading, setLoading] = useState<string | null>(null)
-  const [resultExpanded, setResultExpanded] = useState(false)
-  const [resultFullScreen, setResultFullScreen] = useState(false)
-  const [isDragging, setIsDragging] = useState(false)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  // 视频分析标准化入参（参考 LLM 入参文档）
-  const [videoPlatform, setVideoPlatform] = useState('tiktok')
-  const [videoCountry, setVideoCountry] = useState('cn')
-  const [videoType, setVideoType] = useState('')
-  const [videoAnalysisFocus, setVideoAnalysisFocus] = useState('')
 
-  type ToolResultData =
-    | ({ type: 'script'; data: Record<string, unknown> })
-    | ({ type: 'report'; data: ReportResult & { insights?: string[] } })
-    | ({ type: 'analysis'; data: MarketAnalysisResult & { trends: Array<{ product: string; trend: string; change: string }> } })
-    | ({ type: 'recommendations'; data: RecommendationsResult & { map?: unknown } })
-    | ({ type: 'stats'; data: StatsResult & { summary?: string; keyMetrics?: Record<string, unknown>; trends?: string[] } })
-    | ({ type: 'compare'; data: StoreComparisonResult & { efficiency?: { comparison?: Array<Record<string, unknown>>; recommendations?: string[] }; insights?: string[] } })
-    | ({ type: 'research'; data: MarketResearchResult & { summary?: string; trends?: string[]; opportunities?: string[] } })
-    | ({ type: 'assistant'; data: { message: string; tasks: Task[]; urgentCount: number; totalCount: number } })
 
-  type StoredToolResult = { type: string; data: unknown }
-
-  const loadToolsResults = (): Record<string, StoredToolResult> => {
-    try {
-      const raw = localStorage.getItem(TOOLS_RESULTS_STORAGE_KEY)
-      if (!raw) return {}
-      const parsed = JSON.parse(raw) as Record<string, StoredToolResult>
-      const filtered: Record<string, StoredToolResult> = {}
-      for (const [k, v] of Object.entries(parsed)) {
-        const d = v?.data as Record<string, unknown> | undefined
-        if (d?.streaming) continue // 跳过流式生成中的结果
-        filtered[k] = v
-      }
-      return filtered
-    } catch {
-      return {}
-    }
-  }
-  
-  const [resultsByTool, setResultsByTool] = useState<Record<string, StoredToolResult>>(loadToolsResults)
-  const result = (propToolId ? (resultsByTool[propToolId] ?? null) : null) as ToolResultData | null
-  /** script 结果 data 为松散结构，用 Record 避免 TS 报错 */
-  const scriptData = result?.type === 'script' ? (result.data as Record<string, unknown>) : null
-
-  const setResultForTool = (toolId: string, value: ToolResultData | null) => {
-    if (value === null) {
-      setResultsByTool((prev) => {
-        const next = { ...prev }
-        delete next[toolId]
-        try {
-          localStorage.setItem(TOOLS_RESULTS_STORAGE_KEY, JSON.stringify(next))
-        } catch {
-          // ignore
-        }
-        return next
-      })
-    } else {
-      setResultsByTool((prev) => {
-        const next = { ...prev, [toolId]: value as StoredToolResult }
-        const d = value.data as Record<string, unknown> | undefined
-        if (!d?.streaming) {
-          try {
-            localStorage.setItem(TOOLS_RESULTS_STORAGE_KEY, JSON.stringify(next))
-          } catch {
-            // ignore
-          }
-        }
-        return next
-      })
-    }
-  }
+  const { setResultForTool, getResultForTool, clearAllResults, hasResults } = useToolResults()
+  const result = getResultForTool(propToolId) as ToolResultData | null
   const [showUploadModal, setShowUploadModal] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
-  const [completingAll, setCompletingAll] = useState(false)
   const isScriptTool = propToolId === 'script' || propToolId === 'speech'
+  // 单品/组套切换（不写入草稿，避免破坏旧数据结构）
+  const [productTypeTab, setProductTypeTab] = useState<'single' | 'bundle'>('single')
+  const [coreFeatures, setCoreFeatures] = useState('')
+  const [secondaryFeatures, setSecondaryFeatures] = useState('')
+  const [afterSalesInfo, setAfterSalesInfo] = useState('')
+  const [competitorLink, setCompetitorLink] = useState('')
+  const [bundleName, setBundleName] = useState('')
+  const [bundleTotalPrice, setBundleTotalPrice] = useState('')
+  const [bundleFeaturesText, setBundleFeaturesText] = useState('')
+  const [bundleItems, setBundleItems] = useState<BundleItem[]>([])
+  const [bundleEditorOpen, setBundleEditorOpen] = useState(false)
+  const [bundleEditingId, setBundleEditingId] = useState<string | null>(null)
+  const bundleEditorRef = useRef<HTMLDivElement | null>(null)
+  const [bundleDraft, setBundleDraft] = useState<Omit<BundleItem, 'id'> & { id?: string }>({ name: '', price: '', sku: '', features: '', quantity: 1, role: 'tool' })
+  const bundleSingleBuySum = bundleItems.reduce((sum, it) => {
+    const p = parsePriceToNumber(it.price)
+    return sum + (p != null ? p * (it.quantity || 1) : 0)
+  }, 0)
+  const bundleTotalNum = parsePriceToNumber(bundleTotalPrice)
+  const bundleDiscount = bundleTotalNum != null ? bundleSingleBuySum - bundleTotalNum : null
   const [scriptForm, setScriptForm] = useState<{
     productName: string
     productSku: string
@@ -237,6 +103,8 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     scriptType: ScriptType
     language: ScriptLanguage
     promoCopy: string
+    priceLevel: string
+    productRole: string
   }>({
     productName: '',
     productSku: '',
@@ -247,26 +115,58 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     scriptType: 'full-sales',
     language: 'zh-CN',
     promoCopy: '',
+    priceLevel: '',
+    productRole: '',
   })
   const [streamingContent, setStreamingContent] = useState('')
   const streamedLengthRef = useRef(0)
   const simulatingStreamRef = useRef(false)
   const [scriptHasAccess, setScriptHasAccess] = useState<boolean | null>(null)
-  /** 界面语言非中文时，话术内容为中文则自动翻译并缓存；key 为 scriptId 或 content 指纹 */
-  const [scriptTranslatedContent, setScriptTranslatedContent] = useState<string | null>(null)
-  const [scriptTranslationLoading, setScriptTranslationLoading] = useState(false)
-  const [scriptTranslationCacheKey, setScriptTranslationCacheKey] = useState<string>('')
   const [showGuideModal, setShowGuideModal] = useState(false)
+  const [showParseModal, setShowParseModal] = useState(false)
   const scriptFormSaveTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    setResultExpanded(false)
-    setResultFullScreen(false)
-  }, [propToolId])
-
+  /** 清空当前选项卡内容，同时清空底部共用的营销、售后、竞品信息；但保留国家、话术类型选择 */
+  const clearCurrentScriptTabFields = useCallback(() => {
+    if (productTypeTab === 'single') {
+      setScriptForm((prev) => ({
+        ...prev,
+        productName: '',
+        productSku: '',
+        price: '',
+        features: '',
+        targetAudience: '',
+        promoCopy: '',
+      }))
+      setCoreFeatures('')
+      setSecondaryFeatures('')
+      setAfterSalesInfo('')
+      setCompetitorLink('')
+    } else {
+      setBundleName('')
+      setBundleTotalPrice('')
+      setBundleFeaturesText('')
+      setBundleItems([])
+      setBundleEditorOpen(false)
+      setBundleEditingId(null)
+      setBundleDraft({ name: '', price: '', sku: '', features: '', quantity: 1, role: 'tool' })
+      setScriptForm((prev) => ({ ...prev, promoCopy: '' }))
+      setAfterSalesInfo('')
+      setCompetitorLink('')
+    }
+    toast.success(t('tools.scriptFormClearedCurrentTab'))
+  }, [productTypeTab, t, toast])
   useEffect(() => {
     if (!isScriptTool) return
     const draft = loadScriptFormDraft()
+    if (draft.productTypeTab === 'single' || draft.productTypeTab === 'bundle') setProductTypeTab(draft.productTypeTab)
+    if (typeof draft.coreFeatures === 'string') setCoreFeatures(draft.coreFeatures)
+    if (typeof draft.secondaryFeatures === 'string') setSecondaryFeatures(draft.secondaryFeatures)
+    if (typeof draft.afterSalesInfo === 'string') setAfterSalesInfo(draft.afterSalesInfo)
+    if (typeof draft.competitorLink === 'string') setCompetitorLink(draft.competitorLink)
+    if (typeof draft.bundleName === 'string') setBundleName(draft.bundleName)
+    if (typeof draft.bundleTotalPrice === 'string') setBundleTotalPrice(draft.bundleTotalPrice)
+    if (typeof draft.bundleFeaturesText === 'string') setBundleFeaturesText(draft.bundleFeaturesText)
+    if (Array.isArray(draft.bundleItems)) setBundleItems(draft.bundleItems)
     setScriptForm((prev) => ({
       ...prev,
       ...draft,
@@ -278,13 +178,23 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
     if (scriptFormSaveTimeout.current) clearTimeout(scriptFormSaveTimeout.current)
     scriptFormSaveTimeout.current = setTimeout(() => {
       scriptFormSaveTimeout.current = null
-      saveScriptFormDraft(scriptForm)
+      saveScriptFormDraft({
+        ...scriptForm,
+        productTypeTab,
+        coreFeatures,
+        secondaryFeatures,
+        afterSalesInfo,
+        competitorLink,
+        bundleName,
+        bundleTotalPrice,
+        bundleFeaturesText,
+        bundleItems,
+      })
     }, 500)
     return () => {
       if (scriptFormSaveTimeout.current) clearTimeout(scriptFormSaveTimeout.current)
     }
-  }, [isScriptTool, scriptForm])
-
+  }, [isScriptTool, scriptForm, productTypeTab, coreFeatures, secondaryFeatures, afterSalesInfo, competitorLink, bundleName, bundleTotalPrice, bundleFeaturesText, bundleItems])
   // 不在进入话术页时自动恢复 sessionStorage 中的上次结果，避免「第一次点生成」秒出内容（实为旧缓存）、第二次才像调用 LLM；生成完成后仍会写入 sessionStorage
   useEffect(() => {
     if (!isScriptTool || !propToolId) return
@@ -301,48 +211,11 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       .catch(() => setScriptHasAccess(null))
   }, [propToolId])
 
-  // 界面语言非中文且话术内容含中文时，自动请求翻译并展示（key 含 locale，切换语言会重新请求对应语言）
-  const scriptContent = scriptData && typeof scriptData.content === 'string' ? scriptData.content : ''
-  const scriptNeedsTranslation = scriptContent && (locale === 'en-US' || locale === 'th-TH') && /[\u4e00-\u9fff]/.test(scriptContent) && !scriptData?.streaming
-  const scriptTranslationKey = scriptNeedsTranslation ? `${scriptData?.id ?? `${scriptContent.length}-${scriptContent.slice(0, 80)}`}-${locale}` : ''
-  const scriptTranslationInFlight = useRef<string | null>(null)
   useEffect(() => {
-    if (!scriptNeedsTranslation || !scriptTranslationKey) {
-      setScriptTranslatedContent(null)
-      setScriptTranslationCacheKey('')
-      scriptTranslationInFlight.current = null
-      return
-    }
-    if (scriptTranslationCacheKey === scriptTranslationKey && scriptTranslatedContent !== null) return
-    if (scriptTranslationInFlight.current === scriptTranslationKey) return
-    scriptTranslationInFlight.current = scriptTranslationKey
-    setScriptTranslationCacheKey(scriptTranslationKey)
-    setScriptTranslationLoading(true)
-    setScriptTranslatedContent(null)
-    const keyForThisRequest = scriptTranslationKey
-    translateLongTextForDisplay(scriptContent, locale, 'zh-CN')
-      .then((translated) => {
-        if (scriptTranslationInFlight.current === keyForThisRequest) setScriptTranslatedContent(translated)
-      })
-      .catch((err: unknown) => {
-        const error = err as { response?: { status?: number; data?: { error?: string } }; message?: string }
-        if (scriptTranslationInFlight.current === keyForThisRequest) {
-          setScriptTranslatedContent(null)
-          setScriptTranslationCacheKey('')
-        }
-        const status = error.response?.status
-        const msg =
-          status === 404
-            ? t('tools.translation404Hint', { fallback: 'Translation API not found (404). Please restart the backend server (e.g. npm run dev in backend folder).' })
-            : error.response?.data?.error || error.message || 'Translation failed'
-        toast.error(typeof msg === 'string' && msg.length > 100 ? msg.slice(0, 100) + '…' : msg)
-      })
-      .finally(() => {
-        setScriptTranslationLoading(false)
-        if (scriptTranslationInFlight.current === keyForThisRequest) scriptTranslationInFlight.current = null
-      })
-  }, [scriptTranslationKey, scriptNeedsTranslation, scriptContent, locale])
-
+    if (!bundleEditorOpen) return
+    // 编辑区在列表底部；打开后自动滚动到可视区域，避免误以为“无法编辑”
+    requestAnimationFrame(() => bundleEditorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }, [bundleEditorOpen, bundleEditingId])
   // 录屏分析：有分析中的视频时每 5 秒刷新状态
   useEffect(() => {
     if (propToolId !== 'screen-recording' || !hasProcessingVideos) return
@@ -368,7 +241,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
-          toast.warning('请先选择店铺')
+          toast.warning(t('tasks.selectStoreFirst'))
           return
         }
         setLoading('report')
@@ -378,7 +251,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('生成报告失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '生成报告失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorReportFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -400,7 +273,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('市场分析失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '市场分析失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorMarketFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -416,7 +289,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
-          toast.warning('请先选择店铺')
+          toast.warning(t('tasks.selectStoreFirst'))
           return
         }
         setLoading('recommendations')
@@ -426,7 +299,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('商品推荐失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '商品推荐失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorRecommendFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -442,7 +315,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       inDevelopment: true,
       action: async () => {
         if (!selectedStore) {
-          toast.warning('请先选择店铺')
+          toast.warning(t('tasks.selectStoreFirst'))
           return
         }
         setLoading('stats')
@@ -452,7 +325,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('数据统计失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '数据统计失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorStatsFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -477,7 +350,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('话术生成失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '话术生成失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorScriptFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -513,7 +386,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       inDevelopment: true,
       action: async () => {
         if (stores.length < 2) {
-          toast.warning('至少需要2个商店才能进行对比')
+          toast.warning(t('tools.compareNeedTwoStores'))
           return
         }
         setLoading('compare')
@@ -530,7 +403,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
         } catch (error: unknown) {
           const err = error as { response?: { data?: { error?: string } }; message?: string }
           console.error('店铺对比失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '店铺对比失败，请检查网络连接或登录状态'
+          const errorMsg = err.response?.data?.error || err.message || t('tools.errorCompareFailed')
           toast.error(errorMsg)
         } finally {
           setLoading(null)
@@ -545,7 +418,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
       color: 'bg-indigo-100 text-indigo-600',
       action: async () => {
         if (!selectedStore) {
-          toast.warning('请先选择店铺')
+          toast.warning(t('tasks.selectStoreFirst'))
           return
         }
         setLoading('assistant')
@@ -562,70 +435,13 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               totalCount: pendingTasks.length,
             },
           })
-          toast.success('AI助手已激活，正在显示待办任务')
+          toast.success(t('tools.assistantActivated'))
         } finally {
           setLoading(null)
         }
       },
     },
   ]
-
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      toast.warning(t('tools.pleaseSelectFile'))
-      return
-    }
-
-    if (!selectedStore) {
-      toast.warning('请先选择店铺')
-      return
-    }
-
-    const isVideoAnalysis = propToolId === 'screen-recording'
-    if (isVideoAnalysis) {
-      const formData = new FormData()
-      formData.append('file', selectedFile)
-      formData.append('storeId', selectedStore.id)
-      formData.append('platform', videoPlatform)
-      formData.append('country', videoCountry)
-      if (videoType) formData.append('videoType', videoType)
-      if (videoAnalysisFocus.trim()) formData.append('analysisFocus', videoAnalysisFocus.trim())
-      setShowUploadModal(false)
-      setSelectedFile(null)
-      toast.info('视频上传中，您可继续使用其他功能')
-      uploadVideo.mutate(formData, {
-        onSuccess: () => {
-          refetchVideos()
-          toast.success('视频上传成功，AI 分析正在进行中')
-        },
-        onError: (error: unknown) => {
-          const err = error as { response?: { data?: { error?: string } }; message?: string }
-          console.error('上传失败:', error)
-          const errorMsg = err.response?.data?.error || err.message || '上传失败'
-          toast.error(errorMsg)
-        },
-      })
-      return
-    }
-
-    const formData = new FormData()
-    formData.append('file', selectedFile)
-    formData.append('name', selectedFile.name)
-    formData.append('type', 'video')
-    formData.append('storeId', selectedStore.id)
-
-    try {
-      await createMaterial.mutateAsync(formData)
-      setShowUploadModal(false)
-      setSelectedFile(null)
-      toast.success('上传成功')
-    } catch (error: unknown) {
-      const err = error as { response?: { data?: { error?: string } }; message?: string }
-      console.error('上传失败:', error)
-      const errorMsg = err.response?.data?.error || err.message || '上传失败，请检查网络连接或登录状态'
-      toast.error(errorMsg)
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -701,7 +517,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           const vidMats = materialsByVideo[video.id] || []
                           const excellent = vidMats.filter((m) => m.type === 'excellent')
                           const problem = vidMats.filter((m) => m.type === 'problem')
-                          const statusLabel = video.status === 'processing' ? '分析中' : video.status === 'failed' ? '分析失败' : '已完成'
+                          const statusLabel =
+                            video.status === 'processing'
+                              ? t('tools.videoStatusProcessing')
+                              : video.status === 'failed'
+                                ? t('tools.videoStatusFailed')
+                                : t('tools.videoStatusDone')
                           const statusColor = video.status === 'processing' ? 'bg-amber-100 text-amber-800' : video.status === 'failed' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
                           return (
                             <div
@@ -733,12 +554,12 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                                   )}
                                   <button
                                     onClick={async () => {
-                                      if (!confirm('确定删除该视频及分析结果？')) return
+                                      if (!confirm(t('tools.deleteVideoConfirm'))) return
                                       try {
                                         await deleteVideo.mutateAsync(video.id)
-                                        toast.success('已删除')
+                                        toast.success(t('tools.mediaDeleted'))
                                       } catch (e) {
-                                        toast.error((e as Error)?.message || '删除失败')
+                                        toast.error((e as Error)?.message || t('tools.mediaDeleteFailed'))
                                       }
                                     }}
                                     className="text-red-500 hover:text-red-700"
@@ -811,13 +632,77 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
 
                   {isScriptTool && scriptHasAccess === false && (
                     <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
-                      <p className="font-medium">您暂无话术生成权限</p>
-                      <p className="text-sm mt-1">请联系管理员在「管理员」-「LLM 配置」中为您勾选开通。</p>
+                      <p className="font-medium">{t('tools.scriptNoAccessTitle')}</p>
+                      <p className="text-sm mt-1">{t('tools.scriptNoAccessDesc')}</p>
                     </div>
                   )}
 
                   {isScriptTool && (
                     <div className="p-5 bg-gray-50/80 rounded-xl border border-gray-200 space-y-4">
+                      {/* 单品 / 组套 两个选项卡 */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setProductTypeTab('single')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            productTypeTab === 'single'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {t('tools.productTypeSingle')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setProductTypeTab('bundle')}
+                          className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+                            productTypeTab === 'bundle'
+                              ? 'bg-indigo-600 text-white border-indigo-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {t('tools.productTypeBundle')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={clearCurrentScriptTabFields}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
+                        >
+                          {t('tools.clearScriptForm')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setShowParseModal(true)}
+                          className="px-3 py-1.5 text-xs font-medium rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1.5"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          {t('tools.smartParse', { fallback: '智能识别' })}
+                        </button>
+                        <div className="ml-auto flex items-center gap-2">
+                          <span className="text-xs text-gray-500 hidden sm:inline">{t('tools.paramTypeHint')}</span>
+                          <div className="flex items-center gap-2">
+                            <label className="text-sm font-medium text-gray-700 whitespace-nowrap">{t('tools.scriptType')}</label>
+                            <select
+                              value={scriptForm.scriptType}
+                              onChange={(e) => setScriptForm((f) => ({ ...f, scriptType: e.target.value as ScriptType }))}
+                              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                            >
+                              <option value="framework-weak-product">{t('tools.scriptTypeFrameworkWeakProduct', { fallback: '弱塑品强营销框架' })}</option>
+                              <option value="framework-strong-product">{t('tools.scriptTypeFrameworkStrongProduct', { fallback: '强塑品理性说服框架' })}</option>
+                              <option value="full-sales">{t('tools.scriptTypeFullSales')}</option>
+                              <option value="segment-audience">{t('tools.scriptTypeSegmentAudience')}</option>
+                              <option value="segment-product">{t('tools.scriptTypeSegmentProduct')}</option>
+                              <option value="segment-concerns">{t('tools.scriptTypeSegmentConcerns')}</option>
+                              <option value="segment-benefits">{t('tools.scriptTypeSegmentBenefits')}</option>
+                              <option value="segment-after-sales">{t('tools.scriptTypeSegmentAfterSales')}</option>
+                              <option value="segment-closing">{t('tools.scriptTypeSegmentClosing')}</option>
+                            </select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {productTypeTab === 'single' && (
+                      <>
                       {/* 必填项靠前：产品名称、价格、国家 */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.productName')}</label>
@@ -851,6 +736,39 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           />
                         </div>
                       </div>
+                      {/* 价格定位 & 产品角色（弱塑品/强塑品路由） */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.priceLevelLabel')}</label>
+                          <select
+                            value={scriptForm.priceLevel}
+                            onChange={(e) => setScriptForm((f) => ({ ...f, priceLevel: e.target.value }))}
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                          >
+                            <option value="">{t('tools.priceLevelNone')}</option>
+                            <option value="低">{t('tools.priceLevelLow')}</option>
+                            <option value="中">{t('tools.priceLevelMid')}</option>
+                            <option value="高">{t('tools.priceLevelHigh')}</option>
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500">{t('tools.priceLevelHint')}</p>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.productRoleLabel')}</label>
+                          <select
+                            value={scriptForm.productRole}
+                            onChange={(e) => setScriptForm((f) => ({ ...f, productRole: e.target.value }))}
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white text-sm"
+                          >
+                            <option value="">{t('tools.productRoleNone')}</option>
+                            <option value="引流款">{t('tools.productRoleTraffic')}</option>
+                            <option value="爆单款">{t('tools.productRoleBoom')}</option>
+                            <option value="利润款">{t('tools.productRoleProfit')}</option>
+                            <option value="战略款">{t('tools.productRoleStrategic')}</option>
+                            <option value="普通款">{t('tools.productRoleNormal')}</option>
+                          </select>
+                          <p className="mt-1 text-xs text-gray-500">{t('tools.productRoleHint')}</p>
+                        </div>
+                      </div>
                       {/* 可选项：两列紧凑 */}
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
@@ -877,36 +795,33 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       </div>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.productFeaturesOptional')}</label>
-                          <input
-                            type="text"
-                            value={scriptForm.features}
-                            onChange={(e) => setScriptForm((f) => ({ ...f, features: e.target.value }))}
-                            placeholder={t('tools.productFeaturesPlaceholder')}
-                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.coreFeaturesLabel')}</label>
+                          <textarea
+                            value={coreFeatures}
+                            onChange={(e) => setCoreFeatures(e.target.value)}
+                            placeholder={t('tools.coreFeaturesPlaceholder')}
+                            rows={4}
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[90px] text-sm"
                           />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.scriptType')}</label>
-                          <select
-                            value={scriptForm.scriptType}
-                            onChange={(e) => setScriptForm((f) => ({ ...f, scriptType: e.target.value as ScriptType }))}
-                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
-                          >
-                            <option value="full-sales">{t('tools.scriptTypeFullSales')}</option>
-                            <option value="segment-audience">{t('tools.scriptTypeSegmentAudience')}</option>
-                            <option value="segment-product">{t('tools.scriptTypeSegmentProduct')}</option>
-                            <option value="segment-concerns">{t('tools.scriptTypeSegmentConcerns')}</option>
-                            <option value="segment-benefits">{t('tools.scriptTypeSegmentBenefits')}</option>
-                            <option value="segment-after-sales">{t('tools.scriptTypeSegmentAfterSales')}</option>
-                            <option value="segment-closing">{t('tools.scriptTypeSegmentClosing')}</option>
-                          </select>
+                          <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.secondaryFeaturesLabel')}</label>
+                          <textarea
+                            value={secondaryFeatures}
+                            onChange={(e) => setSecondaryFeatures(e.target.value)}
+                            placeholder={t('tools.secondaryFeaturesPlaceholder')}
+                            rows={4}
+                            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[90px] text-sm"
+                          />
                         </div>
                       </div>
+                      {/* 话术类型已移至顶部页签行（靠右） */}
                       {(
                         scriptForm.scriptType === 'full-sales' ||
                         scriptForm.scriptType === 'segment-benefits' ||
-                        scriptForm.scriptType === 'segment-closing'
+                        scriptForm.scriptType === 'segment-closing' ||
+                        scriptForm.scriptType === 'framework-weak-product' ||
+                        scriptForm.scriptType === 'framework-strong-product'
                       ) && (
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.promoOptional')}</label>
@@ -919,6 +834,231 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           />
                         </div>
                       )}
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.afterSalesInfoLabel')}</label>
+                        <textarea
+                          value={afterSalesInfo}
+                          onChange={(e) => setAfterSalesInfo(e.target.value)}
+                          placeholder={t('tools.afterSalesInfoPlaceholder')}
+                          rows={3}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[80px]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.competitorLinkLabel')}</label>
+                        <textarea
+                          value={competitorLink}
+                          onChange={(e) => setCompetitorLink(e.target.value)}
+                          placeholder={t('tools.competitorLinkPlaceholder')}
+                          rows={2}
+                          className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[64px] text-sm"
+                        />
+                        <p className="mt-1 text-xs text-gray-500">{t('tools.competitorLinkHint')}</p>
+                      </div>
+                      </>
+                      )}
+
+                      {productTypeTab === 'bundle' && (
+                        <div className="space-y-4">
+                          <div className="p-4 rounded-xl bg-white border border-gray-200 space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.bundleNameLabel')}</label>
+                                <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleName} onChange={(e) => setBundleName(e.target.value)} />
+                              </div>
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.bundleTotalPriceLabel')}</label>
+                                <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleTotalPrice} onChange={(e) => setBundleTotalPrice(e.target.value)} />
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                                <div className="text-xs text-gray-500">{t('tools.bundleSingleBuySumLabel')}</div>
+                                <div className="text-sm font-semibold text-gray-900 mt-0.5">{bundleSingleBuySum.toFixed(2)}</div>
+                              </div>
+                              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                                <div className="text-xs text-gray-500">{t('tools.bundleDiscountLabel')}</div>
+                                <div className={`text-sm font-semibold mt-0.5 ${bundleDiscount != null && bundleDiscount > 0 ? 'text-emerald-700' : 'text-gray-900'}`}>
+                                  {bundleDiscount == null ? '—' : bundleDiscount.toFixed(2)}
+                                </div>
+                              </div>
+                              <div className="p-3 rounded-lg bg-gray-50 border border-gray-200">
+                                <div className="text-xs text-gray-500">{t('tools.bundleHintLabel')}</div>
+                                <div className="text-xs text-gray-600 mt-0.5">{t('tools.bundleHintText')}</div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-white border border-gray-200 space-y-3">
+                            <div className="text-sm font-medium text-gray-800">{t('tools.bundleFeaturesTitle')}</div>
+                            <textarea
+                              value={bundleFeaturesText}
+                              onChange={(e) => setBundleFeaturesText(e.target.value)}
+                              placeholder={t('tools.bundleFeaturesPlaceholder')}
+                              rows={4}
+                              className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[90px] text-sm"
+                            />
+                            <p className="text-xs text-gray-500">{t('tools.bundleFeaturesHint')}</p>
+                          </div>
+
+                          <div className="p-4 rounded-xl bg-white border border-gray-200 space-y-3">
+                            <div className="flex items-center justify-between gap-2">
+                              <div className="text-sm font-medium text-gray-800">{t('tools.bundleItemsTitle')}</div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (bundleItems.length >= BUNDLE_ITEMS_MAX) return toast.error(t('tools.maxBundleItemsToast', { max: BUNDLE_ITEMS_MAX }))
+                                  setBundleEditingId(null)
+                                  setBundleDraft({ name: '', price: '', sku: '', features: '', quantity: 1, role: 'tool' })
+                                  setBundleEditorOpen(true)
+                                }}
+                                className="px-3 py-2 text-sm bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg"
+                              >
+                                {t('tools.addBundleItem')}
+                              </button>
+                            </div>
+
+                            {bundleItems.map((it, idx) => (
+                              <div key={it.id} className="p-3 rounded-lg border border-gray-200">
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="text-sm font-medium text-gray-900">
+                                    {t('tools.bundleItemPrefix', { index: idx + 1 })} {it.name}{' '}
+                                    <span className={`ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${it.role === 'core' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700'}`}>
+                                      {it.role === 'core' ? t('tools.roleBadgeCore') : t('tools.roleBadgeTool')}
+                                    </span>
+                                  </div>
+                                  <div className="inline-flex items-center gap-3 text-sm">
+                                    <button type="button" onClick={() => { setBundleEditingId(it.id); setBundleDraft({ id: it.id, name: it.name, price: it.price, sku: it.sku, features: it.features, quantity: it.quantity, role: it.role }); setBundleEditorOpen(true) }} className="text-indigo-600 hover:underline">{t('tools.edit')}</button>
+                                    <button type="button" onClick={() => setBundleItems((prev) => prev.filter((x) => x.id !== it.id))} className="text-rose-600 hover:underline">{t('tools.delete')}</button>
+                                  </div>
+                                </div>
+                                <div className="mt-2 text-sm text-gray-700 space-y-1">
+                                  <div>{t('tools.itemUnitPrice')}：{it.price || '—'}　{t('tools.itemSku')}：{it.sku || '—'}</div>
+                                  <div>{t('tools.itemFeatures')}：{it.features || '—'}</div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {bundleEditorOpen && (
+                              <div ref={bundleEditorRef} className="mt-4 p-4 rounded-lg border border-gray-200 bg-gray-50">
+                                <div className="text-sm font-medium text-gray-900 mb-3">{bundleEditingId ? t('tools.inlineEditorTitleEdit') : t('tools.inlineEditorTitleAdd')}</div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                  <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemName')}</label>
+                                    <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.name} onChange={(e) => setBundleDraft((d) => ({ ...d, name: e.target.value }))} />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemRole')}</label>
+                                    <select className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.role} onChange={(e) => setBundleDraft((d) => ({ ...d, role: (e.target.value as BundleItemRole) === 'core' ? 'core' : 'tool' }))}>
+                                      <option value="core">{t('tools.roleCore')}</option>
+                                      <option value="tool">{t('tools.roleTool')}</option>
+                                    </select>
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemUnitPrice')}</label>
+                                    <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.price} onChange={(e) => setBundleDraft((d) => ({ ...d, price: e.target.value }))} />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemQuantity')}</label>
+                                    <input type="number" min={1} className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.quantity} onChange={(e) => setBundleDraft((d) => ({ ...d, quantity: Math.max(1, Math.floor(Number(e.target.value || 1))) }))} />
+                                  </div>
+                                  <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemSku')}</label>
+                                    <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.sku} onChange={(e) => setBundleDraft((d) => ({ ...d, sku: e.target.value }))} />
+                                  </div>
+                                  <div className="sm:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.itemFeatures')}</label>
+                                    <input className="w-full px-3 py-2.5 border border-gray-300 rounded-lg bg-white" value={bundleDraft.features} onChange={(e) => setBundleDraft((d) => ({ ...d, features: e.target.value }))} />
+                                  </div>
+                                </div>
+                                <div className="flex items-center justify-end gap-2 mt-4">
+                                  <button type="button" onClick={() => { setBundleEditorOpen(false); setBundleEditingId(null) }} className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-white">{t('tools.cancel')}</button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      const name = bundleDraft.name.trim()
+                                      if (!name) return toast.error(t('tools.fillItemName'))
+                                      const next: BundleItem = {
+                                        id: bundleEditingId || crypto.randomUUID(),
+                                        name,
+                                        price: bundleDraft.price,
+                                        sku: bundleDraft.sku,
+                                        features: bundleDraft.features,
+                                        quantity: bundleDraft.quantity || 1,
+                                        role: bundleDraft.role,
+                                      }
+                                      setBundleItems((prev) => {
+                                        const exists = prev.some((x) => x.id === next.id)
+                                        const items = exists ? prev.map((x) => (x.id === next.id ? next : x)) : [...prev, next]
+                                        return (next.role === 'core' ? items.map((x) => (x.id === next.id ? x : { ...x, role: 'tool' as const })) : items).slice(0, BUNDLE_ITEMS_MAX)
+                                      })
+                                      setBundleEditorOpen(false)
+                                      setBundleEditingId(null)
+                                    }}
+                                    className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white"
+                                  >
+                                    {t('tools.save')}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 国家 / 营销 / 售后 / 竞品（话术类型仅在顶部选择，与清空逻辑一致） */}
+                          <div className="p-4 rounded-xl bg-white border border-gray-200 space-y-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.countryRequired')}</label>
+                              <input
+                                type="text"
+                                value={scriptForm.country}
+                                onChange={(e) => setScriptForm((f) => ({ ...f, country: e.target.value }))}
+                                placeholder={t('tools.countryPlaceholder')}
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
+                              />
+                            </div>
+                            {(
+                              scriptForm.scriptType === 'full-sales' ||
+                              scriptForm.scriptType === 'segment-benefits' ||
+                              scriptForm.scriptType === 'segment-closing' ||
+                              scriptForm.scriptType === 'framework-weak-product' ||
+                              scriptForm.scriptType === 'framework-strong-product'
+                            ) && (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.promoOptional')}</label>
+                                <textarea
+                                  value={scriptForm.promoCopy}
+                                  onChange={(e) => setScriptForm((f) => ({ ...f, promoCopy: e.target.value }))}
+                                  placeholder={t('tools.promoPlaceholder')}
+                                  rows={3}
+                                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 bg-white resize-y min-h-[80px]"
+                                />
+                              </div>
+                            )}
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.afterSalesInfoLabel')}</label>
+                              <textarea
+                                value={afterSalesInfo}
+                                onChange={(e) => setAfterSalesInfo(e.target.value)}
+                                placeholder={t('tools.afterSalesInfoPlaceholder')}
+                                rows={3}
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[80px]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-1.5">{t('tools.competitorLinkLabel')}</label>
+                              <textarea
+                                value={competitorLink}
+                                onChange={(e) => setCompetitorLink(e.target.value)}
+                                placeholder={t('tools.competitorLinkPlaceholder')}
+                                rows={2}
+                                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white resize-y min-h-[64px] text-sm"
+                              />
+                              <p className="mt-1 text-xs text-gray-500">{t('tools.competitorLinkHint')}</p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -928,13 +1068,24 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                       e.preventDefault()
                       e.stopPropagation()
                       if (isScriptTool) {
-                        if (!scriptForm.productName.trim()) {
-                          toast.warning(t('tools.fillProductName'))
-                          return
-                        }
-                        if (!scriptForm.price.trim()) {
-                          toast.warning(t('tools.fillPrice'))
-                          return
+                        if (productTypeTab === 'single') {
+                          if (!scriptForm.productName.trim()) {
+                            toast.warning(t('tools.fillProductName'))
+                            return
+                          }
+                          if (!scriptForm.price.trim()) {
+                            toast.warning(t('tools.fillPrice'))
+                            return
+                          }
+                        } else {
+                          if (!bundleName.trim()) {
+                            toast.warning(t('tools.fillBundleName'))
+                            return
+                          }
+                          if (!bundleTotalPrice.trim()) {
+                            toast.warning(t('tools.fillBundleTotalPrice'))
+                            return
+                          }
                         }
                         if (!scriptForm.country.trim()) {
                           toast.warning(t('tools.fillCountry'))
@@ -951,19 +1102,64 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                           setResultForTool(propToolId!, { type: 'script', data: { content: '', streaming: true } })
                           await generateScriptStream(
                             {
-                              productName: scriptForm.productName.trim(),
-                              productSku: scriptForm.productSku.trim() || undefined,
-                              price: scriptForm.price.trim() || undefined,
-                              features: scriptForm.features.trim() || undefined,
-                              targetAudience: scriptForm.targetAudience.trim() || undefined,
+                              productName: productTypeTab === 'single' ? scriptForm.productName.trim() : (bundleName.trim() || t('tools.productTypeBundle')),
+                              productSku: productTypeTab === 'single' ? (scriptForm.productSku.trim() || undefined) : undefined,
+                              price: productTypeTab === 'single' ? (scriptForm.price.trim() || undefined) : (bundleTotalPrice.trim() || undefined),
+                              coreFeatures: productTypeTab === 'single' ? (coreFeatures.trim() || undefined) : undefined,
+                              secondaryFeatures: productTypeTab === 'single' ? (secondaryFeatures.trim() || undefined) : undefined,
+                              targetAudience: productTypeTab === 'single' ? (scriptForm.targetAudience.trim() || undefined) : undefined,
+                              isBundle: productTypeTab === 'bundle',
+                              bundleName: productTypeTab === 'bundle' ? (bundleName.trim() || undefined) : undefined,
+                              bundleTotalPrice: productTypeTab === 'bundle' ? (bundleTotalPrice.trim() || undefined) : undefined,
+                              bundleFeatures: productTypeTab === 'bundle'
+                                ? bundleFeaturesText
+                                  .split(/[\n\r;；]+/)
+                                  .map((s) => s.trim())
+                                  .filter(Boolean)
+                                  .slice(0, 50)
+                                : undefined,
+                              bundleItems: productTypeTab === 'bundle' ? bundleItems.map((it) => ({
+                                name: it.name,
+                                price: it.price || undefined,
+                                sku: it.sku || undefined,
+                                features: it.features || undefined,
+                                quantity: it.quantity,
+                                role: it.role,
+                              })) : undefined,
+                              ...(productTypeTab === 'bundle'
+                                ? {
+                                    is_combo: true,
+                                    combo_original_price:
+                                      bundleSingleBuySum > 0 ? bundleSingleBuySum.toFixed(2) : undefined,
+                                    combo_discount_amount:
+                                      bundleDiscount != null && bundleDiscount > 0
+                                        ? bundleDiscount.toFixed(2)
+                                        : undefined,
+                                    products: bundleItems.map((it, i) => ({
+                                      id: i + 1,
+                                      name: it.name,
+                                      price: it.price || '',
+                                      is_main: it.role === 'core',
+                                      features: it.features || '',
+                                      ...(it.sku ? { sku: it.sku } : {}),
+                                      ...(it.quantity > 1 ? { quantity: it.quantity } : {}),
+                                    })),
+                                  }
+                                : {}),
                               country: scriptForm.country.trim(),
                               scriptType: scriptForm.scriptType,
+                              price_level: scriptForm.priceLevel || undefined,
+                              product_role: scriptForm.productRole || undefined,
                               language: scriptLanguageFromLocale(locale),
                               promoCopy: (
                                 scriptForm.scriptType === 'full-sales' ||
                                 scriptForm.scriptType === 'segment-benefits' ||
-                                scriptForm.scriptType === 'segment-closing'
+                                scriptForm.scriptType === 'segment-closing' ||
+                                scriptForm.scriptType === 'framework-weak-product' ||
+                                scriptForm.scriptType === 'framework-strong-product'
                               ) ? (scriptForm.promoCopy.trim() || undefined) : undefined,
+                              afterSalesInfo: afterSalesInfo.trim() || undefined,
+                              competitorLink: competitorLink.trim() || undefined,
                               storeId: selectedStore.id,
                             },
                             {
@@ -1017,14 +1213,17 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                                 }
                               },
                               onError: (msg) => {
-                                setResultForTool(propToolId!, { type: 'script', data: { error: msg || '生成话术时发生错误' } })
-                                toast.error(msg || '生成话术时发生错误')
+                                setResultForTool(propToolId!, {
+                                  type: 'script',
+                                  data: { error: msg || t('tools.scriptGenerateError') },
+                                })
+                                toast.error(msg || t('tools.scriptGenerateError'))
                               },
                               onFallback: (reason) => {
                                 if (reason === 'llm_timeout_or_empty') {
-                                  toast.info('生成超时或未返回内容，已为您切换为模板话术')
+                                  toast.info(t('tools.fallbackTemplateTimeout'))
                                 } else if (reason === 'llm_not_configured') {
-                                  toast.info('未配置话术 LLM，已为您展示模板话术')
+                                  toast.info(t('tools.fallbackTemplateNoLlm'))
                                 }
                               },
                             }
@@ -1041,7 +1240,7 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
                               errorMsg = (error as { message?: string }).message
                             }
                           }
-                          toast.error(errorMsg || '生成脚本失败，请检查网络连接或登录状态')
+                          toast.error(errorMsg || t('tools.scriptGenerateFailedNetwork'))
                         } finally {
                           if (!simulatingStreamRef.current) setLoading(null)
                         }
@@ -1073,24 +1272,19 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
           <>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-gray-900">{t('tools.aiAutoGenerate')}</h2>
-              {Object.keys(resultsByTool).length > 0 && (
+              {hasResults && (
                 <button
                   onClick={() => {
-                    if (confirm('确定清空所有工具的历史记录吗？')) {
-                      setResultsByTool({})
-                      try {
-                        localStorage.removeItem(TOOLS_RESULTS_STORAGE_KEY)
-                        toast.success('已清空历史记录')
-                      } catch {
-                        // ignore
-                      }
+                    if (confirm(t('tools.clearAllHistoryConfirm'))) {
+                      clearAllResults()
+                      toast.success(t('tools.historyCleared'))
                     }
                   }}
                   className="text-xs text-gray-500 hover:text-red-600 flex items-center gap-1"
-                  title="清空所有工具的历史记录"
+                  title={t('tools.clearHistoryTitle')}
                 >
                   <RefreshCw className="w-3 h-3" />
-                  清空历史
+                  {t('tools.clearHistoryButton')}
                 </button>
               )}
             </div>
@@ -1136,746 +1330,56 @@ export default function AIFeatures({ toolId: propToolId }: { toolId?: string }) 
               })}
             </div>
             {/* 电商数据分析专家 - 交互提示词模板 弹窗 */}
-            {showGuideModal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={() => setShowGuideModal(false)}>
-                <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center justify-between p-4 border-b border-gray-200 shrink-0">
-                    <h3 className="text-lg font-semibold text-gray-900">电商数据分析专家 - 交互提示词模板</h3>
-                    <button type="button" onClick={() => setShowGuideModal(false)} className="p-2 hover:bg-gray-100 rounded-lg">
-                      <X className="w-5 h-5 text-gray-500" />
-                    </button>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4 text-sm text-gray-700 space-y-4">
-                    <section>
-                      <h4 className="font-medium text-gray-900 mb-2">👋 开场欢迎语</h4>
-                      <p className="whitespace-pre-wrap bg-gray-50 p-3 rounded-lg">你好！我是你的电商数据分析专家助手，专注于帮助运营团队进行数据复盘和业务优化。我可以帮助你：分析店铺数据、搜索行业信息、生成营销素材、制作专业文档、优化直播间场景、生成主播话术。请告诉我你需要什么帮助！</p>
-                    </section>
-                    <section>
-                      <h4 className="font-medium text-gray-900 mb-2">📦 常见使用场景</h4>
-                      <ul className="list-disc list-inside space-y-1 text-gray-600">
-                        <li>店铺数据分析（订单、用户、销售额、阶段）</li>
-                        <li>多维度拆解（供应链、物流、定价、渠道、营销）</li>
-                        <li>生成营销图片 / 海报</li>
-                        <li>生成专业文档（Word / Excel / PPT）</li>
-                        <li>直播间场景优化</li>
-                        <li>生成主播话术（产品+人群+痛点）</li>
-                        <li>搜索行业信息（平台规则、节庆、趋势、竞品）</li>
-                        <li>综合分析报告（多维度+报告+PPT）</li>
-                      </ul>
-                    </section>
-                    <section>
-                      <h4 className="font-medium text-gray-900 mb-2">🎯 指令模板</h4>
-                      <ul className="space-y-2 text-gray-600">
-                        <li><strong>快速分析：</strong>快速分析：[简述问题或数据]</li>
-                        <li><strong>深度分析：</strong>深度分析：[提供详细数据]</li>
-                        <li><strong>生成素材：</strong>生成：[素材类型 + 具体要求]</li>
-                        <li><strong>优化场景：</strong>优化场景：[图片URL] + [产品类别] + [主播风格]</li>
-                        <li><strong>生成话术：</strong>生成话术：产品名称、类别、特点、目标人群、价格、痛点</li>
-                      </ul>
-                    </section>
-                    <section>
-                      <h4 className="font-medium text-gray-900 mb-2">💡 最佳实践</h4>
-                      <p className="text-gray-600">提供完整信息（订单数、用户数、销售额、品类、阶段）；明确分析维度（如物流：配送时长、准时率、退货率）；要求具体输出（报告标题、章节、格式）；多维度结合分析（定价+内容+物流）。</p>
-                    </section>
-                    <p className="text-gray-500 text-xs border-t border-gray-100 pt-3">完整模板（含迭代优化、数据格式、话术/搜索提示词等）见项目文档：docs/电商数据分析专家-交互提示词模板.md</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            {showGuideModal && <GuideModal onClose={() => setShowGuideModal(false)} />}
           </>
         )}
 
-        {/* 显示结果 */}
-        {result && (
-          <div className="mt-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="font-semibold text-blue-900">
-                {result.type === 'script' && (scriptData?.storeId ? t('tools.resultTitleScriptWithStore', { storeName: selectedStore?.name || t('tools.currentStore') }) : t('tools.resultTitleScript'))}
-                {result.type === 'report' && t('tools.resultTitleReport')}
-                {result.type === 'analysis' && t('tools.resultTitleAnalysis')}
-                {result.type === 'stats' && t('tools.resultTitleStats')}
-                {result.type === 'research' && t('tools.resultTitleResearch')}
-                {result.type === 'recommendations' && t('tools.resultTitleRecommendations')}
-                {result.type === 'compare' && t('tools.resultTitleCompare')}
-                {result.type === 'assistant' && t('tools.resultTitleAssistant')}
-              </h3>
-              <div className="flex items-center gap-1">
-                {result.type === 'script' && (typeof scriptData?.content === 'string' || Boolean(scriptData?.streaming)) && (
-                  <>
-                    <button
-                      type="button"
-                      onClick={async () => {
-                        const text = scriptData?.streaming
-                          ? streamingContent
-                          : scriptNeedsTranslation && scriptTranslatedContent
-                            ? scriptTranslatedContent
-                            : scriptData?.content
-                        const ok = await copyToClipboard(String(text ?? ''))
-                        if (ok) toast.success(t('tools.copyToClipboard'))
-                        else toast.error(t('tools.copyFailed'))
-                      }}
-                      className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
-                      title={t('tools.copyFullText')}
-                    >
-                      <Copy className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setResultExpanded((e) => !e)}
-                      className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
-                      title={resultExpanded ? t('tools.collapse') : t('tools.expandFull')}
-                    >
-                      {resultExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setResultFullScreen(true)}
-                      className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
-                      title={t('tools.fullScreenView')}
-                    >
-                      <Maximize2 className="w-4 h-4" />
-                    </button>
-                  </>
-                )}
-            <button
-                  onClick={() => { if (propToolId) setResultForTool(propToolId, null); setResultExpanded(false); setResultFullScreen(false) }}
-                  className="p-1.5 text-blue-600 hover:text-blue-800 hover:bg-blue-100 rounded"
-                  title={t('tools.closeClearResult')}
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-            <p className="text-xs text-gray-500 mb-2 border-b border-blue-100 pb-2 flex items-center justify-between">
-              <span>
-              {result.type === 'script' && (scriptData?.storeId || selectedStore)
-                ? t('tools.scriptDisclaimerWithStore')
-                : t('tools.scriptDisclaimerDefault')}
-              </span>
-              <span className="text-xs text-green-600 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" />
-                {t('tools.saved')}
-              </span>
-            </p>
-            <div
-              className={`text-sm text-gray-700 overflow-y-auto rounded border border-blue-100 bg-white ${result.type === 'script' && resultExpanded ? 'max-h-[70vh] min-h-[320px]' : 'max-h-[28rem]'}`}
-              style={result.type === 'script' ? { minHeight: resultExpanded ? undefined : '12rem' } : undefined}
-            >
-              {result.type === 'script' && (
-                <div className="space-y-2">
-                  {Boolean(scriptData?.storeId && selectedStore && !scriptData?.streaming) && (
-                    <div className="flex items-center gap-2 px-2 py-1.5 bg-teal-50 rounded text-sm text-teal-800 border border-teal-200">
-                      <Store className="w-4 h-4 shrink-0" />
-                      <span>{t('tools.basedOnStore')}<strong>{String(selectedStore?.name ?? '')}</strong></span>
-                    </div>
-                  )}
-                  {Boolean(scriptData?.relevanceWarning) && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                      <p className="font-medium">⚠️ {t('tools.templateFallbackTitle')}</p>
-                      <p className="mt-1">{String(scriptData?.relevanceWarning ?? '')}</p>
-                    </div>
-                  )}
-                  {scriptData?.dataSource === 'template' && Boolean(scriptData?.fallbackReason) && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm mb-2">
-                      <p className="font-medium">⚠️ {t('tools.templateFallbackHint')}</p>
-                      <p className="mt-1 text-sm">{String(scriptData?.fallbackReason ?? '')}</p>
-                    </div>
-                  )}
-                  {Boolean(scriptData?.translationSkipped) && (
-                    <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-                      <p className="font-medium">🌐 {String(scriptData?.translationSkippedMessage ?? t('tools.scriptTranslationSkipped'))}</p>
-                    </div>
-                  )}
-                  {scriptNeedsTranslation && !scriptData?.streaming && !scriptTranslationLoading && !scriptTranslatedContent && (
-                    <div className="px-2 py-1.5 flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          setScriptTranslationLoading(true)
-                        try {
-                          const translated = await translateLongTextForDisplay(scriptContent, locale, 'zh-CN')
-                          setScriptTranslatedContent(translated)
-                          setScriptTranslationCacheKey(scriptTranslationKey)
-                        } catch (e: unknown) {
-                          const error = e as { response?: { status?: number; data?: { error?: string } }; message?: string }
-                          const status = error.response?.status
-                          const msg =
-                            status === 404
-                              ? t('tools.translation404Hint', { fallback: 'Translation API not found. Please restart the backend server.' })
-                              : error.response?.data?.error ||
-                                error.message ||
-                                t('tools.translationFailed', { fallback: 'Translation failed. Please try again.' })
-                          toast.error(typeof msg === 'string' && msg.length > 100 ? msg.slice(0, 100) + '…' : msg)
-                        } finally {
-                          setScriptTranslationLoading(false)
-                        }
-                        }}
-                        className="text-sm px-3 py-1.5 rounded-lg bg-blue-100 text-blue-800 hover:bg-blue-200 font-medium"
-                      >
-                        {locale === 'th-TH' ? t('tools.translateToThai') : t('tools.translateToEnglish')}
-                      </button>
-                    </div>
-                  )}
-                  {scriptData?.error ? (
-                    <div className="p-4 rounded-lg bg-amber-50 border border-amber-200 text-amber-800">
-                      <p className="font-semibold mb-2">{t('tools.cannotGenerateScript')}</p>
-                      {getCurrentUserRole() === 'admin' ? (
-                        <>
-                          <p className="text-sm mb-2">您可以在管理员后台配置 LLM，配置后全体用户均可使用话术生成。</p>
-                          <p className="text-sm mb-2">
-                            请进入 <Link to="/admin/permissions?tab=llm" className="text-indigo-600 underline font-medium">权限配置</Link> 页面的「LLM 配置」标签，填写 API 地址与 API 密钥并保存。
-                          </p>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-sm mb-2">话术生成需要管理员先配置 LLM。</p>
-                          <p className="text-sm">请联系管理员在「管理员」-「LLM 配置」中完成配置后即可使用。</p>
-                        </>
-                      )}
-                    </div>
-                  ) : (
-                    <>
-                      {scriptNeedsTranslation && scriptTranslationLoading && (
-                        <p className="text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded mb-2" role="status">
-                          {t('tools.translatingLong')}
-                        </p>
-                      )}
-                      <pre
-                        className="whitespace-pre-wrap leading-relaxed text-[15px] p-4 font-sans min-h-[8rem]"
-                        role="status"
-                        aria-live="polite"
-                      >
-                        {scriptData?.streaming
-                          ? (streamingContent || t('tools.streamPlaceholder'))
-                          : scriptNeedsTranslation
-                            ? (scriptTranslatedContent ?? String(scriptData?.content ?? ''))
-                            : String(scriptData?.content ?? '')}
-                        {scriptData?.streaming && streamingContent ? (
-                          <span className="inline-block w-2 h-4 ml-0.5 bg-indigo-500 animate-pulse" aria-hidden />
-                        ) : null}
-                      </pre>
-                    </>
-                  )}
-                </div>
-              )}
-              {result.type === 'report' && (
-                <div>
-                  <p className="mb-2">{result.data.summary}</p>
-                  <div className="mt-2">
-                    <strong>洞察：</strong>
-                    <ul className="list-disc list-inside ml-2">
-                      {result.data.insights?.map((item, i) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {result.type === 'stats' && (
-                <div>
-                  <p className="mb-2 font-semibold">{result.data.summary}</p>
-                  <div className="mt-2 space-y-1">
-                    <p><strong>关键指标：</strong></p>
-                    <ul className="list-disc list-inside ml-2 space-y-1">
-                      <li>总GMV: ¥{result.data.keyMetrics?.totalGMV?.toLocaleString()}</li>
-                      <li>总订单数: {result.data.keyMetrics?.totalOrders?.toLocaleString()}</li>
-                      <li>成交订单: {String(result.data.keyMetrics?.completedOrders ?? '')}</li>
-                      <li>平均转化率: {String(result.data.keyMetrics?.averageConversionRate ?? '')}%</li>
-                    </ul>
-                  </div>
-                  <div className="mt-2">
-                    <strong>趋势：</strong>
-                    <ul className="list-disc list-inside ml-2">
-                      {result.data.trends?.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {result.type === 'analysis' && (
-                <div>
-                  <p className="mb-2">趋势分析：</p>
-                  <ul className="list-disc list-inside ml-2">
-                    {result.data.trends.map((t, i) => (
-                      <li key={i}>
-                        {t.product}: {t.trend} ({t.change})
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {result.type === 'research' && (
-                <div>
-                  <p className="mb-2 font-semibold">{result.data.summary}</p>
-                  <div className="mt-2">
-                    <strong>趋势：</strong>
-                    <ul className="list-disc list-inside ml-2">
-                      {result.data.trends?.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div className="mt-2">
-                    <strong>机会点：</strong>
-                    <ul className="list-disc list-inside ml-2">
-                      {result.data.opportunities?.map((item: string, i: number) => (
-                        <li key={i}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              )}
-              {result.type === 'recommendations' && (
-                <div>
-                  {(result.data.items ?? []).map((item, i) => (
-                    <div key={i} className="mb-2 p-2 bg-white rounded">
-                      <strong>{(item as { name?: string }).name}</strong>{' '}
-                      {(item as { category?: string }).category && <>- {(item as { category?: string }).category}</>}
-                      <br />
-                      <span className="text-xs text-gray-600">{(item as { reason?: string }).reason}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-              {result.type === 'compare' && (
-                <div className="space-y-4">
-                  <div>
-                    <p className="font-medium text-gray-800 mb-2">综合对比</p>
-                    <ul className="list-disc list-inside ml-2">
-                      {((() => {
-                        const d = result.data as unknown as Record<string, unknown>
-                        const comp = d?.comparison as { insights?: string[] } | undefined
-                        const ins = (d?.insights ?? []) as string[]
-                        return (comp?.insights ?? ins).map((item: string, i: number) => (
-                          <li key={i}>{item}</li>
-                        ))
-                      })())}
-                    </ul>
-                    {((() => {
-                      const d = result.data as unknown as Record<string, unknown>
-                      const comp = d?.comparison as { insights?: string[] } | undefined
-                      const ins = (d?.insights ?? []) as string[]
-                      return !(comp?.insights?.length) && !ins.length
-                    })()) && (
-                      <p className="text-sm text-gray-500">暂无综合对比数据（功能待接入）</p>
-                    )}
-                  </div>
-                  <div className="border-t border-gray-200 pt-4">
-                    <p className="font-medium text-gray-800 mb-2">时效对比</p>
-                    {((result.data as { efficiency?: { comparison?: unknown[]; recommendations?: string[] } }).efficiency?.comparison?.length ?? 0) > 0 ? (
-                      <>
-                        {(result.data as { efficiency?: { comparison?: unknown[] } }).efficiency?.comparison?.map((store, i) => {
-                          const s = store as {
-                            storeName?: string
-                            name?: string
-                            score?: number
-                            metrics?: {
-                              responseTime?: string
-                              orderProcessingTime?: string
-                              customerServiceTime?: string
-                              deliveryTime?: string
-                            }
-                          }
-                          return (
-                            <div key={i} className="mb-3 p-2 bg-white rounded border border-gray-100">
-                              <strong>{s.storeName ?? s.name}</strong>
-                              {s.score != null && <span className="text-gray-600"> (评分: {s.score})</span>}
-                              {s.metrics && (
-                                <ul className="list-disc list-inside ml-2 mt-1 text-xs text-gray-600">
-                                  {s.metrics.responseTime != null && <li>响应时间: {s.metrics.responseTime}</li>}
-                                  {s.metrics.orderProcessingTime != null && <li>订单处理时间: {s.metrics.orderProcessingTime}</li>}
-                                  {s.metrics.customerServiceTime != null && <li>客服时间: {s.metrics.customerServiceTime}</li>}
-                                  {s.metrics.deliveryTime != null && <li>配送时间: {s.metrics.deliveryTime}</li>}
-                                </ul>
-                              )}
-                            </div>
-                          )
-                        })}
-                        {((result.data as { efficiency?: { recommendations?: string[] } }).efficiency?.recommendations?.length ?? 0) > 0 && (
-                          <div className="mt-2">
-                            <strong>建议：</strong>
-                            <ul className="list-disc list-inside ml-2">
-                              {(result.data as { efficiency?: { recommendations?: string[] } }).efficiency?.recommendations?.map((item, i) => (
-                                <li key={i}>{item}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </>
-                    ) : (
-                      <p className="text-sm text-gray-500">暂无时效对比数据（功能待接入）</p>
-                    )}
-                  </div>
-                </div>
-              )}
-              {result.type === 'assistant' && (
-                <div>
-                  {/* 头部信息 */}
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="font-semibold text-gray-900">{result.data.message}</p>
-                    <button
-                      onClick={async () => {
-                        if (!selectedStore) {
-                          toast.warning('请先选择店铺')
-                          return
-                        }
-                        setRefreshing(true)
-                        try {
-                          const res = await generateTasks({ storeId: selectedStore.id })
-                          await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-                          await refetchTasks()
-                          const updatedTasks = await refetchTasks()
-                          const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
-                          const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
-                          setResultForTool('assistant', { 
-                            type: 'assistant', 
-                            data: { 
-                              message: `待办任务管理 (共 ${pendingTasks.length} 个)`,
-                              tasks: pendingTasks,
-                              urgentCount: urgentTasks.length,
-                              totalCount: pendingTasks.length,
-                            } 
-                          })
-                          const total = res?.tasks?.length ?? 0
-                          const meta: GenerateTasksMetadata = res?.metadata ?? {}
-                          const skipped = meta.skippedDuplicateCount ?? 0
-                          const generated = meta.generatedCount ?? 0
-                          if (total === 0) {
-                            if (skipped > 0 && generated > 0) {
-                              toast.info(`本次生成了 ${generated} 条建议，均与当前待办重复，未添加新任务。可先完成或关闭部分待办后再试。`)
-                            } else {
-                              toast.info('已刷新，当前无新任务。若刚点过「智能生成」且列表里已有待办，多半是本次建议与已有重复，可先完成或关闭部分待办后再试。')
-                            }
-                          } else {
-                            toast.success(`成功生成 ${total} 个新任务！`)
-                          }
-                        } catch (error: unknown) {
-                          const err = error as { response?: { data?: { error?: string; detail?: string } }; message?: string }
-                          console.error('生成任务失败:', error)
-                          const errorMsg = err.response?.data?.detail || err.response?.data?.error || err.message || '生成任务失败'
-                          toast.error(errorMsg)
-                        } finally {
-                          setRefreshing(false)
-                        }
-                      }}
-                      disabled={refreshing}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                    >
-                      <RefreshCw className={`w-3 h-3 shrink-0 ${refreshing ? 'animate-spin' : ''}`} />
-                      {refreshing ? '生成中…(约 15–30 秒)' : '智能生成'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        if (!selectedStore) {
-                          toast.warning('请先选择店铺')
-                          return
-                        }
-                        if (result.data.totalCount === 0) {
-                          toast.info('没有待办任务')
-                          return
-                        }
-                        setCompletingAll(true)
-                        try {
-                          await completeAllTasks.mutateAsync(selectedStore.id)
-                          await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-                          const updatedTasks = await refetchTasks()
-                          const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
-                          const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
-                          setResultForTool('assistant', { 
-                            type: 'assistant', 
-                            data: { 
-                              message: `待办任务管理 (共 ${pendingTasks.length} 个)`,
-                              tasks: pendingTasks,
-                              urgentCount: urgentTasks.length,
-                              totalCount: pendingTasks.length,
-                            } 
-                          })
-                          toast.success('所有任务已完成！')
-                        } catch (error: unknown) {
-                          const err = error as { response?: { data?: { error?: string } }; message?: string }
-                          console.error('一键完成失败:', error)
-                          const errorMsg = err.response?.data?.error || err.message || '一键完成失败'
-                          toast.error(errorMsg)
-                        } finally {
-                          setCompletingAll(false)
-                        }
-                      }}
-                      disabled={completingAll || result.data.totalCount === 0}
-                      className="flex items-center gap-2 px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-50"
-                    >
-                      <CheckCircle2 className={`w-3 h-3 ${completingAll ? 'animate-spin' : ''}`} />
-                      一键完成
-                    </button>
-                  </div>
-
-                  {/* 统计信息 */}
-                  {result.data.urgentCount > 0 && (
-                    <div className="mb-3 p-2 bg-red-50 rounded-lg border border-red-200">
-                      <p className="text-xs text-red-700">
-                        <AlertCircle className="w-3 h-3 inline mr-1" />
-                        <strong>{result.data.urgentCount} 个紧急任务</strong>需要优先处理
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 任务列表 */}
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto">
-                    {result.data.tasks && result.data.tasks.length === 0 ? (
-                      <div className="text-center py-8">
-                        <Clock className="w-12 h-12 text-gray-300 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">还没有待办任务</p>
-                        <p className="text-xs text-gray-400 mt-1">点击"智能生成"创建任务</p>
-                      </div>
-                    ) : (
-                      result.data.tasks?.map((task) => (
-                        <div
-                          key={task.id}
-                          className={`flex items-start gap-3 p-3 rounded-lg border transition-all hover:shadow-sm ${
-                            task.priority === 'urgent'
-                              ? 'bg-red-50 border-red-200'
-                              : 'bg-white border-gray-200'
-                          }`}
-                        >
-                          {task.priority === 'urgent' ? (
-                            <div className="p-1.5 bg-red-100 rounded shrink-0 mt-0.5">
-                              <AlertCircle className="w-4 h-4 text-red-600" />
-                            </div>
-                          ) : (
-                            <div className="p-1.5 bg-gray-100 rounded shrink-0 mt-0.5">
-                              <CheckCircle2 className="w-4 h-4 text-gray-500" />
-                            </div>
-                          )}
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-sm font-semibold mb-1 ${
-                              task.priority === 'urgent' ? 'text-red-900' : 'text-gray-900'
-                            }`}>
-                              {task.title}
-                            </p>
-                            {task.description && (
-                              <p className="text-xs text-gray-600 leading-relaxed">
-                                {task.description}
-                              </p>
-                            )}
-                          </div>
-                          <button
-                            onClick={async () => {
-                              try {
-                                await updateTask.mutateAsync({ id: task.id, status: 'completed' })
-                                await queryClient.invalidateQueries({ queryKey: ['tasks'] })
-                                const updatedTasks = await refetchTasks()
-                                const pendingTasks = (updatedTasks.data || []).filter((t) => t.status === 'pending')
-                                const urgentTasks = pendingTasks.filter((t) => t.priority === 'urgent')
-                                setResultForTool('assistant', { 
-                                  type: 'assistant', 
-                                  data: { 
-                                    message: `待办任务管理 (共 ${pendingTasks.length} 个)`,
-                                    tasks: pendingTasks,
-                                    urgentCount: urgentTasks.length,
-                                    totalCount: pendingTasks.length,
-                                  } 
-                                })
-                                toast.success('任务已完成！')
-                              } catch (e) {
-                                console.error('标记完成失败', e)
-                                toast.error('操作失败，请重试')
-                              }
-                            }}
-                            disabled={updateTask.isPending}
-                            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors shrink-0 ${
-                              task.priority === 'urgent'
-                                ? 'bg-red-600 text-white hover:bg-red-700'
-                                : 'bg-indigo-500 text-white hover:bg-indigo-600'
-                            } disabled:opacity-50`}
-                          >
-                            ✓
-                          </button>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  {/* 底部提示 */}
-                  <div className="mt-3 p-2 bg-indigo-50 rounded-lg border border-indigo-200">
-                    <p className="text-xs text-indigo-700">
-                      💡 <strong>提示：</strong>所有任务都基于运营数据智能生成，包含详细的执行建议和量化预期效果
-                    </p>
-                  </div>
-                </div>
-              )}
-            </div>
-            {/* 全屏查看话术 */}
-            {result?.type === 'script' && typeof scriptData?.content === 'string' && resultFullScreen && (
-              <div
-                className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-                onClick={() => setResultFullScreen(false)}
-              >
-                <div
-                  className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] flex flex-col"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <div className="flex items-center justify-between p-4 border-b">
-                    <h3 className="font-semibold text-gray-900">{t('tools.resultTitleScriptFullScreen')}</h3>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={async () => {
-                          const copyText = scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)
-                          const ok = await copyToClipboard(copyText ?? '')
-                          if (ok) toast.success(t('tools.copyToClipboard'))
-                          else toast.error(t('tools.copyFailed'))
-                        }}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-blue-600 hover:bg-blue-50 rounded-lg"
-                      >
-                        <Copy className="w-4 h-4" />
-                        {t('tools.copyShort')}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setResultFullScreen(false)}
-                        className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
-                        title={t('tools.exitFullScreen')}
-                      >
-                        <Minimize2 className="w-5 h-5" />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-4">
-                    <pre className="whitespace-pre-wrap leading-relaxed text-[15px] font-sans text-gray-800">
-                      {scriptNeedsTranslation && scriptTranslatedContent ? scriptTranslatedContent : (scriptData?.content as string)}
-                    </pre>
-                  </div>
-                </div>
-              </div>
-            )}
-        </div>
+        {result && propToolId && (
+          <ToolResultDisplay
+            result={result}
+            propToolId={propToolId}
+            selectedStore={selectedStore}
+            streamingContent={streamingContent}
+            onClose={() => { setResultForTool(propToolId, null) }}
+            setResultForTool={setResultForTool}
+            refetchTasks={refetchTasks as () => Promise<{ data: Task[] | undefined }>}
+          />
         )}
       </div>
 
-      {/* 上传模态框（录屏分析页与素材上传共用） */}
       {showUploadModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-semibold mb-4">{t('tools.uploadVideo')}</h3>
-            <div className="space-y-4">
-              {propToolId === 'screen-recording' && (
-                <div className="space-y-3 pb-3 border-b border-gray-200">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoPlatform')}</label>
-                    <select
-                      value={videoPlatform}
-                      onChange={(e) => setVideoPlatform(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {VIDEO_PLATFORMS.map((p) => (
-                        <option key={p.code} value={p.code}>{p.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoCountry')}</label>
-                    <select
-                      value={videoCountry}
-                      onChange={(e) => setVideoCountry(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {VIDEO_COUNTRIES.map((c) => (
-                        <option key={c.code} value={c.code}>{c.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoType')}</label>
-                    <select
-                      value={videoType}
-                      onChange={(e) => setVideoType(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    >
-                      {VIDEO_TYPES.map((vt) => (
-                        <option key={vt.code || '_auto'} value={vt.code}>{vt.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">{t('tools.videoAnalysisFocus')}</label>
-                    <textarea
-                      value={videoAnalysisFocus}
-                      onChange={(e) => setVideoAnalysisFocus(e.target.value)}
-                      placeholder={t('tools.videoAnalysisFocusPlaceholder')}
-                      rows={2}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 resize-none"
-                    />
-                  </div>
-                </div>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="video/*"
-                className="hidden"
-                onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
-              />
-              <div
-                role="button"
-                tabIndex={0}
-                onClick={() => fileInputRef.current?.click()}
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setIsDragging(true)
-                }}
-                onDragLeave={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setIsDragging(false)
-                }}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  setIsDragging(false)
-                  const file = e.dataTransfer?.files?.[0]
-                  if (file?.type?.startsWith('video/')) {
-                    setSelectedFile(file)
-                  } else if (file) {
-                    toast.error('请选择视频文件（MP4、WebM、MOV 等）')
-                  }
-                }}
-                className={`border-2 border-dashed rounded-xl min-h-[220px] py-16 px-12 flex flex-col items-center justify-center text-center cursor-pointer transition-colors ${
-                  isDragging
-                    ? 'border-blue-500 bg-blue-50'
-                    : 'border-gray-300 hover:border-gray-400 hover:bg-gray-50'
-                }`}
-              >
-                <Upload className="w-12 h-12 mx-auto mb-2 text-gray-400" />
-                <p className="text-sm text-gray-600">{t('tools.dragDropHint')}</p>
-              </div>
-              {selectedFile && (
-                <div className="text-sm text-gray-600">
-                  已选择: {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                </div>
-              )}
-            </div>
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowUploadModal(false)
-                  setSelectedFile(null)
-                }}
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
-              >
-                取消
-              </button>
-              <button
-                onClick={handleUpload}
-                disabled={!selectedFile || createMaterial.isPending || uploadVideo.isPending}
-                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {(createMaterial.isPending || uploadVideo.isPending) ? '上传中...' : '上传'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <UploadModal
+          isScreenRecording={propToolId === 'screen-recording'}
+          selectedStore={selectedStore}
+          onClose={() => setShowUploadModal(false)}
+          onUploadVideo={(formData) => {
+            uploadVideo.mutate(formData, {
+              onSuccess: () => { refetchVideos(); toast.success(t('tools.videoUploadSuccessAnalyzing')) },
+              onError: (error: unknown) => {
+                const err = error as { response?: { data?: { error?: string } }; message?: string }
+                toast.error(err.response?.data?.error || err.message || t('tools.errorUploadShort'))
+              },
+            })
+          }}
+          onUploadMaterial={async (formData) => { await createMaterial.mutateAsync(formData) }}
+          uploadPending={createMaterial.isPending || uploadVideo.isPending}
+        />
       )}
+
+      <ParseProductModal
+        isOpen={showParseModal}
+        onClose={() => setShowParseModal(false)}
+        onParsed={(data) => {
+          setScriptForm((prev) => ({
+            ...prev,
+            ...(data.productName ? { productName: data.productName } : {}),
+            ...(data.price ? { price: data.price } : {})
+          }))
+          if (data.coreFeatures) setCoreFeatures((prev) => prev ? `${prev}\n\n${data.coreFeatures}` : data.coreFeatures)
+          if (data.afterSalesInfo) setAfterSalesInfo((prev) => prev ? `${prev}\n\n${data.afterSalesInfo}` : data.afterSalesInfo)
+          toast.success(t('tools.parseSuccess', { fallback: '已成功提取商品信息并填入表单' }))
+        }}
+      />
     </div>
   )
 }

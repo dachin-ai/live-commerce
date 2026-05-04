@@ -12,7 +12,9 @@ export type ScriptType =
   | 'segment-benefits'
   | 'segment-after-sales'
   | 'segment-closing'
-export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH'
+  | 'framework-weak-product'
+  | 'framework-strong-product'
+export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH' | 'id-ID'
 
 // 话术类型元数据
 export const SCRIPT_TYPE_META = {
@@ -85,6 +87,26 @@ export const SCRIPT_TYPE_META = {
     scenario: '完整流程第6环节单独生成',
     duration: '60-90秒',
     elements: ['限时限量', '最终价值', '强行动召唤', '倒计时催单'],
+  },
+  'framework-weak-product': {
+    id: 'framework-weak-product',
+    nameCN: '弱塑品强营销框架',
+    nameEN: 'Fast-sell Framework (Weak Product Build)',
+    nameTH: 'กรอบขายเร็ว (สร้างสินค้าเบา)',
+    goal: '高频循环：一卖点一逼单，2分钟/循环，适合引流款/爆单款',
+    scenario: '低中客单价、快速出单、引流爆单场景',
+    duration: '2分钟/循环，可重复',
+    elements: ['痛点闪击(15s)', '单一卖点(30-45s)', '利益点(15s)', '逼单CTA(15s)', '互动循环(15s)'],
+  },
+  'framework-strong-product': {
+    id: 'framework-strong-product',
+    nameCN: '强塑品理性说服框架',
+    nameEN: 'Persuasion Framework (Strong Product Build)',
+    nameTH: 'กรอบโน้มน้าว (สร้างสินค้าหนัก)',
+    goal: '深度塑品：Before/After对比+算账法+理性说服，适合利润款/战略款',
+    scenario: '高客单价、品质品牌、利润款战略款场景',
+    duration: '6-10分钟完整流程',
+    elements: ['圈人群共鸣(60s)', '深度塑品Before/After(90-120s)', '算账法说服(60s)', '顾虑打消(60s)', '售后背书(30s)', '理性逼单(60s)'],
   },
 } as const
 

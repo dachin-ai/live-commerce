@@ -63,6 +63,20 @@ const COZE_SCRIPT_TYPE_MAPPING: Record<ScriptType, CozeScriptTypeConfig> = {
     use_promotion_info: true,
     segmentHint: '仅输出逼单部分',
   },
+  'framework-weak-product': {
+    script_type_name: '弱塑品强营销框架话术',
+    script_type: 'simple_cycle',
+    script_type_description: '高频循环：一卖点一逼单，2分钟/循环，适合引流款/爆单款/低中客单价',
+    use_promotion_info: true,
+    segmentHint: '按「弱塑品强营销」框架输出：痛点闪击(15s)→单一卖点(30-45s)→利益点(15s)→逼单CTA(15s)→互动循环(15s)，整体2分钟可循环，节奏快、价格前置',
+  },
+  'framework-strong-product': {
+    script_type_name: '强塑品理性说服框架话术',
+    script_type: 'full_process',
+    script_type_description: '深度塑品：Before/After对比+算账法+理性说服，适合利润款/高客单价',
+    use_promotion_info: true,
+    segmentHint: '按「强塑品理性说服」框架输出：圈人群共鸣(60s)→深度塑品Before/After(90-120s)→算账法说服(60s)→顾虑打消(60s)→售后背书(30s)→理性逼单(60s)；塑品段必须有Before/After场景对比与算账；逼单温和理性，不咆哮',
+  },
 }
 
 const COUNTRY_CODE_TO_NAME: Record<string, string> = {
@@ -130,30 +144,103 @@ export function buildScriptToolCallMessage(
       ? COUNTRY_CODE_TO_NAME[explicitCountryCode]
       : getStoreCountry(storeContext, userInput.language)
   const scriptTypeConfig = COZE_SCRIPT_TYPE_MAPPING[userInput.scriptType] || COZE_SCRIPT_TYPE_MAPPING['full-sales']
-  const brackets: string[] = [
-    `【product_name：${userInput.productName}】`,
-    `【country：${countryName}】`,
-    `【script_type：${scriptTypeConfig.script_type}】`,
-  ]
-  if (userInput.price) brackets.push(`【price：${String(userInput.price).replace(/[^\d.]/g, '') || userInput.price}】`)
-  if (userInput.features) brackets.push(`【features：${userInput.features}】`)
-  if (userInput.targetAudience) brackets.push(`【target_audience：${userInput.targetAudience}】`)
-  if (promotionInfo && scriptTypeConfig.use_promotion_info) brackets.push(`【promotion_info：${promotionInfo}】`)
-  if (userInput.productSku) brackets.push(`【sku_info：${userInput.productSku}】`)
+  /** 与 Coze 文档范式一致：单品 / 组套 使用不同括号字段 */
+  const brackets: string[] = []
+  if (userInput.isCombo) {
+    brackets.push(`【product_name：${userInput.productName}】`)
+    brackets.push(`【script_type：${scriptTypeConfig.script_type}】`)
+    brackets.push(`【country：${countryName}】`)
+    if (userInput.targetAudience) brackets.push(`【target_audience：${userInput.targetAudience}】`)
+    brackets.push(`【is_combo：true】`)
+    if (userInput.comboTotalPrice) brackets.push(`【combo_total_price：${userInput.comboTotalPrice}】`)
+    if (userInput.comboOriginalPrice) brackets.push(`【combo_original_price：${userInput.comboOriginalPrice}】`)
+    if (userInput.comboDiscountAmount) brackets.push(`【combo_discount_amount：${userInput.comboDiscountAmount}】`)
+    if (userInput.comboProductsJson) brackets.push(`【products：${userInput.comboProductsJson}】`)
+    if (userInput.bundleFeaturesNarrative?.trim())
+      brackets.push(`【combo_bundle_features：${userInput.bundleFeaturesNarrative.trim()}】`)
+    if (promotionInfo && scriptTypeConfig.use_promotion_info) brackets.push(`【promotion_info：${promotionInfo}】`)
+    if (userInput.afterSalesInfo) brackets.push(`【after_sales_info：${userInput.afterSalesInfo}】`)
+    if (userInput.competitorLink?.trim()) brackets.push(`【competitor_reference：${userInput.competitorLink.trim()}】`)
+    if (userInput.priceLevel) brackets.push(`【price_level：${userInput.priceLevel}】`)
+    if (userInput.productRole) brackets.push(`【product_role：${userInput.productRole}】`)
+  } else {
+    brackets.push(`【product_name：${userInput.productName}】`)
+    brackets.push(`【script_type：${scriptTypeConfig.script_type}】`)
+    brackets.push(`【country：${countryName}】`)
+    if (userInput.price) brackets.push(`【price：${String(userInput.price).replace(/[^\d.]/g, '') || userInput.price}】`)
+    if (userInput.productSku) brackets.push(`【sku_info：${userInput.productSku}】`)
+    if (userInput.features) brackets.push(`【features：${userInput.features}】`)
+    if (userInput.targetAudience) brackets.push(`【target_audience：${userInput.targetAudience}】`)
+    if (promotionInfo && scriptTypeConfig.use_promotion_info) brackets.push(`【promotion_info：${promotionInfo}】`)
+    if (userInput.afterSalesInfo) brackets.push(`【after_sales_info：${userInput.afterSalesInfo}】`)
+    if (userInput.competitorLink?.trim()) brackets.push(`【competitor_reference：${userInput.competitorLink.trim()}】`)
+    if (userInput.priceLevel) brackets.push(`【price_level：${userInput.priceLevel}】`)
+    if (userInput.productRole) brackets.push(`【product_role：${userInput.productRole}】`)
+  }
+  const isFrameworkType = userInput.scriptType === 'framework-weak-product' || userInput.scriptType === 'framework-strong-product'
   const customReqParts: string[] = []
-  if (scriptTypeConfig.segmentHint) customReqParts.push(scriptTypeConfig.segmentHint)
+  // For framework types, segmentHint is already injected via stageRequirement + outputFormat below.
+  // Adding it here a second time sends conflicting signals that cause the Bot to ignore the framework structure.
+  if (scriptTypeConfig.segmentHint && !isFrameworkType) customReqParts.push(scriptTypeConfig.segmentHint)
   if (userInput.customRequirements && userInput.customRequirements.trim()) customReqParts.push(userInput.customRequirements.trim())
   if (customReqParts.length > 0) brackets.push(`【custom_requirements：${customReqParts.join('；')}】`)
-  const stageRequirement = userInput.scriptType === 'full-sales'
-    ? '只输出完整销售流程话术。'
-    : (scriptTypeConfig.segmentHint ? `${scriptTypeConfig.segmentHint}。` : '只输出当前指定单环节话术。')
+
+  let stageRequirement: string
+  if (userInput.isCombo) {
+    stageRequirement = userInput.scriptType === 'full-sales'
+      ? '输出完整销售流程话术（多环节一体），结构与 Coze 话术专家默认版式对齐；此为组套：以核心产品（is_main=true）为主展开塑品与逼单，配套产品仅作简要组合价值说明，勿写成多个单品并列长稿。'
+      : `${scriptTypeConfig.segmentHint || '按所选环节'}；组套场景以核心产品为主，配套点到为止。`
+  } else if (userInput.scriptType === 'full-sales') {
+    stageRequirement = '输出完整销售流程话术（多环节一体），结构与 Coze 话术专家默认版式对齐。'
+  } else if (isFrameworkType) {
+    stageRequirement = scriptTypeConfig.segmentHint || ''
+  } else {
+    stageRequirement = scriptTypeConfig.segmentHint
+      ? `${scriptTypeConfig.segmentHint}；仍须保留本段的「💡 小白主播提示」与必要的【】小标题。`
+      : '只输出当前指定单环节话术；须保留本段导演提示与【】结构。'
+  }
+
+  if (userInput.competitorLink?.trim()) {
+    stageRequirement +=
+      ' 若参数含竞品参考（链接或用户填写的对比要点），据此做差异化口播与站位；对用户未写明、且无法从链接获知的竞品数据勿编造；通常无法实时打开链接。'
+  }
+
+  // Framework types get their own output format so the standard segment structure
+  // does not override the cycle / deep-persuasion rhythm specified in segmentHint.
+  let outputFormat: string
+  if (userInput.scriptType === 'framework-weak-product') {
+    outputFormat = [
+      '【输出格式 — 弱塑品强营销框架，严格按此结构】',
+      '整段控制在约 350-400 字（2 分钟可口播循环），严格按五步输出：',
+      '❗ 痛点闪击（约 50 字）→ ✅ 单一卖点（约 100-150 字，只讲 1 个核心卖点）→ 💰 利益点（约 50 字，直接报价+促销）→ 🛒 逼单CTA（约 50 字）→ 💬 互动循环（约 50 字，引导评论/互动过渡下一轮）。',
+      '禁止写成多环节完整销售流程；禁止输出「小白主播提示」；禁止图表/数据分析报告。',
+    ].join('')
+  } else if (userInput.scriptType === 'framework-strong-product') {
+    outputFormat = [
+      '【输出格式 — 强塑品理性说服框架，严格按此结构】',
+      '整段控制在约 1000-1800 字（6-10 分钟口播），严格按六步输出：',
+      '1️⃣ 圈人群共鸣（约 60 秒）→ 2️⃣ 深度塑品 Before/After（约 90-120 秒，必须有对比场景）→ 3️⃣ 算账法说服（约 60 秒，将价格拆解到每次使用成本）→ 4️⃣ 顾虑打消（约 60 秒）→ 5️⃣ 售后背书（约 30 秒）→ 6️⃣ 理性逼单（约 60 秒，温和坚定，不咆哮）。',
+      '每步用「### 步骤名 (时长)」作标题；Before/After 用「Before：…」「After：…」明确对比；算账法必须有数字拆解。',
+      '禁止输出「小白主播提示」样式的导演提示；禁止图表/数据分析报告。',
+    ].join('')
+  } else {
+    outputFormat = [
+      '【输出格式 — 须完整保留，勿以「精简」为由删减】',
+      '1）环节划分：完整流程须覆盖圈人群、塑品、打消顾虑、利益点、售后、逼单（或与你 Bot 内定等价环节）；每大段可用 emoji 序号（如 1️⃣ 2️⃣）开头，或用 Markdown「### 环节名 (时长)」与单独一行的「---」分隔大段。',
+      '2）小白主播提示：每个大段开头另起一行写「💡 小白主播提示：……」，一句话点明本段要讲什么、语气与镜头注意；该行必须保留。',
+      '3）半角【】结构：须保留「【核心卖点 1：……】」「【顾虑 1：……】」「【承诺 1：……】」「【原价 vs 现价】」「【SKU 说明】」等括号标题，其下再写口播正文；可含 Before（使用前）/ After（使用后）、生活场景、对比句。',
+      '4）口播与提示混排：导演提示、emoji、【】标题与口播正文同属交付内容，禁止只输出「纯口播」而删掉提示与【】行。',
+      '5）禁止输出图表、Mermaid、仪表盘、宽表、政策对比或数据分析报告；仅输出直播话术文稿。',
+    ].join('')
+  }
+
   const query = [
     '任务：直播带货话术生成（非政策分析）。',
-    '请严格仅根据下列参数生成话术，勿使用店铺名称、品类或其它未列出的信息。',
+    '请严格仅根据下列参数生成话术，勿使用店铺名称、店铺类目或其它未在参数中出现的背景信息。',
     stageRequirement,
-    '禁止输出图表、Mermaid、仪表盘、表格、政策对比或分析报告。',
+    outputFormat,
     `请基于以下参数生成：${brackets.join('')}`,
-    '输出要求：仅输出纯中文口播话术正文。',
+    '最后一行要求：直接输出完整话术全文（从标题或第一节开始），不要前言、不要复述本指令。',
   ].join('')
   return query
 }
@@ -193,7 +280,33 @@ export function buildCozeScriptPrompts(
 ${userInput.productSku ? `- SKU信息（sku_info）：${userInput.productSku}` : ''}
 ${userInput.price ? `- 价格（price）：${userInput.price}` : ''}
 ${userInput.features ? `- 产品特点（features）：${userInput.features}` : ''}
-${userInput.targetAudience ? `- 目标人群（target_audience）：${userInput.targetAudience}` : ''}`
+${userInput.targetAudience ? `- 目标人群（target_audience）：${userInput.targetAudience}` : ''}
+${userInput.afterSalesInfo && !userInput.isCombo ? `- 售后信息（after_sales_info）：${userInput.afterSalesInfo}` : ''}`
+
+  const competitorSection = userInput.competitorLink?.trim()
+    ? `
+
+## 竞品参考（competitor_reference）
+- 可为商品/店铺链接，或用户手写的竞品关键参数（价格带、核心卖点、规格、赠品等）；模型通常无法打开链接，且仅可采信本字段已写明的文字，勿虚构未出现的数据：
+${userInput.competitorLink.trim()}`
+    : ''
+
+  const comboSection = userInput.isCombo
+    ? `
+
+## 组套入参（combo，与 Coze 范式一致）
+- is_combo：true
+${userInput.comboTotalPrice ? `- combo_total_price：${userInput.comboTotalPrice}` : ''}
+${userInput.comboOriginalPrice ? `- combo_original_price：${userInput.comboOriginalPrice}` : ''}
+${userInput.comboDiscountAmount ? `- combo_discount_amount：${userInput.comboDiscountAmount}` : ''}
+- products（JSON，is_main=true 为核心品）：
+\`\`\`json
+${userInput.comboProductsJson ?? '[]'}
+\`\`\`
+${userInput.bundleFeaturesNarrative ? `- 组套整体特点（补充）：${userInput.bundleFeaturesNarrative}` : ''}
+${userInput.afterSalesInfo ? `- 售后信息（after_sales_info）：${userInput.afterSalesInfo}` : ''}
+话术结构：以核心产品为主展开，配套仅作组合价值简要说明。`
+    : ''
 
   const countrySection = `## 国家/地区（country 必填）
 - 国家（country）：${countryName}
@@ -220,19 +333,29 @@ ${userInput.targetAudience ? `- 目标人群（target_audience）：${userInput.
     ? `\n\n## 店铺数据参考\n${research.dataHint}${research.storeContext.storeName ? `\n店铺：${research.storeContext.storeName}` : ''}`
     : ''
 
+  const formatBlock = [
+    '## 输出版式（与 Coze 控制台一致，须遵守）',
+    '- 每大段：可选 emoji 序号 + 环节名 + 建议时长；段首必须有「💡 小白主播提示：…」一行。',
+    '- 段内用「【核心卖点 n：…】」「【顾虑 n：…】」等半角【】标题组织卖点、顾虑、承诺、价格、SKU；可写 Before/After、生活场景。',
+    '- 可用 ### 标题与 --- 分隔线区分大段；不要删掉提示行与【】标题。',
+    '- 禁止输出图表、Mermaid、政策对比报告；仅输出话术文稿。',
+  ].join('\n')
+
   const userPrompt = `${requestSummaryParts.join('，')}
 
 ---
 
-请为以下产品生成${scriptTypeConfig.script_type_name}类型的直播话术。仅输出纯中文话术（由终端系统负责翻译为目标语言）。
+请为以下产品生成${scriptTypeConfig.script_type_name}类型的直播话术。默认输出简体中文（若终端请求其它界面语言，系统会在收到后再翻译，你仍先按完整结构生成中文稿）。
 
-${productSection}
+${productSection}${comboSection}${competitorSection}
 
 ${countrySection}${promotionSection}${customRequirementsSection}${storeSection}
 
 ## 话术类型（script_type）
 ${scriptTypeConfig.script_type}
 ${scriptTypeConfig.script_type_description}
+
+${formatBlock}
 
 请生成话术：`
 

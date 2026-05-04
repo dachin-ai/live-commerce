@@ -1,13 +1,15 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import i18n, { loadLocale } from '../i18n'
+import { htmlLangFromLocale } from '../utils/htmlLang'
 
 const STORAGE_KEY = 'lvbcsym_locale'
 
-export type Locale = 'zh-CN' | 'en-US' | 'th-TH'
+export type Locale = 'zh-CN' | 'en-US' | 'th-TH' | 'id-ID'
 
 const DEFAULT_LOCALE: Locale = 'zh-CN'
 
-const LOCALES: Locale[] = ['zh-CN', 'en-US', 'th-TH']
+const LOCALES: Locale[] = ['zh-CN', 'en-US', 'th-TH', 'id-ID']
 
 function loadStoredLocale(): Locale {
   if (typeof window === 'undefined') return DEFAULT_LOCALE
@@ -63,7 +65,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     const stored = loadStoredLocale()
     if (stored !== locale) setLocaleState(stored)
     if (stored !== 'zh-CN') loadLocale(stored).then(() => i18n.changeLanguage(stored))
-  }, [])
+  }, [locale])
+
+  // 同步到 <html lang>，影响原生控件（date/month）与可访问性
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    try {
+      document.documentElement.lang = htmlLangFromLocale(locale)
+    } catch {
+      // ignore
+    }
+  }, [locale])
 
   const countryCode = localeToCountryCode(locale)
 

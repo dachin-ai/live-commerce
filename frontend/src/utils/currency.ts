@@ -13,6 +13,8 @@ export interface CurrencyOption {
   rateToCny: number
 }
 
+type TFunctionLike = (key: string, opts?: { defaultValue?: string; fallback?: string }) => string
+
 /** 人民币对多国：1 CNY = rateToCny 单位该货币（参考汇率） */
 export const CURRENCIES: CurrencyOption[] = [
   { code: 'CNY', name: '人民币', symbol: '¥', rateToCny: 1 },
@@ -51,13 +53,30 @@ export function convertAmount(amount: number, fromCode: string, toCode: string):
   return cny * to.rateToCny
 }
 
+function currencyNameKey(code: string): string | undefined {
+  const n = (code || '').trim().toUpperCase()
+  if (!n) return undefined
+  return `currencies.${n}`
+}
+
+export function getCurrencyLabel(t: TFunctionLike, code: string): string {
+  const key = currencyNameKey(code)
+  const fallback =
+    getCurrencyByCode(code)?.name ||
+    code
+  if (!key) return fallback
+  const v = t(key, { defaultValue: fallback }) as unknown
+  return typeof v === 'string' && v.trim() ? v : fallback
+}
+
 /** 展示用选项：店铺货币(store) + 人民币 + 多国 */
-export function getDisplayOptions(storeCurrencyCode?: string): { value: string; label: string }[] {
+export function getDisplayOptions(t: TFunctionLike, storeCurrencyCode?: string): { value: string; label: string }[] {
   const store = storeCurrencyCode ? getCurrencyByCode(storeCurrencyCode) : null
-  const base = [{ value: 'store', label: store ? `店铺货币 (${store.symbol} ${storeCurrencyCode})` : '店铺货币' }]
+  const storeFallback = store ? `Store Currency (${store.symbol} ${storeCurrencyCode})` : 'Store Currency'
+  const base = [{ value: 'store', label: t('dashboard.currencyStore', { defaultValue: storeFallback }) }]
   const rest = CURRENCIES.filter((c) => c.code !== storeCurrencyCode).map((c) => ({
     value: c.code,
-    label: `${c.name} (${c.symbol} ${c.code})`,
+    label: `${getCurrencyLabel(t, c.code)} (${c.symbol} ${c.code})`,
   }))
   return [...base, ...rest]
 }

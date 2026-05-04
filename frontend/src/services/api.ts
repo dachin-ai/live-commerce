@@ -3,6 +3,7 @@ import axios from 'axios'
 const api = axios.create({
   baseURL: '/api',
   timeout: 10000,
+  withCredentials: true,  // 浏览器自动携带 httpOnly Cookie
   headers: {
     'Content-Type': 'application/json',
   },
@@ -11,10 +12,7 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    // Token 由 httpOnly Cookie 自动携带，无需手动设置 Authorization
     // 多语言：带用户当前语言与地区，供后端/LLM 入参
     try {
       const locale = localStorage.getItem('lvbcsym_locale')
@@ -50,7 +48,7 @@ api.interceptors.response.use(
 
     if (status === 401 || errorMessage === '未登录') {
       console.warn('未授权，需要登录')
-      localStorage.removeItem('token')
+      // Cookie 由后端 clearCookie 管理，前端只清理 UI 状态
       localStorage.removeItem('userId')
       localStorage.removeItem('userRole')
       localStorage.removeItem('userName')

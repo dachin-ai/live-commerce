@@ -76,6 +76,11 @@ export interface LiveStats {
   productClicks?: number
   clickThroughRate?: number
   interactionRate?: number
+  meta?: {
+    requested?: { dateFrom: string; dateTo: string; timeRange?: string }
+    inRangeCount?: number
+    available?: { minDate: string | null; maxDate: string | null; count: number }
+  }
 }
 
 /** timePeriod：today | week | month | quarter | year | custom | monthPick | yearPick；custom 传 dateFrom/dateTo；monthPick 传 month(YYYY-MM)；yearPick 传 year(YYYY) */

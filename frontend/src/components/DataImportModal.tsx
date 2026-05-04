@@ -1,8 +1,10 @@
 import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { X, Upload, FileSpreadsheet, CheckCircle, AlertCircle } from 'lucide-react'
 import { useStore } from '../contexts/StoreContext'
 import { useToast } from '../contexts/ToastContext'
 import { importTikTokData, DataImportResult } from '../services/dataImport'
+import { GlassButton } from './ui/GlassButton'
 
 /** 传入则锁定本次导入目标店铺（避免打开弹窗后切换店铺导致数据导入到错误店铺） */
 export interface DataImportModalProps {
@@ -14,6 +16,7 @@ export interface DataImportModalProps {
 }
 
 export default function DataImportModal({ isOpen, onClose, onSuccess, targetStore }: DataImportModalProps) {
+  const { t } = useTranslation()
   const { selectedStore } = useStore()
   const toast = useToast()
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -33,7 +36,7 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
   const validateAndSetFile = (file: File | null) => {
     if (!file) return
     if (!file.name.match(/\.(xlsx|xls)$/i)) {
-      toast.error('只支持Excel文件（.xlsx, .xls）')
+      toast.error(t('dataImport.excelOnly'))
       return
     }
     setSelectedFile(file)
@@ -73,13 +76,13 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
     }
 
     if (!importTarget) {
-      toast.warning('请先选择店铺')
+      toast.warning(t('tasks.selectStoreFirst'))
       return
     }
 
     // 验证店铺平台
     if (importTarget.platform && importTarget.platform !== 'TikTok' && importTarget.platform !== '抖音') {
-      toast.error('该功能仅支持TikTok/抖音平台店铺')
+      toast.error(t('dataImport.tiktokDouyinOnly'))
       return
     }
 
@@ -87,7 +90,7 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
     try {
       const result = await importTikTokData(importTarget.id, selectedFile)
       setImportResult(result)
-      toast.success(result?.message || '数据导入成功')
+      toast.success(result?.message || t('dataImport.successDefault'))
       if (onSuccess) {
         onSuccess(result)
       }
@@ -106,7 +109,7 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
           errorMsg = (error as { message?: string }).message
         }
       }
-      toast.error(errorMsg || '导入失败，请检查文件格式')
+      toast.error(errorMsg || t('dataImport.failedCheckFormat'))
     } finally {
       setUploading(false)
     }
@@ -119,14 +122,14 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200 overflow-y-auto">
+      <div className="bg-white/90 backdrop-blur-xl border border-white/50 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
         {/* 头部 */}
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold text-gray-900">导入TikTok直播数据</h2>
+        <div className="flex items-center justify-between p-6 border-b border-slate-200/50">
+          <h2 className="text-xl font-bold text-slate-800">导入TikTok直播数据</h2>
           <button
             onClick={handleClose}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-slate-400 hover:text-slate-600 transition-colors p-1"
           >
             <X className="w-6 h-6" />
           </button>
@@ -136,13 +139,13 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
         <div className="p-6 space-y-6">
           {/* 店铺信息：显式展示本次导入目标，避免切店导致数据写入错误店铺 */}
           {importTarget && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600">
+            <div className="bg-primary-50 border border-primary-200 rounded-lg p-4">
+              <p className="text-sm text-slate-600">
                 <span className="font-medium">本次导入目标：</span>
                 {importTarget.name}
                 {importTarget.platform && ` (${importTarget.platform})`}
                 {targetStore && targetStore.id && (
-                  <span className="ml-1 text-blue-600 text-xs">（已锁定，数据将仅写入该店铺）</span>
+                  <span className="ml-1 text-primary-600 text-xs">（已锁定，数据将仅写入该店铺）</span>
                 )}
               </p>
             </div>
@@ -150,25 +153,25 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
 
           {/* 文件选择 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-slate-700 mb-2">
               选择Excel文件
             </label>
             <div
               className={`mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg transition-colors ${
                 isDragging
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-300 hover:border-blue-400'
+                  ? 'border-primary-500 bg-primary-50'
+                  : 'border-slate-300 hover:border-primary-400'
               }`}
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
             >
               <div className="space-y-1 text-center">
-                <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
-                <div className="flex text-sm text-gray-600">
+                <FileSpreadsheet className="mx-auto h-12 w-12 text-slate-400" />
+                <div className="flex text-sm text-slate-600">
                   <label
                     htmlFor="file-upload"
-                    className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
+                    className="relative cursor-pointer bg-white rounded-md font-medium text-primary-600 hover:text-primary-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-primary-500"
                   >
                     <span>选择文件</span>
                     <input
@@ -183,14 +186,14 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
                   </label>
                   <p className="pl-1">或拖拽文件到此处</p>
                 </div>
-                <p className="text-xs text-gray-500">支持 .xlsx, .xls 格式，最大50MB</p>
+                <p className="text-xs text-slate-500">支持 .xlsx, .xls 格式，最大50MB</p>
               </div>
             </div>
             {selectedFile && (
-              <div className="mt-3 flex items-center gap-2 text-sm text-gray-700">
+              <div className="mt-3 flex items-center gap-2 text-sm text-slate-700">
                 <FileSpreadsheet className="w-5 h-5 text-green-600" />
                 <span className="font-medium">{selectedFile.name}</span>
-                <span className="text-gray-500">
+                <span className="text-slate-500">
                   ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
                 </span>
               </div>
@@ -220,12 +223,12 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
           )}
 
           {/* 说明 */}
-          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-            <h3 className="text-sm font-medium text-gray-900 mb-2 flex items-center gap-2">
+          <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <h3 className="text-sm font-medium text-slate-900 mb-2 flex items-center gap-2">
               <AlertCircle className="w-4 h-4" />
               数据格式说明
             </h3>
-            <ul className="text-xs text-gray-600 space-y-1 list-disc list-inside">
+            <ul className="text-xs text-slate-600 space-y-1 list-disc list-inside">
               <li>Excel文件应包含以下字段：日期、直播ID、直播标题、总观看人数、总成交额(GMV)、总订单数、直播时长等</li>
               <li>支持中英文表头，系统会自动识别</li>
               <li>导入的数据将自动计算统计数据并更新到Dashboard</li>
@@ -235,22 +238,23 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
         </div>
 
         {/* 底部按钮 */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t bg-gray-50">
-          <button
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-slate-200/50">
+          <GlassButton
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             disabled={uploading}
+            variant="secondary"
           >
             取消
-          </button>
-          <button
+          </GlassButton>
+          <GlassButton
             onClick={handleUpload}
             disabled={!selectedFile || uploading}
-            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            variant="primary"
+            className="gap-2"
           >
             {uploading ? (
               <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin" />
                 导入中...
               </>
             ) : (
@@ -259,7 +263,7 @@ export default function DataImportModal({ isOpen, onClose, onSuccess, targetStor
                 开始导入
               </>
             )}
-          </button>
+          </GlassButton>
         </div>
       </div>
     </div>

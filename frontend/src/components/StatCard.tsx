@@ -56,7 +56,7 @@ export default function StatCard({
 
   // 渐变色配置（对标抖店罗盘）
   const gradients = {
-    blue: 'from-blue-500 to-blue-600',
+    blue: 'from-primary-500 to-primary-600',
     green: 'from-green-500 to-green-600',
     purple: 'from-purple-500 to-purple-600',
     orange: 'from-orange-500 to-orange-600',
@@ -105,9 +105,9 @@ export default function StatCard({
     <div className={`stat-card ${compact ? 'stat-card--compact' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex-1 min-w-0">
-          <p className="text-xs text-gray-600 mb-0.5" title={titleTooltip}>{title}</p>
-          <p className={`font-bold text-gray-900 ${compact ? 'text-lg' : 'text-2xl'}`}>{formattedValue}</p>
-          {subtitle && <p className="text-[11px] text-gray-500 mt-0.5">{subtitle}</p>}
+          <p className="text-xs text-slate-600 mb-0.5" title={titleTooltip}>{title}</p>
+          <p className={`font-bold text-slate-900 ${compact ? 'text-lg' : 'text-2xl'}`}>{formattedValue}</p>
+          {subtitle && <p className="text-[11px] text-slate-500 mt-0.5">{subtitle}</p>}
           {(hasChange || hasYoY) && (
             <div className="flex items-center flex-wrap gap-x-3 mt-1.5 text-[11px]">
               {preferences.showIcons && hasChange && (isChangePositive
@@ -116,13 +116,13 @@ export default function StatCard({
               )}
               {hasChange && (
                 <span className="flex items-center gap-1">
-                  <span className="text-gray-500">环比</span>
+                  <span className="text-slate-500">环比</span>
                   <ChangeSpan value={change!} />
                 </span>
               )}
               {hasYoY && (
                 <span className="flex items-center gap-1">
-                  <span className="text-gray-500">同比</span>
+                  <span className="text-slate-500">同比</span>
                   <ChangeSpan value={changeYoY!} />
                 </span>
               )}

@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import Sidebar from '../components/Sidebar'
+import { useTranslation } from 'react-i18next'
+import AppLayout from '../components/AppLayout'
+import { GlassInput } from '../components/ui/GlassInput'
+import { GlassButton } from '../components/ui/GlassButton'
 import { useCurrentUser, updateProfile, changePassword, changeEmail, type User as AuthUser } from '../services/auth'
 import { useToast } from '../contexts/ToastContext'
 import { User, Lock, Mail, Save } from 'lucide-react'
 
 export default function Profile() {
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
+  const { t } = useTranslation()
   const { data: user } = useCurrentUser()
   const queryClient = useQueryClient()
   const toast = useToast()
@@ -33,12 +36,12 @@ export default function Profile() {
           old ? { ...old, name: data.name } : old
         )
       }
-      toast.success('资料已更新')
+      toast.success(t('profile.updated'))
       setNameSaving(false)
     },
     onError: (err: unknown) => {
       const error = err as { response?: { data?: { error?: string } }; message?: string }
-      toast.error(error.response?.data?.error || error.message || '更新失败')
+      toast.error(error.response?.data?.error || error.message || t('profile.updateFailed'))
       setNameSaving(false)
     },
   })
@@ -51,14 +54,14 @@ export default function Profile() {
           old ? { ...old, email: data.email } : old
         )
       }
-      toast.success('邮箱已修改')
+      toast.success(t('profile.emailUpdated'))
       setNewEmail('')
       setEmailPassword('')
       setEmailSaving(false)
     },
     onError: (err: unknown) => {
       const error = err as { response?: { data?: { error?: string } }; message?: string }
-      toast.error(error.response?.data?.error || error.message || '修改失败')
+      toast.error(error.response?.data?.error || error.message || t('profile.changeFailed'))
       setEmailSaving(false)
     },
   })
@@ -67,7 +70,7 @@ export default function Profile() {
     mutationFn: ({ current, newPwd }: { current: string; newPwd: string }) =>
       changePassword(current, newPwd),
     onSuccess: () => {
-      toast.success('密码已修改')
+      toast.success(t('profile.passwordUpdated'))
       setCurrentPassword('')
       setNewPassword('')
       setConfirmPassword('')
@@ -75,7 +78,7 @@ export default function Profile() {
     },
     onError: (err: unknown) => {
       const error = err as { response?: { data?: { error?: string } }; message?: string }
-      toast.error(error.response?.data?.error || error.message || '修改失败')
+      toast.error(error.response?.data?.error || error.message || t('profile.changeFailed'))
       setPasswordSaving(false)
     },
   })
@@ -84,11 +87,11 @@ export default function Profile() {
     e.preventDefault()
     const trimmed = name.trim()
     if (!trimmed) {
-      toast.warning('姓名不能为空')
+      toast.warning(t('profile.nameRequired'))
       return
     }
     if (trimmed === user?.name) {
-      toast.info('未做修改')
+      toast.info(t('profile.noChanges'))
       return
     }
     setNameSaving(true)
@@ -98,15 +101,15 @@ export default function Profile() {
   const handleChangePassword = (e: React.FormEvent) => {
     e.preventDefault()
     if (!currentPassword || !newPassword || !confirmPassword) {
-      toast.warning('请填写当前密码、新密码并确认')
+      toast.warning(t('profile.fillPasswordFields'))
       return
     }
     if (newPassword.length < 6) {
-      toast.warning('新密码至少 6 位')
+      toast.warning(t('profile.passwordMinLength'))
       return
     }
     if (newPassword !== confirmPassword) {
-      toast.warning('两次输入的新密码不一致')
+      toast.warning(t('profile.passwordMismatch'))
       return
     }
     setPasswordSaving(true)
@@ -117,15 +120,15 @@ export default function Profile() {
     e.preventDefault()
     const trimmed = newEmail.trim()
     if (!trimmed) {
-      toast.warning('请输入新邮箱')
+      toast.warning(t('profile.enterNewEmail'))
       return
     }
     if (trimmed === user?.email) {
-      toast.info('新邮箱与当前邮箱相同')
+      toast.info(t('profile.emailSameAsCurrent'))
       return
     }
     if (!emailPassword) {
-      toast.warning('请输入当前密码')
+      toast.warning(t('profile.enterCurrentPassword'))
       return
     }
     setEmailSaving(true)
@@ -133,166 +136,157 @@ export default function Profile() {
   }
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
-      <Sidebar 
-        isExpanded={sidebarExpanded}
-        onToggle={setSidebarExpanded}
-      />
-      <main className="flex-1 overflow-auto p-6 transition-all duration-300">
-        <div className="max-w-2xl mx-auto">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">个人中心</h1>
-          <p className="text-gray-500 text-sm mb-8">管理您的账号资料与密码</p>
+    <AppLayout
+      title="个人中心"
+      subtitle="管理您的账号资料与密码"
+    >
+      <div className="max-w-2xl mx-auto">
+        {/* 基本资料 */}
+        <section className="card mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <User className="w-5 h-5 text-slate-500" />
+            基本资料
+          </h2>
+          <form onSubmit={handleSaveProfile} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">姓名</label>
+              <GlassInput
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="您的姓名"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">当前邮箱</label>
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-slate-50/50 backdrop-blur-md border border-white/60 rounded-xl text-slate-600">
+                <Mail className="w-4 h-4 text-slate-400" />
+                {user?.email ?? '—'}
+              </div>
+            </div>
+            <GlassButton
+              type="submit"
+              variant="primary"
+              disabled={nameSaving}
+              className="gap-2"
+            >
+              {nameSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  保存中...
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  保存资料
+                </>
+              )}
+            </GlassButton>
+          </form>
+        </section>
 
-          {/* 基本资料 */}
-          <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <User className="w-5 h-5 text-gray-500" />
-              基本资料
-            </h2>
-            <form onSubmit={handleSaveProfile} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">姓名</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="您的姓名"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">当前邮箱</label>
-                <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-gray-600">
-                  <Mail className="w-4 h-4 text-gray-400" />
-                  {user?.email ?? '—'}
-                </div>
-              </div>
-              <button
-                type="submit"
-                disabled={nameSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {nameSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    保存中...
-                  </>
-                ) : (
-                  <>
-                    <Save className="w-4 h-4" />
-                    保存资料
-                  </>
-                )}
-              </button>
-            </form>
-          </section>
+        {/* 修改邮箱 */}
+        <section className="card mb-6">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Mail className="w-5 h-5 text-slate-500" />
+            修改邮箱
+          </h2>
+          <form onSubmit={handleChangeEmail} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">新邮箱</label>
+              <GlassInput
+                type="email"
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                placeholder="请输入新邮箱地址"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">当前密码</label>
+              <GlassInput
+                type="password"
+                value={emailPassword}
+                onChange={(e) => setEmailPassword(e.target.value)}
+                placeholder="请输入当前密码以验证身份"
+              />
+            </div>
+            <GlassButton
+              type="submit"
+              variant="primary"
+              disabled={emailSaving}
+              className="gap-2"
+            >
+              {emailSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  提交中...
+                </>
+              ) : (
+                <>
+                  <Mail className="w-4 h-4" />
+                  修改邮箱
+                </>
+              )}
+            </GlassButton>
+          </form>
+        </section>
 
-          {/* 修改邮箱 */}
-          <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Mail className="w-5 h-5 text-gray-500" />
-              修改邮箱
-            </h2>
-            <form onSubmit={handleChangeEmail} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">新邮箱</label>
-                <input
-                  type="email"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="请输入新邮箱地址"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
-                <input
-                  type="password"
-                  value={emailPassword}
-                  onChange={(e) => setEmailPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="请输入当前密码以验证身份"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={emailSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-              >
-                {emailSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    提交中...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="w-4 h-4" />
-                    修改邮箱
-                  </>
-                )}
-              </button>
-            </form>
-          </section>
-
-          {/* 修改密码 */}
-          <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <Lock className="w-5 h-5 text-gray-500" />
-              修改密码
-            </h2>
-            <form onSubmit={handleChangePassword} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">当前密码</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="请输入当前密码"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">新密码</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="至少 6 位"
-                  minLength={6}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">确认新密码</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="再次输入新密码"
-                />
-              </div>
-              <button
-                type="submit"
-                disabled={passwordSaving}
-                className="flex items-center gap-2 px-4 py-2 bg-gray-800 text-white rounded-lg hover:bg-gray-900 disabled:opacity-50"
-              >
-                {passwordSaving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    提交中...
-                  </>
-                ) : (
-                  <>
-                    <Lock className="w-4 h-4" />
-                    修改密码
-                  </>
-                )}
-              </button>
-            </form>
-          </section>
-        </div>
-      </main>
-    </div>
+        {/* 修改密码 */}
+        <section className="card">
+          <h2 className="text-lg font-semibold text-slate-900 mb-4 flex items-center gap-2">
+            <Lock className="w-5 h-5 text-slate-500" />
+            修改密码
+          </h2>
+          <form onSubmit={handleChangePassword} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">当前密码</label>
+              <GlassInput
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                placeholder="请输入当前密码"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">新密码</label>
+              <GlassInput
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="至少 6 位"
+                minLength={6}
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1">确认新密码</label>
+              <GlassInput
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="再次输入新密码"
+              />
+            </div>
+            <GlassButton
+              type="submit"
+              variant="primary"
+              disabled={passwordSaving}
+              className="gap-2"
+            >
+              {passwordSaving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  提交中...
+                </>
+              ) : (
+                <>
+                  <Lock className="w-4 h-4" />
+                  修改密码
+                </>
+              )}
+            </GlassButton>
+          </form>
+        </section>
+      </div>
+    </AppLayout>
   )
 }

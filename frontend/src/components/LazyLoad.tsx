@@ -2,7 +2,7 @@ import { lazy, Suspense, ComponentType } from 'react'
 
 export function lazyLoad<P = Record<string, unknown>>(
   importFunc: () => Promise<{ default: ComponentType<P> }>,
-  fallback: React.ReactNode = <div className="text-center py-8 text-gray-500">加载中...</div>
+  fallback: React.ReactNode = <div className="text-center py-8 text-slate-500">加载中...</div>
 ) {
   const LazyComponent = lazy(importFunc)
   return (props: P) => (

@@ -1,7 +1,8 @@
-import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import Sidebar from '../components/Sidebar'
+import AppLayout from '../components/AppLayout'
+import CustomSelect from '../components/CustomSelect'
 import { getScriptLLMConfig, getLlmModes, setLlmModes, type LLMModeId } from '../services/ai'
 import { useCurrentUser } from '../services/auth'
 import { useToast } from '../contexts/ToastContext'
@@ -26,48 +27,47 @@ const TAB_TO_MODE_KEY: Record<LLMTabId, 'todo' | 'script' | null> = {
   future: null,
 }
 
-const TABS: { id: LLMTabId; label: string; icon: React.ReactNode; description: string; usedIn: string; detail: string }[] = [
+const TABS: { id: LLMTabId; labelKey: string; icon: React.ReactNode; descriptionKey: string; usedInKey: string; detailKey: string }[] = [
   {
     id: 'todo',
-    label: '智能待办生成',
+    labelKey: 'llmPage.tabs.todo.label',
     icon: <ListTodo className="w-5 h-5" />,
-    description: '基于店铺最近 30 天数据、阶段、趋势与按日明细，一次性调用 LLM 生成待办列表（JSON），条数由 Coze 内置规则控制。',
-    usedIn: '店铺管理 → 待处理任务 → 智能生成',
-    detail: 'callLLMOnce；systemPrompt + userMessage 拼成一条发给 Coze，或走 OpenAI 兼容 messages。返回完整 JSON 后解析 tasks 数组，失败则规则兜底。',
+    descriptionKey: 'llmPage.tabs.todo.desc',
+    usedInKey: 'llmPage.tabs.todo.usedIn',
+    detailKey: 'llmPage.tabs.todo.detail',
   },
   {
     id: 'anomaly',
-    label: '异常分析待办',
+    labelKey: 'llmPage.tabs.anomaly.label',
     icon: <AlertTriangle className="w-5 h-5" />,
-    description: '系统检测到数据异常后，调用 LLM 针对异常生成 1～3 条可执行待办（扭转异常、优化指标）。',
-    usedIn: '智能生成待办流程中（当存在异常时）',
-    detail: 'callLLMOnce；输入为异常列表与店铺/类目/当前数据，输出 JSON tasks。未配置或失败返回空数组。',
+    descriptionKey: 'llmPage.tabs.anomaly.desc',
+    usedInKey: 'llmPage.tabs.anomaly.usedIn',
+    detailKey: 'llmPage.tabs.anomaly.detail',
   },
   {
     id: 'script',
-    label: '话术生成（流式）',
+    labelKey: 'llmPage.tabs.script.label',
     icon: <MessageSquare className="w-5 h-5" />,
-    description: '根据商品、场景、风格等生成直播话术，以流式方式逐块返回，支持打字机效果。',
-    usedIn: '执行工具 → 话术生成',
-    detail: 'streamScriptFromLLM；Coze 为 stream_run 流式 SSE，OpenAI 兼容为 stream: true。',
+    descriptionKey: 'llmPage.tabs.script.desc',
+    usedInKey: 'llmPage.tabs.script.usedIn',
+    detailKey: 'llmPage.tabs.script.detail',
   },
   {
     id: 'future',
-    label: '预留扩展',
+    labelKey: 'llmPage.tabs.future.label',
     icon: <Plus className="w-5 h-5" />,
-    description: '后续可在此增加其他 LLM 模型或调用方式（如专用分析模型、多轮对话等）。',
-    usedIn: '—',
-    detail: '新增选项卡与对应路由/功能后，在此补充说明与入口。',
+    descriptionKey: 'llmPage.tabs.future.desc',
+    usedInKey: 'llmPage.tabs.future.usedIn',
+    detailKey: 'llmPage.tabs.future.detail',
   },
 ]
 
 export default function LLMPage() {
   const navigate = useNavigate()
   const toast = useToast()
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   useCurrentUser()
-  const [sidebarExpanded, setSidebarExpanded] = useState(true)
-  const [activeTab, setActiveTab] = useState<LLMTabId>('todo')
 
   const { data: scriptConfig, isLoading: configLoading } = useQuery({
     queryKey: ['script-llm-config'],
@@ -83,12 +83,12 @@ export default function LLMPage() {
     mutationFn: setLlmModes,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['llm-modes'] })
-      toast.success('智能体偏好已保存')
+      toast.success(t('llmPage.modesSaved', { defaultValue: 'Preferences saved' }))
     },
     onError: (err: unknown) => {
       const error = err as { response?: { data?: { error?: string }; status?: number }; message?: string }
-      const msg = error.response?.data?.error || error.message || '保存失败'
-      toast.error(error.response?.status === 403 ? '仅管理员可修改智能体偏好' : msg)
+      const msg = error.response?.data?.error || error.message || t('common.saveFailed', { defaultValue: 'Save failed' })
+      toast.error(error.response?.status === 403 ? t('llmPage.onlyAdminCanEdit', { defaultValue: 'Only admin can edit preferences' }) : msg)
     },
   })
 
@@ -107,145 +107,120 @@ export default function LLMPage() {
     setLlmModesMutation.mutate(key === 'todo' ? { todo: modeId } : { script: modeId })
   }
 
+  const headerExtra = (
+    <div className="flex items-center gap-3">
+      {configLoading ? (
+        <span className="text-sm text-slate-500">{t('llmPage.checkingConfig', { defaultValue: 'Checking…' })}</span>
+      ) : configured ? (
+        <span className="inline-flex items-center gap-1.5 text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg border border-green-200">
+          <CheckCircle2 className="w-4 h-4" />
+          {t('llmPage.configured', { defaultValue: 'Configured' })}
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200">
+          <XCircle className="w-4 h-4" />
+          {t('llmPage.notConfigured', { defaultValue: 'Not configured' })}
+        </span>
+      )}
+      <button
+        type="button"
+        onClick={() => navigate('/admin/permissions?tab=llm')}
+        className="text-sm text-primary-600 hover:text-primary-800 font-medium"
+      >
+        {t('llmPage.goToConfig', { defaultValue: 'Go to config' })}
+      </button>
+    </div>
+  )
+
   return (
-    <div className="h-screen min-h-0 bg-gray-50 flex overflow-hidden">
-      <Sidebar
-        isExpanded={sidebarExpanded}
-        onToggle={setSidebarExpanded}
-      />
-
-      <div className="flex-1 flex flex-col min-h-0 transition-all duration-300">
-        <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
-          <div className="px-6 py-4 flex items-center justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">LLM 调用方式</h1>
-              <p className="text-sm text-gray-500 mt-1">当前与 LLM 的多种调用方式及使用位置，后续可扩展更多模型</p>
-            </div>
-            <div className="flex items-center gap-3">
-              {configLoading ? (
-                <span className="text-sm text-gray-500">检查配置…</span>
-              ) : configured ? (
-                <span className="inline-flex items-center gap-1.5 text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
-                  <CheckCircle2 className="w-4 h-4" />
-                  LLM 已配置
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-sm text-amber-700 bg-amber-50 px-3 py-1.5 rounded-lg">
-                  <XCircle className="w-4 h-4" />
-                  未配置（管理员可配置）
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => navigate('/admin/permissions?tab=llm')}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                前往配置
-              </button>
-            </div>
-          </div>
-        </header>
-
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="max-w-4xl mx-auto">
-            {/* 选项卡导航 */}
-            <div className="flex flex-wrap gap-1 p-1 bg-gray-100 rounded-xl mb-6">
-              {TABS.map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    activeTab === tab.id
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {tab.icon}
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* 当前选项卡内容 */}
+    <AppLayout
+      title={t('llmPage.title', { defaultValue: 'LLM 调用方式' })}
+      subtitle={t('llmPage.subtitle', { defaultValue: '配置系统调用 LLM 的方式及使用场景，可扩展更多模型' })}
+      headerExtra={headerExtra}
+    >
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            {/* 智能体配置列表：直接展开渲染所有项 */}
             {TABS.map((tab) => (
               <div
                 key={tab.id}
-                className={`rounded-xl border bg-white p-6 ${activeTab === tab.id ? 'block' : 'hidden'}`}
+                className="card p-6 sm:p-8 transition-transform duration-300"
               >
-                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2 mb-2">
-                  {tab.icon}
-                  {tab.label}
+                <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2.5 mb-3">
+                  <span className="text-primary-600 bg-primary-50 p-2 rounded-lg">
+                    {tab.icon}
+                  </span>
+                  {t(tab.labelKey)}
                 </h2>
-                <p className="text-gray-600 mb-4">{tab.description}</p>
+                <p className="text-slate-500 text-sm mb-6 pb-6 border-b border-slate-100">{t(tab.descriptionKey)}</p>
 
                 {/* 智能体及版本选择（待办/异常/话术有对应偏好，预留扩展无）— 始终展示，避免因接口未返回而看不到选择按钮 */}
                 {TAB_TO_MODE_KEY[tab.id] && (
-                  <div className="mb-5 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                    <h3 className="text-sm font-medium text-gray-700 mb-3">智能体及版本</h3>
+                  <div className="mb-6 p-5 bg-slate-50/50 rounded-xl border border-slate-100">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-4">{t('llmPage.agentAndVersion', { defaultValue: 'Agent & Version' })}</h3>
                     {modesLoading ? (
-                      <p className="text-sm text-gray-500">加载中…</p>
+                      <p className="text-sm text-slate-500 animate-pulse">{t('common.loading')}</p>
                     ) : (
-                      <div className="flex flex-wrap items-center gap-4">
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-gray-600">调用方式</label>
-                          <select
+                      <div className="flex flex-wrap items-center gap-6">
+                        <div className="w-56 cursor-pointer">
+                          <label className="block text-xs font-medium text-slate-500 mb-1.5">{t('llmPage.callingMethod', { defaultValue: 'Calling method' })}</label>
+                          <CustomSelect
                             value={currentModeForTab(tab.id)}
-                            onChange={(e) => handleModeChange(tab.id, e.target.value as LLMModeId)}
+                            onChange={(val) => handleModeChange(tab.id, val as LLMModeId)}
                             disabled={setLlmModesMutation.isPending}
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-60 min-w-[220px]"
-                          >
-                            <option value="coze_agent">Coze Agent</option>
-                            <option value="openai">OpenAI 兼容接口</option>
-                          </select>
+                            options={[
+                              { value: 'coze_agent', label: 'Coze Agent' },
+                              { value: 'openai', label: t('llmPage.openaiCompatible', { defaultValue: 'OpenAI-compatible API' }) }
+                            ]}
+                          />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <label className="text-sm text-gray-600">版本</label>
-                          <select
-                            defaultValue="default"
-                            className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 min-w-[120px]"
-                          >
-                            <option value="default">当前默认</option>
-                          </select>
+                        <div className="w-40 cursor-pointer">
+                          <label className="block text-xs font-medium text-slate-500 mb-1.5">{t('llmPage.version', { defaultValue: 'Version' })}</label>
+                          <CustomSelect
+                            value="default"
+                            onChange={() => {}}
+                            options={[
+                              { value: 'default', label: t('llmPage.currentDefault', { defaultValue: 'Current default' }) }
+                            ]}
+                          />
                         </div>
                         {llmModes?.effectiveMode != null && (
-                          <span className="text-xs text-gray-500">
+                          <span className="text-xs text-slate-500">
                             当前生效：{llmModes.modes.find((m) => m.id === llmModes.effectiveMode)?.label ?? llmModes.effectiveMode}
                           </span>
                         )}
                       </div>
                     )}
                     {!modesLoading && (
-                      <p className="text-xs text-gray-500 mt-2">实际生效方式由「LLM 配置」中的 API 地址决定。</p>
+                      <p className="text-xs text-slate-500 mt-2">{t('llmPage.effectiveMethodHint', { defaultValue: 'The effective method is determined by the API URL in LLM settings.' })}</p>
                     )}
                   </div>
                 )}
 
-                <dl className="space-y-3 text-sm">
-                  <div>
-                    <dt className="text-gray-500 font-medium">使用位置</dt>
-                    <dd className="text-gray-800 mt-0.5">{tab.usedIn}</dd>
+                <dl className="space-y-4 text-sm mt-2">
+                  <div className="flex gap-4">
+                    <dt className="text-slate-400 font-medium w-24 shrink-0">{t('llmPage.usedIn', { defaultValue: 'Used in' })}</dt>
+                    <dd className="text-slate-700 font-medium">{t(tab.usedInKey)}</dd>
                   </div>
-                  <div>
-                    <dt className="text-gray-500 font-medium">实现要点</dt>
-                    <dd className="text-gray-800 mt-0.5">{tab.detail}</dd>
+                  <div className="flex gap-4">
+                    <dt className="text-slate-400 font-medium w-24 shrink-0">{t('llmPage.implementation', { defaultValue: 'Implementation' })}</dt>
+                    <dd className="text-slate-700 leading-relaxed">{t(tab.detailKey)}</dd>
                   </div>
                 </dl>
                 {tab.id === 'todo' && (
                   <button
                     type="button"
                     onClick={() => navigate('/')}
-                    className="mt-4 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                    className="mt-6 inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-800 font-medium text-sm transition-colors decoration-primary-300 hover:underline underline-offset-4"
                   >
                     <ExternalLink className="w-4 h-4" />
-                    前往店铺管理 · 智能生成
+                    {t('llmPage.goToStoreManagementSmartGenerate', { defaultValue: 'Go to Store Management · Smart Generate' })}
                   </button>
                 )}
                 {tab.id === 'script' && (
                   <button
                     type="button"
                     onClick={() => navigate('/tools')}
-                    className="mt-4 inline-flex items-center gap-2 text-blue-600 hover:text-blue-800 text-sm"
+                    className="mt-6 inline-flex items-center gap-1.5 text-primary-600 hover:text-primary-800 font-medium text-sm transition-colors decoration-primary-300 hover:underline underline-offset-4"
                   >
                     <ExternalLink className="w-4 h-4" />
                     前往执行工具 · 话术生成
@@ -254,13 +229,11 @@ export default function LLMPage() {
               </div>
             ))}
 
-            <div className="mt-6 flex items-center gap-2 text-sm text-gray-500">
-              <FileText className="w-4 h-4 shrink-0" />
-              <span>详细流程与配置见文档：<code className="bg-gray-100 px-1 rounded">docs/LLM交互流程说明.md</code></span>
-            </div>
           </div>
-        </main>
-      </div>
-    </div>
+          <div className="mt-6 flex items-center gap-2.5 text-sm text-slate-500">
+            <FileText className="w-4 h-4 text-slate-400 shrink-0" />
+            <span>详细流程与配置见文档：<code className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded shadow-sm font-mono text-xs">docs/LLM交互流程说明.md</code></span>
+          </div>
+    </AppLayout>
   )
 }
