@@ -1,4 +1,4 @@
-import api from './api'
+import api, { API_BASE_URL } from './api'
 
 export type FeedbackType = 'problem' | 'feature' | 'other'
 export type FeedbackStatus = 'pending' | 'read' | 'replied'
@@ -62,7 +62,7 @@ export async function uploadFeedbackImage(file: File): Promise<string> {
   const formData = new FormData()
   formData.append('file', file)
   const token = localStorage.getItem('token')
-  const res = await fetch('/api/feedback/upload-image', {
+  const res = await fetch(`${API_BASE_URL}/feedback/upload-image`, {
     method: 'POST',
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     body: formData,

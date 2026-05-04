@@ -1,4 +1,5 @@
 import api from './api'
+import { API_BASE_URL } from './api'
 
 export type ScriptType =
   | 'full-sales'
@@ -283,7 +284,7 @@ export async function generateScriptStream(
   if (params.storeId) body.storeId = params.storeId
 
   const token = localStorage.getItem('token')
-  const base = (typeof window !== 'undefined' && window.__API_BASE__) || '/api'
+  const base = API_BASE_URL
   const timeoutMs = params.language && params.language !== 'zh-CN' ? SCRIPT_STREAM_TIMEOUT_MS_NON_ZH : SCRIPT_STREAM_TIMEOUT_MS
   const ac = new AbortController()
   const timeoutId = setTimeout(() => ac.abort(), timeoutMs)

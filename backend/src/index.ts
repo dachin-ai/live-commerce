@@ -27,10 +27,20 @@ import { rateLimitMiddleware } from './middleware/rateLimit'
 import compression from 'compression'
 
 const app = express()
-const PORT = process.env.PORT || 3000
+const PORT = Number(process.env.PORT || 8080)
 
 // 中间件
-app.use(cors())
+const corsOrigins = (process.env.CORS_ORIGIN || '')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean)
+
+app.use(
+  cors({
+    origin: corsOrigins.length > 0 ? corsOrigins : true,
+    credentials: true,
+  })
+)
 app.use(compression()) // 启用Gzip压缩
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true, limit: '10mb' }))
@@ -91,7 +101,7 @@ async function startServer() {
     await loadScriptLLMConfigCache()
 
     app.listen(PORT, () => {
-      console.log(`🚀 服务器运行在 http://localhost:${PORT}`)
+      console.log(`🚀 服务器运行在 http://0.0.0.0:${PORT}`)
       console.log(`✅ 后端服务已启动，按 Ctrl+C 停止`)
       if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
         console.log(`📧 邮件服务已配置（忘记密码将发验证码至邮箱）`)

@@ -1,0 +1,73 @@
+options:
+  logging: CLOUD_LOGGING_ONLY
+
+substitutions:
+  _REGION: asia-southeast1
+  _DATABASE_URL: ""
+  _CORS_ORIGIN: ""
+  _VITE_API_URL: "https://live-commerce-api-416645281925.asia-southeast1.run.app/api"
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    id: Build backend image
+    args:
+      - build
+      - -f
+      - backend/Dockerfile
+      - -t
+      - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
+      - ./backend
+
+  - name: gcr.io/cloud-builders/docker
+    id: Push backend image
+    args:
+      - push
+      - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: Deploy backend service
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - live-commerce-api
+      - --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+      - --set-secrets=JWT_SECRET=jwt-secret:latest
+      - --set-env-vars=NODE_ENV=production,DATABASE_URL=$_DATABASE_URL,CORS_ORIGIN=$_CORS_ORIGIN
+
+  - name: gcr.io/cloud-builders/docker
+    id: Build frontend image
+    args:
+      - build
+      - -f
+      - frontend/Dockerfile
+      - --build-arg
+      - VITE_API_URL=$_VITE_API_URL
+      - -t
+      - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA
+      - ./frontend
+
+  - name: gcr.io/cloud-builders/docker
+    id: Push frontend image
+    args:
+      - push
+      - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: Deploy frontend service
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - live-commerce-web
+      - --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA
+      - --region=$_REGION
+      - --platform=managed
+      - --allow-unauthenticated
+
+images:
+  - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-api:$SHORT_SHA
+  - asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA
