@@ -115,7 +115,7 @@ export interface LlmToolRow {
   apiKey: string
   model?: string | null
   features?: string | null   // JSON: string[] — 支持的功能 ('todo' | 'script' | 'anomaly')
-  isActive: number           // SQLite BOOLEAN: 0 | 1
+  isActive: number           // INTEGER BOOLEAN: 0 | 1
   sort_order?: number | null
   createdAt: string
   updatedAt?: string | null

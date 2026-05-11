@@ -126,7 +126,7 @@ const description = descParts.join('\n').trim().slice(0, 2000)
 description TEXT
 ```
 
-- SQLite TEXT 类型无长度限制
+- PostgreSQL TEXT 类型无长度限制
 - 实测存储 465 字符描述成功
 
 ---

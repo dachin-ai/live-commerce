@@ -18,7 +18,7 @@ export const errorHandler = (
     });
   }
 
-  // 针对某些已知库的异常（例如 JWT, SQLite）可以做特殊处理
+  // 针对某些已知库的异常（例如 JWT, PostgreSQL）可以做特殊处理
   if (err.name === 'UnauthorizedError') { // express-jwt 的默认错误
     return res.status(401).json({
       error: 'Invalid or missing token',

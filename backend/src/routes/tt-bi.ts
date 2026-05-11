@@ -439,7 +439,7 @@ router.post('/targets/generate', async (req: AuthRequest, res, next) => {
     const results: any[] = []
     await dbTransaction(async () => {
       for (const t of targetList) {
-        // SQLite UPSERT：冲突时更新，无冲突时插入
+        // UPSERT：冲突时更新，无冲突时插入
         const id = uuid()
         await dbRun(
           `INSERT INTO tt_targets (id, storeId, month, metric, targetValue, isAiGenerated, note)

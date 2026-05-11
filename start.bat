@@ -105,14 +105,12 @@ echo.
 set /p confirm=Reset database? All data will be lost! (Y/N): 
 if /i not "%confirm%"=="Y" goto db_menu
 echo.
-if exist "backend\data.db" (
-    copy "backend\data.db" "backend\data.db.backup.%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%" >nul 2>&1
-    echo Backup created
-    del /f /q "backend\data.db"
-    echo Database deleted
-)
+echo Resetting PostgreSQL database...
+cd backend
+call npx tsx scripts/reset-database.ts
+cd ..
 echo.
-echo Restart backend to create new database
+echo Database reset complete. Restart backend to apply.
 timeout /t 3 >nul
 goto db_menu
 
@@ -128,12 +126,13 @@ goto db_menu
 
 :db_backup
 echo.
-if exist "backend\data.db" (
-    set backup_name=data.db.backup.%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%
-    copy "backend\data.db" "backend\%backup_name%" >nul 2>&1
-    echo Backup created: %backup_name%
+echo Backing up PostgreSQL database...
+set backup_name=live_commerce_backup_%date:~0,4%%date:~5,2%%date:~8,2%_%time:~0,2%%time:~3,2%%time:~6,2%.sql
+"%~dp0pgsql\bin\pg_dump.exe" -U postgres live_commerce > "backend\%backup_name%" 2>nul
+if errorlevel 1 (
+    echo Backup failed. Is PostgreSQL running?
 ) else (
-    echo Database not found
+    echo Backup created: %backup_name%
 )
 timeout /t 2 >nul
 goto db_menu

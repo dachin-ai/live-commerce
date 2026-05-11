@@ -74,7 +74,7 @@ export class TtImportRepository {
     if (rows.length === 0) return
     const table = TABLE_MAP[dataType]
 
-    // 批量大小：每次最多 50 行，避免超出 SQLite SQLITE_LIMIT_VARIABLE_NUMBER (999)
+    // 批量大小：每次最多 50 行，控制单条 INSERT 参数量以保持性能稳定
     const BATCH_SIZE = 50
 
     await dbTransaction(async () => {

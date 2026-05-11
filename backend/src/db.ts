@@ -10,6 +10,7 @@ import {
   dbGet,
   dbAll,
   dbTransaction,
+  getTableColumns,
 } from './database/connection'
 
 
@@ -27,91 +28,19 @@ export async function initDatabase() {
     )
   `)
   
-  // 检查并添加userId和storeId字段（如果不存在）
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN userId TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加userId字段时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN storeId TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加storeId字段时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN aiFeature TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加aiFeature字段时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN source TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加source字段时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN updatedAt TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.updatedAt时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN title_i18n TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.title_i18n时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN description_i18n TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.description_i18n时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN assignedRole TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.assignedRole时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN estimatedDays TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.estimatedDays时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN category TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.category时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN responsible TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.responsible时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE tasks ADD COLUMN weekStart TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加tasks.weekStart时出错:', err?.message)
-    }
-  }
+  // 补齐历史字段（PostgreSQL 支持 IF NOT EXISTS，无需 try/catch）
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS userId TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS storeId TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS aiFeature TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS source TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updatedAt TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS title_i18n TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS description_i18n TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS assignedRole TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS estimatedDays TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS category TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS responsible TEXT`)
+  await dbRun(`ALTER TABLE tasks ADD COLUMN IF NOT EXISTS weekStart TEXT`)
 
   // 回填历史任务 weekStart（避免按周筛选时“查不到旧数据”）
   // weekStart 定义：自然周周一（UTC）YYYY-MM-DD
@@ -161,20 +90,8 @@ export async function initDatabase() {
       lastLoginAt TEXT
     )
   `)
-  try {
-    await dbRun(`ALTER TABLE users ADD COLUMN updatedAt TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加users.updatedAt时出错:', err?.message)
-    }
-  }
-  try {
-    await dbRun(`ALTER TABLE users ADD COLUMN language TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加users.language时出错:', err?.message)
-    }
-  }
+  await dbRun(`ALTER TABLE users ADD COLUMN IF NOT EXISTS updatedAt TEXT`)
+  await dbRun(`ALTER TABLE users ADD COLUMN IF NOT EXISTS language TEXT`)
 
   // 创建用户会话表（用于长期记忆功能）
   await dbRun(`
@@ -255,15 +172,9 @@ export async function initDatabase() {
     await dbRun('CREATE INDEX IF NOT EXISTS idx_feedback_type ON feedback(type)')
     await dbRun('CREATE INDEX IF NOT EXISTS idx_feedback_createdAt ON feedback(createdAt)')
   } catch (_) {}
-  try {
-    await dbRun('ALTER TABLE feedback ADD COLUMN replyContent TEXT')
-  } catch (_) {}
-  try {
-    await dbRun('ALTER TABLE feedback ADD COLUMN replyAt TEXT')
-  } catch (_) {}
-  try {
-    await dbRun('ALTER TABLE feedback ADD COLUMN imageUrls TEXT')
-  } catch (_) {}
+  await dbRun('ALTER TABLE feedback ADD COLUMN IF NOT EXISTS replyContent TEXT')
+  await dbRun('ALTER TABLE feedback ADD COLUMN IF NOT EXISTS replyAt TEXT')
+  await dbRun('ALTER TABLE feedback ADD COLUMN IF NOT EXISTS imageUrls TEXT')
 
   // 创建版本更新日志表
   await dbRun(`
@@ -356,13 +267,7 @@ export async function initDatabase() {
       FOREIGN KEY (userId) REFERENCES users(id)
     )
   `)
-  try {
-    await dbRun(`ALTER TABLE stores ADD COLUMN updatedAt TEXT`)
-  } catch (err: any) {
-    if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-      console.warn('添加stores.updatedAt时出错:', err?.message)
-    }
-  }
+  await dbRun(`ALTER TABLE stores ADD COLUMN IF NOT EXISTS updatedAt TEXT`)
 
   // 用户-店铺多对多可见表（一个店铺可被多人查看）
   await dbRun(`
@@ -405,17 +310,13 @@ export async function initDatabase() {
   `)
 
   // 素材表扩展字段（直播录屏分析：优秀案例/问题片段）
-  const materialCols = ['userId', 'title', 'content', 'videoId', 'tags', 'rating', 'metadata']
-  for (const col of materialCols) {
-    try {
-      const def = col === 'userId' ? 'TEXT' : col === 'rating' ? 'REAL' : 'TEXT'
-      await dbRun(`ALTER TABLE materials ADD COLUMN ${col} ${def}`)
-    } catch (err: any) {
-      if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-        console.warn(`添加 materials.${col} 时出错:`, err?.message)
-      }
-    }
-  }
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS userId TEXT`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS title TEXT`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS content TEXT`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS videoId TEXT`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS tags TEXT`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS rating REAL`)
+  await dbRun(`ALTER TABLE materials ADD COLUMN IF NOT EXISTS metadata TEXT`)
 
   // 直播录屏视频表
   await dbRun(`
@@ -478,28 +379,24 @@ export async function initDatabase() {
     )
   `)
 
-  // 添加缺失的字段（如果表已存在）
-  const statsColumns = [
-    'completedOrders', 'averageDailyDuration', 'rounds', 'averageConversionRate',
-    'averageDurationPerRound', 'gmvPerHour', 'averageDurationPerDay', 'roundsPerDay', 'updatedAt',
-    'likes', 'comments', 'shares', 'follows', 'productViews', 'productClicks', 'clickThroughRate', 'interactionRate'
-  ]
-  const statsIntegerCols = new Set(['completedOrders', 'rounds', 'likes', 'comments', 'shares', 'follows', 'productViews', 'productClicks'])
-  for (const col of statsColumns) {
-    try {
-      if (statsIntegerCols.has(col)) {
-        await dbRun(`ALTER TABLE stats ADD COLUMN ${col} INTEGER DEFAULT 0`)
-      } else if (col === 'updatedAt') {
-        await dbRun(`ALTER TABLE stats ADD COLUMN ${col} TEXT`)
-      } else {
-        await dbRun(`ALTER TABLE stats ADD COLUMN ${col} REAL DEFAULT 0`)
-      }
-    } catch (err: any) {
-      if (!err?.message?.includes('duplicate column') && !err?.message?.includes('already exists')) {
-        console.warn(`添加stats表字段${col}时出错:`, err?.message)
-      }
-    }
-  }
+  // 补齐 stats 历史字段
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS completedOrders INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS averageDailyDuration REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS rounds INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS averageConversionRate REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS averageDurationPerRound REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS gmvPerHour REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS averageDurationPerDay REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS roundsPerDay REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS updatedAt TEXT`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS likes INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS comments INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS shares INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS follows INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS productViews INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS productClicks INTEGER DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS clickThroughRate REAL DEFAULT 0`)
+  await dbRun(`ALTER TABLE stats ADD COLUMN IF NOT EXISTS interactionRate REAL DEFAULT 0`)
 
   // 创建数据导入记录表
   await dbRun(`
@@ -584,8 +481,7 @@ export async function initDatabase() {
     orderCvr: 'REAL DEFAULT 0',
     engagementRate: 'REAL DEFAULT 0',
   }
-  const existingLiveCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_live_sessions'`, [])
-  const existingLiveColNames = existingLiveCols.map(c => c.name)
+  const existingLiveColNames = await getTableColumns('tt_live_sessions')
   for (const [col, def] of Object.entries(liveColumns)) {
     if (!existingLiveColNames.includes(col)) {
       await dbRun(`ALTER TABLE tt_live_sessions ADD COLUMN ${col} ${def}`).catch(() => {})
@@ -750,8 +646,7 @@ export async function initDatabase() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_tt_targets_store_month ON tt_targets(storeId, month);`)
 
   // 迁移: tt_store_products 增加 weekTag（自然周标记）和 channelType（渠道预留）
-  const spCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_store_products'`, [])
-  const spColNames = spCols.map(c => c.name)
+  const spColNames = await getTableColumns('tt_store_products')
   if (!spColNames.includes('weekTag')) {
     await dbRun(`ALTER TABLE tt_store_products ADD COLUMN weekTag TEXT`).catch(() => {})
   }
@@ -760,8 +655,7 @@ export async function initDatabase() {
   }
 
   // 迁移: tt_product_details 增加 channelType（与 store_products 保持一致，支持渠道归属标注）
-  const pdMigCols = await dbAll<{ name: string }>(`SELECT column_name AS name FROM information_schema.columns WHERE table_name = 'tt_product_details'`, [])
-  const pdMigColNames = pdMigCols.map(c => c.name)
+  const pdMigColNames = await getTableColumns('tt_product_details')
   if (!pdMigColNames.includes('channelType')) {
     await dbRun(`ALTER TABLE tt_product_details ADD COLUMN channelType TEXT DEFAULT 'ALL'`).catch(() => {})
   }
@@ -785,7 +679,7 @@ export async function initDatabase() {
   await dbRun(`CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId)`)
 
   // 创建复合索引用于加速去重查询（title + status + userId + storeId）
-  // 注意：不使用UNIQUE约束，因为SQLite对NULL的处理比较特殊，多个NULL被认为是不同的
+  // 注意：不使用UNIQUE约束，因为多个NULL在PostgreSQL中被视为不同值（NULLS NOT DISTINCT需PG15+）
   // 去重逻辑在应用层面实现（backend/src/routes/ai.ts）
   try {
     await dbRun(`
