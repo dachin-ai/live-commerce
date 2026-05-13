@@ -744,6 +744,10 @@
   },
   "auth": {
     "login": "Masuk",
+    "loginTitle": "Konsol Live Commerce",
+    "loginSubtitle": "Silakan masuk ke akun Anda",
+    "loggingIn": "Sedang masuk...",
+    "noRegisterDuringBeta": "Pendaftaran dinonaktifkan selama beta",
     "register": "Daftar",
     "logout": "Keluar",
     "forgotPassword": "Lupa Kata Sandi",

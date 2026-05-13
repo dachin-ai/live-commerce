@@ -744,6 +744,10 @@
   },
   "auth": {
     "login": "Login",
+    "loginTitle": "Live Commerce Console",
+    "loginSubtitle": "Please sign in to your account",
+    "loggingIn": "Signing in...",
+    "noRegisterDuringBeta": "Registration is disabled during beta",
     "register": "Register",
     "logout": "Logout",
     "forgotPassword": "Forgot Password",

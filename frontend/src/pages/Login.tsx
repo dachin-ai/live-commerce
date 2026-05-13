@@ -4,11 +4,13 @@ import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useLogin, isAuthenticated } from '../services/auth'
 import { LogIn, Mail, Lock } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import { useLanguage, type Locale } from '../contexts/LanguageContext'
 import { GlassInput } from '../components/ui/GlassInput'
 import { GlassButton } from '../components/ui/GlassButton'
 
 export default function Login() {
   const { t } = useTranslation()
+  const { locale, setLocale } = useLanguage()
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
@@ -35,9 +37,15 @@ export default function Login() {
   useEffect(() => {
     if (sessionStorage.getItem('loginExpiredMessage')) {
       sessionStorage.removeItem('loginExpiredMessage')
-      toast.info('登录已过期，请重新登录')
+      toast.info(t('auth.sessionExpired'))
     }
   }, [toast, t])
+
+  const languageOptions: Array<{ value: Locale; label: string }> = [
+    { value: 'en-US', label: 'EN' },
+    { value: 'zh-CN', label: '中文' },
+    { value: 'id-ID', label: 'ID' },
+  ]
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -73,12 +81,26 @@ export default function Login() {
       <div className="max-w-md w-full relative z-10">
         {/* Glassmorphism card */}
         <div className="bg-white/10 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/20 p-8">
+          <div className="flex justify-end mb-4">
+            <select
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as Locale)}
+              className="bg-white/10 text-white text-sm border border-white/25 rounded-lg px-3 py-1.5 outline-none focus:border-primary-400/70"
+              aria-label={t('sidebar.language')}
+            >
+              {languageOptions.map((option) => (
+                <option key={option.value} value={option.value} className="text-slate-900">
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="text-center mb-8">
             <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl mb-4 shadow-lg shadow-primary-500/30">
               <LogIn className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">直播电商中台</h1>
-            <p className="text-white/60">请登录您的账户</p>
+            <h1 className="text-2xl font-bold text-white mb-2">{t('auth.loginTitle')}</h1>
+            <p className="text-white/60">{t('auth.loginSubtitle')}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
@@ -90,7 +112,7 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">
-                邮箱地址
+                {t('auth.email')}
               </label>
               <div className="relative">
                 <Mail className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40 z-10 pointer-events-none" />
@@ -107,7 +129,7 @@ export default function Login() {
 
             <div>
               <label className="block text-sm font-medium text-white/80 mb-2">
-                密码
+                {t('auth.password')}
               </label>
               <div className="relative">
                 <Lock className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40 z-10 pointer-events-none" />
@@ -122,7 +144,7 @@ export default function Login() {
               </div>
               <div className="flex justify-end mt-2">
                 <Link to="/forgot-password" className="text-xs text-primary-300 hover:text-primary-200 transition-colors">
-                  忘记密码？
+                  {t('auth.forgotPassword')}
                 </Link>
               </div>
             </div>
@@ -136,19 +158,19 @@ export default function Login() {
               {login.isPending ? (
                 <>
                   <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  登录中...
+                  {t('auth.loggingIn')}
                 </>
               ) : (
                 <>
                   <LogIn className="w-4 h-4" />
-                  登录
+                  {t('auth.login')}
                 </>
               )}
             </GlassButton>
           </form>
 
           <p className="mt-6 text-center text-sm text-white/40">
-            系统内测期，暂不支持注册
+            {t('auth.noRegisterDuringBeta')}
           </p>
         </div>
       </div>

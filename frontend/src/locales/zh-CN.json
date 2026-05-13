@@ -749,6 +749,10 @@
   },
   "auth": {
     "login": "登录",
+    "loginTitle": "直播电商中台",
+    "loginSubtitle": "请登录您的账户",
+    "loggingIn": "登录中...",
+    "noRegisterDuringBeta": "系统内测期，暂不支持注册",
     "register": "注册",
     "logout": "退出登录",
     "forgotPassword": "忘记密码",
