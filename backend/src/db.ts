@@ -733,6 +733,7 @@ export async function initDatabase() {
     const fixedUsers = [
       { id: 'admin-dena', name: 'dena', email: 'dena@dachin.ai', role: 'manager' },
       { id: 'admin-ivan', name: 'ivan', email: 'ivan@dachin.ai', role: 'admin' },
+      { id: 'admin-kobe', name: 'kobe', email: 'kobe@dachin.ai', role: 'manager' },
     ] as const
 
     for (const user of fixedUsers) {
