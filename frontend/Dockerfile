@@ -1,4 +1,5 @@
-FROM node:20-bookworm-slim AS builder
+# Stage 1: Build
+FROM node:20-alpine AS builder
 
 WORKDIR /app
 
@@ -11,10 +12,20 @@ RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine AS runner
+# Stage 2: Serve with Nginx
+FROM nginx:alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=builder /app/dist /usr/share/nginx/html
+
+# SPA fallback: all routes -> index.html
+RUN echo 'server { \
+    listen 8080; \
+    location / { \
+        root /usr/share/nginx/html; \
+        index index.html; \
+        try_files $uri $uri/ /index.html; \
+    } \
+}' > /etc/nginx/conf.d/default.conf
 
 EXPOSE 8080
 

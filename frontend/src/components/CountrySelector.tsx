@@ -14,6 +14,8 @@ interface CountrySelectorProps {
   options: CountryOption[]
   defaultCountry?: string
   placeholder?: string
+  searchPlaceholder?: string
+  noResultsText?: string
 }
 
 export default function CountrySelector({
@@ -22,6 +24,8 @@ export default function CountrySelector({
   options,
   defaultCountry = '中国',
   placeholder = '选择国家',
+  searchPlaceholder = '搜索国家...',
+  noResultsText = '未找到匹配的国家',
 }: CountrySelectorProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -29,10 +33,19 @@ export default function CountrySelector({
 
   const selectedCountry = options.find(c => c.id === value) || options.find(c => c.id === defaultCountry)
 
-  const filteredOptions = options.filter(c =>
-    c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    c.id.toLowerCase().includes(searchQuery.toLowerCase())
-  )
+  const normalize = (s: string) => String(s || '').trim().toLowerCase()
+  const COUNTRY_ALIASES: Record<string, string[]> = {
+    印度尼西亚: ['印尼', 'Indonesia', 'ID', 'IDN'],
+    印度: ['India', 'IN'],
+  }
+  const q = normalize(searchQuery)
+  const filteredOptions = options.filter((c) => {
+    if (!q) return true
+    const name = normalize(c.name)
+    const id = normalize(c.id)
+    const aliases = (COUNTRY_ALIASES[c.id] || []).map(normalize)
+    return name.includes(q) || id.includes(q) || aliases.some((a) => a.includes(q))
+  })
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -50,30 +63,30 @@ export default function CountrySelector({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-left flex items-center justify-between hover:border-gray-400 transition-colors"
+        className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white text-left flex items-center justify-between hover:border-slate-400 transition-colors"
       >
-        <span className="text-gray-900">{selectedCountry?.name || placeholder}</span>
-        <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <span className="text-slate-900">{selectedCountry?.name || placeholder}</span>
+        <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-64 overflow-hidden">
-          <div className="p-2 border-b border-gray-200">
+        <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-lg shadow-lg max-h-64 overflow-hidden">
+          <div className="p-2 border-b border-slate-200">
             <div className="relative">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="搜索国家..."
-                className="w-full pl-8 pr-2 py-1.5 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder={searchPlaceholder}
+                className="w-full pl-8 pr-2 py-1.5 text-sm border border-slate-300 rounded focus:outline-none focus:ring-2 focus:ring-primary-500"
                 autoFocus
               />
             </div>
           </div>
           <div className="overflow-y-auto max-h-48">
             {filteredOptions.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-gray-500 text-center">未找到匹配的国家</div>
+              <div className="px-3 py-2 text-sm text-slate-500 text-center">{noResultsText}</div>
             ) : (
               filteredOptions.map((country) => (
                 <button
@@ -84,10 +97,10 @@ export default function CountrySelector({
                     setIsOpen(false)
                     setSearchQuery('')
                   }}
-                  className="w-full px-3 py-2 text-left hover:bg-gray-50 flex items-center justify-between text-sm transition-colors"
+                  className="w-full px-3 py-2 text-left hover:bg-slate-50 flex items-center justify-between text-sm transition-colors"
                 >
-                  <span className="text-gray-900">{country.name}</span>
-                  {value === country.id && <Check className="w-4 h-4 text-blue-600" />}
+                  <span className="text-slate-900">{country.name}</span>
+                  {value === country.id && <Check className="w-4 h-4 text-primary-600" />}
                 </button>
               ))
             )}

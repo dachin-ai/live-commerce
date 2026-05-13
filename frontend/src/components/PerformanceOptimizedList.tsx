@@ -28,11 +28,11 @@ function PerformanceOptimizedListComponent({
   }, [items, hasIntersected])
 
   if (loading) {
-    return <div className="text-center py-8 text-gray-500">加载中...</div>
+    return <div className="text-center py-8 text-slate-500">加载中...</div>
   }
 
   if (items.length === 0) {
-    return <div className="text-center py-8 text-gray-500">{emptyMessage}</div>
+    return <div className="text-center py-8 text-slate-500">{emptyMessage}</div>
   }
 
   return (
@@ -44,7 +44,7 @@ function PerformanceOptimizedListComponent({
           ))}
         </div>
       ) : (
-        <div className="text-center py-8 text-gray-500">加载中...</div>
+        <div className="text-center py-8 text-slate-500">加载中...</div>
       )}
     </div>
   )

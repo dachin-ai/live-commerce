@@ -5,6 +5,7 @@ export const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)
 const api = axios.create({
   baseURL: API_BASE_URL,
   timeout: 10000,
+  withCredentials: true,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -13,10 +14,7 @@ const api = axios.create({
 // 请求拦截器
 api.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem('token')
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`
-    }
+    // Token is managed by httpOnly cookie.
     // 多语言：带用户当前语言与地区，供后端/LLM 入参
     try {
       const locale = localStorage.getItem('lvbcsym_locale')
@@ -52,7 +50,6 @@ api.interceptors.response.use(
 
     if (status === 401 || errorMessage === '未登录') {
       console.warn('未授权，需要登录')
-      localStorage.removeItem('token')
       localStorage.removeItem('userId')
       localStorage.removeItem('userRole')
       localStorage.removeItem('userName')

@@ -1,6 +1,6 @@
 import { useState, lazy, Suspense } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
-import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, GitBranch, ChevronRight, ChevronLeft, Globe, Cpu, Shield } from 'lucide-react'
+import { Store, Mail, BarChart3, MessageSquare, BookOpen, Heart, User, LogOut, Settings, Users, Sparkles, ChevronRight, ChevronLeft, Globe, Cpu, Shield } from 'lucide-react'
 import { useCurrentUser, useLogout, getCurrentUserRole } from '../services/auth'
 import { useLanguage } from '../contexts/LanguageContext'
 import type { Locale } from '../contexts/LanguageContext'
@@ -238,6 +238,7 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
             <option value="zh-CN">CN 中文</option>
             <option value="en-US">EN English</option>
             <option value="th-TH">TH ภาษาไทย</option>
+            <option value="id-ID">ID Bahasa Indonesia</option>
           </select>
         </div>
       ) : (
@@ -249,7 +250,7 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
           >
             <Globe className="w-5 h-5 text-gray-600 mx-auto" />
             <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-              语言: {language === 'zh-CN' ? '中文' : language === 'en-US' ? 'English' : 'ภาษา'}
+              语言: {language === 'zh-CN' ? '中文' : language === 'en-US' ? 'English' : language === 'th-TH' ? 'ภาษา' : 'Bahasa'}
             </span>
           </button>
         </div>
@@ -310,21 +311,10 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
               )}
             </Link>
             
-            {/* 管理员专属功能：工作流、LLM 调用方式、用户管理、权限配置 */}
+            {/* 管理员专属功能：LLM 调用方式、用户管理、权限配置 */}
             {isAdmin && (
               <div className="pt-2 mt-2 border-t border-gray-200">
                 <p className="text-xs font-medium text-gray-500 mb-2 px-2">{t('sidebar.adminSection')}</p>
-                <Link
-                  to="/workflow"
-                  className={`w-full flex items-center gap-3 p-2 rounded-lg ${
-                    location.pathname === '/workflow'
-                      ? 'bg-purple-100 text-purple-700'
-                      : 'text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <GitBranch className="w-5 h-5" />
-                  <span>{t('sidebar.workflow')}</span>
-                </Link>
                 <Link
                   to="/llm"
                   className={`w-full flex items-center gap-3 p-2 rounded-lg ${
@@ -427,24 +417,10 @@ export default function Sidebar({ language: propLanguage, onLanguageChange: prop
               </span>
             </Link>
             
-            {/* 管理员图标（收起状态）：工作流、LLM、用户管理、权限配置 */}
+            {/* 管理员图标（收起状态）：LLM、用户管理、权限配置 */}
             {isAdmin && (
               <>
                 <div className="w-8 h-px bg-gray-300 my-1" />
-                <Link
-                  to="/workflow"
-                  className={`group relative p-3 rounded-lg transition-colors ${
-                    location.pathname === '/workflow'
-                      ? 'bg-purple-100 text-purple-600'
-                      : 'hover:bg-gray-200 text-gray-600'
-                  }`}
-                  title={t('sidebar.workflow')}
-                >
-                  <GitBranch className="w-5 h-5" />
-                  <span className="absolute left-full ml-2 top-1/2 -translate-y-1/2 px-2 py-1 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-50">
-                    {t('sidebar.workflow')}
-                  </span>
-                </Link>
                 <Link
                   to="/llm"
                   className={`group relative p-3 rounded-lg transition-colors ${

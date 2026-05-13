@@ -1,10 +1,14 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { useLogin, isAuthenticated } from '../services/auth'
 import { LogIn, Mail, Lock } from 'lucide-react'
 import { useToast } from '../contexts/ToastContext'
+import { GlassInput } from '../components/ui/GlassInput'
+import { GlassButton } from '../components/ui/GlassButton'
 
 export default function Login() {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const location = useLocation()
   const toast = useToast()
@@ -26,21 +30,21 @@ export default function Login() {
       toast.success(state.message)
       navigate(location.pathname, { replace: true, state: {} })
     }
-  }, [])
+  }, [location.pathname, location.state, navigate, toast])
 
   useEffect(() => {
     if (sessionStorage.getItem('loginExpiredMessage')) {
       sessionStorage.removeItem('loginExpiredMessage')
       toast.info('登录已过期，请重新登录')
     }
-  }, [toast])
+  }, [toast, t])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
 
     if (!email || !password) {
-      setError('请输入邮箱和密码')
+      setError(t('auth.enterEmailPassword'))
       return
     }
 
@@ -55,90 +59,98 @@ export default function Login() {
       const msg =
         error.response?.data?.error ||
         error.message ||
-        (error.code === 'ECONNABORTED' ? '请求超时，请确认后端已启动' : '登录失败，请检查邮箱和密码')
+        (error.code === 'ECONNABORTED' ? t('auth.requestTimeout') : t('auth.loginFailedCheck'))
       setError(msg)
     }
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-            <LogIn className="w-8 h-8 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">直播电商中台</h1>
-          <p className="text-gray-600">请登录您的账户</p>
-        </div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-primary-950 to-indigo-950 flex items-center justify-center p-4 relative overflow-hidden">
+      {/* Ambient glow background effects */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-primary-500/10 rounded-full blur-3xl animate-pulse" />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse delay-1000" />
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-              {error}
+      <div className="max-w-md w-full relative z-10">
+        {/* Glassmorphism card */}
+        <div className="bg-white/10 backdrop-blur-2xl rounded-2xl shadow-2xl border border-white/20 p-8">
+          <div className="text-center mb-8">
+            <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary-500 to-indigo-600 rounded-2xl mb-4 shadow-lg shadow-primary-500/30">
+              <LogIn className="w-8 h-8 text-white" />
             </div>
-          )}
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              邮箱地址
-            </label>
-            <div className="relative">
-              <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="admin@example.com"
-                required
-              />
-            </div>
+            <h1 className="text-2xl font-bold text-white mb-2">直播电商中台</h1>
+            <p className="text-white/60">请登录您的账户</p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              密码
-            </label>
-            <div className="relative">
-              <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="请输入密码"
-                required
-              />
-            </div>
-            <div className="flex justify-end mt-2">
-              <Link to="/forgot-password" className="text-xs text-blue-600 hover:underline">
-                忘记密码？
-              </Link>
-            </div>
-          </div>
-
-          <button
-            type="submit"
-            disabled={login.isPending}
-            className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 font-medium"
-          >
-            {login.isPending ? (
-              <>
-                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                登录中...
-              </>
-            ) : (
-              <>
-                <LogIn className="w-4 h-4" />
-                登录
-              </>
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {error && (
+              <div className="bg-red-500/10 backdrop-blur-md border border-red-400/30 text-red-200 px-4 py-3 rounded-xl text-sm">
+                {error}
+              </div>
             )}
-          </button>
-        </form>
 
-        <p className="mt-4 text-center text-sm text-gray-600">
-          系统内测期，暂不支持注册
-        </p>
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                邮箱地址
+              </label>
+              <div className="relative">
+                <Mail className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40 z-10 pointer-events-none" />
+                <GlassInput
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-11 !bg-white/5 !border-white/20 !text-white placeholder:!text-white/30 focus:!border-primary-400/60 focus:!ring-primary-500/20"
+                  placeholder="admin@example.com"
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-white/80 mb-2">
+                密码
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3.5 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/40 z-10 pointer-events-none" />
+                <GlassInput
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-11 !bg-white/5 !border-white/20 !text-white placeholder:!text-white/30 focus:!border-primary-400/60 focus:!ring-primary-500/20"
+                  placeholder="请输入密码"
+                  required
+                />
+              </div>
+              <div className="flex justify-end mt-2">
+                <Link to="/forgot-password" className="text-xs text-primary-300 hover:text-primary-200 transition-colors">
+                  忘记密码？
+                </Link>
+              </div>
+            </div>
+
+            <GlassButton
+              type="submit"
+              disabled={login.isPending}
+              variant="primary"
+              className="w-full !bg-gradient-to-r !from-primary-500 !to-indigo-600 hover:!from-primary-400 hover:!to-indigo-500 !shadow-lg !shadow-primary-500/25 gap-2"
+            >
+              {login.isPending ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  登录中...
+                </>
+              ) : (
+                <>
+                  <LogIn className="w-4 h-4" />
+                  登录
+                </>
+              )}
+            </GlassButton>
+          </form>
+
+          <p className="mt-6 text-center text-sm text-white/40">
+            系统内测期，暂不支持注册
+          </p>
+        </div>
       </div>
     </div>
   )

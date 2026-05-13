@@ -11,6 +11,9 @@ import { useStore } from '../contexts/StoreContext'
 import { useToast } from '../contexts/ToastContext'
 import { useLanguage } from '../contexts/LanguageContext'
 import CountrySelector from './CountrySelector'
+import { getCountryLabel } from '../utils/regionI18n'
+import { GlassInput } from './ui/GlassInput'
+import { GlassButton } from './ui/GlassButton'
 
 /** 按当前语言显示分类名称：泰语用 nameTh，其余用 name */
 function getCategoryDisplayName(cat: { name: string; nameTh?: string | null }, locale: string): string {
@@ -23,6 +26,7 @@ const COUNTRY_CURRENCY: Record<string, { currency: string; symbol: string; code:
   '中国': { currency: '人民币', symbol: '¥', code: 'CNY' },
   '中国香港': { currency: '港币', symbol: 'HK$', code: 'HKD' },
   '中国台湾': { currency: '新台币', symbol: 'NT$', code: 'TWD' },
+  '印度': { currency: '印度卢比', symbol: '₹', code: 'INR' },
   '泰国': { currency: '泰铢', symbol: '฿', code: 'THB' },
   '越南': { currency: '越南盾', symbol: '₫', code: 'VND' },
   '印度尼西亚': { currency: '印尼盾', symbol: 'Rp', code: 'IDR' },
@@ -46,12 +50,13 @@ interface CreateStoreModalProps {
 const CURRENCY_I18N_KEYS: Record<string, string> = {
   CNY: 'currencyCNY', HKD: 'currencyHKD', TWD: 'currencyTWD', THB: 'currencyTHB',
   VND: 'currencyVND', IDR: 'currencyIDR', MYR: 'currencyMYR', SGD: 'currencySGD',
-  PHP: 'currencyPHP', MMK: 'currencyMMK', KHR: 'currencyKHR', LAK: 'currencyLAK', BND: 'currencyBND',
+  PHP: 'currencyPHP', MMK: 'currencyMMK', KHR: 'currencyKHR', LAK: 'currencyLAK', BND: 'currencyBND', INR: 'currencyINR',
 }
 
 /** 国家 → 当地语言名称（第三行「店铺名称（当地语）」的展示） */
 const COUNTRY_LOCAL_LANG: Record<string, string> = {
   '中国': '中文', '中国香港': '繁体中文', '中国台湾': '繁体中文',
+  '印度': '印地语/英语',
   '泰国': '泰语', '越南': '越南语', '印度尼西亚': '印尼语',
   '马来西亚': '马来语', '新加坡': '英语/马来语', '菲律宾': '菲律宾语',
   '缅甸': '缅语', '柬埔寨': '高棉语', '老挝': '老挝语', '文莱': '马来语',
@@ -147,7 +152,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
       setSelectedLevel2Ids([])
       setSelectedLevel1('')
     }
-  }, [isOpen, editStore?.id, storeForEdit])
+  }, [isOpen, editStore, editStore?.id, storeForEdit])
 
   // 切换国家时立即用静态映射更新 region 与货币，保证选择越南/泰国等立刻显示对应货币
   useEffect(() => {
@@ -292,16 +297,16 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
-      <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between mb-6">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200 overflow-y-auto">
+      <div className="bg-white/90 backdrop-blur-xl shadow-2xl border border-white/50 rounded-2xl p-6 md:p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between mb-8">
           <div>
-            <h3 className="text-xl font-semibold text-gray-900">{isEditMode ? t('createStore.editTitle', { default: '编辑店铺' }) : t('createStore.title')}</h3>
-            <p className="text-sm text-gray-500 mt-1">{isEditMode ? t('createStore.editSubtitle', { default: '修改店铺基本信息、分类、货币等属性' }) : t('createStore.subtitle')}</p>
+            <h3 className="text-2xl font-bold text-slate-800">{isEditMode ? t('createStore.editTitle', { default: '编辑店铺' }) : t('createStore.title')}</h3>
+            <p className="text-sm text-slate-500 mt-1">{isEditMode ? t('createStore.editSubtitle', { default: '修改店铺基本信息、分类、货币等属性' }) : t('createStore.subtitle')}</p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600"
+            className="text-slate-400 hover:text-slate-600"
           >
             <X className="w-6 h-6" />
           </button>
@@ -310,30 +315,29 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
         <div className="space-y-6">
           {/* 基本信息 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">{t('createStore.basicInfo')}</h4>
+            <h4 className="font-medium text-slate-900">{t('createStore.basicInfo')}</h4>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
                 {t('createStore.storeName')}
               </label>
-              <input
+              <GlassInput
                 ref={storeNameInputRef}
                 type="text"
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder={t('createStore.storeNamePlaceholder')}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
                 {t('createStore.platform')}
               </label>
               <select
                 value={formData.platform}
                 onChange={(e) => setFormData({ ...formData, platform: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-full bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/60 transition-all duration-200 rounded-xl focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 px-4 py-2.5 text-slate-800"
               >
                 <option value="抖音">{t('createStore.platformDouyin')}</option>
                 <option value="TikTok">{t('createStore.platformTikTok')}</option>
@@ -347,14 +351,13 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
                 {t('createStore.storeNameLocal', { lang: COUNTRY_LOCAL_LANG[country] || '当地语' })}
               </label>
-              <input
+              <GlassInput
                 type="text"
                 value={formData.nameTh || ''}
                 onChange={(e) => setFormData({ ...formData, nameTh: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder={t('createStore.storeNameLocalPlaceholder', { lang: COUNTRY_LOCAL_LANG[country] || '当地语' })}
               />
             </div>
@@ -362,13 +365,13 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
             {canAssignStore && (
               <>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
                     {t('createStore.selectUser')}
                   </label>
                   <select
                     value={formData.userId || ''}
                     onChange={(e) => setFormData({ ...formData, userId: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/60 transition-all duration-200 rounded-xl focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 px-4 py-2.5 text-slate-800"
                   >
                     <option value="">{t('createStore.currentUser')}</option>
                     {(userRole === 'manager'
@@ -380,20 +383,20 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                       </option>
                     ))}
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">{t('createStore.ownerHint', { default: '主归属人，拥有该店铺的完整权限' })}</p>
+                  <p className="text-xs text-slate-500 mt-1 pl-1">{t('createStore.ownerHint', { default: '主归属人，拥有该店铺的完整权限' })}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">
                     {t('createStore.accessUsers', { default: '可查看该店铺的其他用户' })}
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-2 max-h-32 overflow-y-auto">
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-slate-200 rounded-lg p-2 max-h-32 overflow-y-auto">
                     {(userRole === 'manager'
                       ? users.filter((u) => u.role === 'operator' || u.role === 'user')
                       : users
                     ).filter((u) => u.id !== formData.userId).map(user => (
                       <label
                         key={user.id}
-                        className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded"
+                        className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded"
                       >
                         <input
                           type="checkbox"
@@ -403,13 +406,13 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                               ? prev.filter(id => id !== user.id)
                               : [...prev, user.id]
                           )}
-                          className="w-4 h-4 text-blue-600"
+                          className="w-4 h-4 text-primary-600"
                         />
                         <span className="text-sm">{user.name}</span>
                       </label>
                     ))}
                   </div>
-                  <p className="text-xs text-gray-500 mt-1">{t('createStore.accessUsersHint', { default: '勾选后可查看该店铺数据，支持多人共享' })}</p>
+                  <p className="text-xs text-slate-500 mt-1">{t('createStore.accessUsersHint', { default: '勾选后可查看该店铺数据，支持多人共享' })}</p>
                 </div>
               </>
             )}
@@ -417,16 +420,17 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
 
           {/* 国家 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">{t('createStore.country')}</h4>
+            <h4 className="font-medium text-slate-900">{t('createStore.country')}</h4>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.countryRequired')}</label>
+              <label className="block text-sm font-medium text-slate-700 mb-1">{t('createStore.countryRequired')}</label>
               <CountrySelector
                 value={country}
                 onChange={setCountry}
-                options={countries.length > 0 ? countries : [
+                options={(countries.length > 0 ? countries : [
                   { id: '中国', name: '中国' },
                   { id: '中国香港', name: '中国香港' },
                   { id: '中国台湾', name: '中国台湾' },
+                  { id: '印度', name: '印度' },
                   { id: '泰国', name: '泰国' },
                   { id: '越南', name: '越南' },
                   { id: '印度尼西亚', name: '印度尼西亚' },
@@ -438,12 +442,14 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                   { id: '老挝', name: '老挝' },
                   { id: '文莱', name: '文莱' },
                   { id: '其他', name: '其他' },
-                ]}
+                ]).map((c) => ({ ...c, name: getCountryLabel(t, c.id) }))}
                 defaultCountry="中国"
                 placeholder={t('createStore.countryPlaceholder')}
+                searchPlaceholder={t('regions.searchCountry', { fallback: '搜索国家...' })}
+                noResultsText={t('regions.noCountryFound', { fallback: '未找到匹配的国家' })}
               />
-              <p className="text-xs text-gray-500 mt-1">{t('createStore.countryHint')}</p>
-              <p className="text-sm text-blue-600 mt-1 min-h-[1.25rem]" aria-live="polite">
+              <p className="text-xs text-slate-500 mt-1">{t('createStore.countryHint')}</p>
+              <p className="text-sm text-primary-600 mt-1 min-h-[1.25rem]" aria-live="polite">
                 {(() => {
                   const cur = COUNTRY_CURRENCY[country] || COUNTRY_CURRENCY['中国']
                   const currencyLabel = CURRENCY_I18N_KEYS[cur.code] ? t(`createStore.${CURRENCY_I18N_KEYS[cur.code]}`) : `${cur.currency} (${cur.symbol} ${cur.code})`
@@ -455,10 +461,10 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
 
           {/* 产品分类 */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">{t('createStore.categoriesTitle')}</h4>
+            <h4 className="font-medium text-slate-900">{t('createStore.categoriesTitle')}</h4>
             
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">{t('createStore.level1')}</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2 pl-1">{t('createStore.level1')}</label>
               <select
                 value={selectedLevel1}
                 onChange={(e) => {
@@ -466,7 +472,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                   setSelectedLevel2Ids([])
                   setSelectedCategories([])
                 }}
-                className="w-full max-w-xs min-w-[12rem] px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full max-w-xs min-w-[12rem] bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/60 transition-all duration-200 rounded-xl focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 px-4 py-2.5 text-slate-800"
                 aria-label={t('createStore.level1')}
                 aria-busy={level1Loading}
               >
@@ -480,31 +486,31 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
               {level1Error && (
                 <p className="text-xs text-red-600 mt-1">
                   {t('createStore.level1LoadFailed')}
-                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">{t('createStore.retry')}</button>
+                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-primary-600 hover:underline">{t('createStore.retry')}</button>
                 </p>
               )}
               {!level1Loading && !level1Error && level1Categories.length === 0 && (
                 <p className="text-xs text-amber-600 mt-1">
                   {t('createStore.level1NoData')}
-                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-blue-600 hover:underline">{t('createStore.retry')}</button>
+                  <button type="button" onClick={() => refetchCategories()} className="ml-1 text-primary-600 hover:underline">{t('createStore.retry')}</button>
                 </p>
               )}
             </div>
 
             {selectedLevel1 && level2Categories.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">{t('createStore.level2')}</label>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-gray-200 rounded-lg p-2 max-h-32 overflow-y-auto">
+                <label className="block text-sm font-medium text-slate-700 mb-2">{t('createStore.level2')}</label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 border border-slate-200 rounded-lg p-2 max-h-32 overflow-y-auto">
                   {level2Categories.map(cat => (
                     <label
                       key={cat.id}
-                      className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded"
+                      className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded"
                     >
                       <input
                         type="checkbox"
                         checked={selectedLevel2Ids.includes(cat.id)}
                         onChange={() => handleLevel2Toggle(cat.id)}
-                        className="w-4 h-4 text-blue-600"
+                        className="w-4 h-4 text-primary-600"
                       />
                       <span className="text-sm">{getCategoryDisplayName(cat, locale)}</span>
                     </label>
@@ -515,20 +521,20 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
 
             {selectedLevel2Ids.length > 0 && level3Categories.length > 0 && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
                   {t('createStore.level3')}
                 </label>
-                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-2">
+                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto border border-slate-200 rounded-lg p-2">
                   {level3Categories.map(cat => (
                     <label
                       key={cat.id}
-                      className="flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer rounded"
+                      className="flex items-center gap-2 p-2 hover:bg-slate-50 cursor-pointer rounded"
                     >
                       <input
                         type="checkbox"
                         checked={selectedCategories.includes(cat.id)}
                         onChange={() => handleCategoryToggle(cat.id)}
-                        className="w-4 h-4 text-blue-600"
+                        className="w-4 h-4 text-primary-600"
                       />
                       <span className="text-sm">{getCategoryDisplayName(cat, locale)}</span>
                     </label>
@@ -537,13 +543,13 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                 <div className="mt-2 flex items-center gap-2 flex-wrap">
                   <button
                     onClick={handleAddCategories}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                    className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
                   >
                     <Plus className="w-4 h-4" />
                     {t('createStore.addSelectedCategories')}
                   </button>
                   {level2IdsWithNoLevel3.length > 0 && (
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-slate-500">
                       {t('createStore.level2NoLevel3Hint', { count: level2IdsWithNoLevel3.length })}
                     </span>
                   )}
@@ -555,12 +561,12 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
                   onClick={handleAddCategories}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm"
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm"
                 >
                   <Plus className="w-4 h-4" />
                   {t('createStore.addSelectedCategories')}
                 </button>
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-slate-500">
                   {t('createStore.level2OnlyHint')}
                 </span>
               </div>
@@ -573,12 +579,12 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                   return cat ? (
                     <span
                       key={catId}
-                      className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs flex items-center gap-1"
+                      className="px-2 py-1 bg-primary-100 text-primary-800 rounded text-xs flex items-center gap-1"
                     >
                       {getCategoryDisplayName(cat, locale)}
                       <button
                         onClick={() => handleCategoryToggle(catId)}
-                        className="text-blue-600 hover:text-blue-800"
+                        className="text-primary-600 hover:text-primary-800"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -588,30 +594,30 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
               </div>
             )}
 
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500">
               {t('createStore.categoriesHint')}
             </p>
           </div>
 
           {/* 货币和价格（可省略，跟随国家推荐） */}
           <div className="space-y-4">
-            <h4 className="font-medium text-gray-900">{t('createStore.currencyAndPrice')}</h4>
+            <h4 className="font-medium text-slate-900">{t('createStore.currencyAndPrice')}</h4>
             {!currencyOverride && currencyInfo ? (
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-sm text-gray-700">
+                <span className="text-sm text-slate-700">
                   {t('createStore.currencyFollowCountry', { symbol: formData.currencySymbol, code: formData.currency })}
                 </span>
                 <button
                   type="button"
                   onClick={() => setCurrencyOverride(true)}
-                  className="text-sm text-blue-600 hover:underline"
+                  className="text-sm text-primary-600 hover:underline"
                 >
                   {t('createStore.modify')}
                 </button>
               </div>
             ) : (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.currencyOptional')}</label>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">{t('createStore.currencyOptional')}</label>
                 <select
                   value={[formData.currencySymbol, formData.currency].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim() || '¥ CNY'}
                   onChange={(e) => {
@@ -621,7 +627,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                     const code = lastSpace > 0 ? v.slice(lastSpace + 1) : 'CNY'
                     setFormData({ ...formData, currencySymbol: symbol, currency: code })
                   }}
-                  className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full max-w-xs bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/60 transition-all duration-200 rounded-xl focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 px-4 py-2.5 text-slate-800"
                 >
                   <option value="¥ CNY">¥ {t('createStore.currencyCNY')}</option>
                   <option value="HK$ HKD">HK$ {t('createStore.currencyHKD')}</option>
@@ -640,7 +646,7 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
                 <button
                   type="button"
                   onClick={() => setCurrencyOverride(false)}
-                  className="ml-2 text-sm text-gray-500 hover:underline"
+                  className="ml-2 text-sm text-slate-500 hover:underline"
                 >
                   {t('createStore.restoreFollowCountry')}
                 </button>
@@ -648,33 +654,31 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
             )}
 
             <div>
-              <p className="text-sm text-gray-600 mb-2">
+              <p className="text-sm text-slate-600 mb-2">
                 {t('createStore.priceRange', {
                   currency: (formData.currency && CURRENCY_I18N_KEYS[formData.currency] ? t(`createStore.${CURRENCY_I18N_KEYS[formData.currency]}`) : formData.currency ?? '')
                 })}
               </p>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
                     {t('createStore.minPrice')}
                   </label>
-                  <input
+                  <GlassInput
                     type="number"
                     value={formData.minPrice || ''}
                     onChange={(e) => setFormData({ ...formData, minPrice: e.target.value ? Number(e.target.value) : undefined })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder={t('createStore.minPricePlaceholder')}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {t('createStore.maxPrice')} <span className="text-gray-500 font-normal">({formData.currencySymbol || '¥'} {formData.currency || 'CNY'})</span>
+                  <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
+                    {t('createStore.maxPrice')} <span className="text-slate-500 font-normal">({formData.currencySymbol || '¥'} {formData.currency || 'CNY'})</span>
                   </label>
-                  <input
+                  <GlassInput
                     type="number"
                     value={formData.maxPrice || ''}
                     onChange={(e) => setFormData({ ...formData, maxPrice: e.target.value ? Number(e.target.value) : undefined })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder={t('createStore.maxPricePlaceholder')}
                   />
                 </div>
@@ -684,50 +688,51 @@ export default function CreateStoreModal({ isOpen, onClose, store: editStore }: 
 
           {/* 目标人群 */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">
               {t('createStore.targetAudience')}
             </label>
-            <input
+            <GlassInput
               type="text"
               value={formData.targetAudience || ''}
               onChange={(e) => setFormData({ ...formData, targetAudience: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder={t('createStore.targetAudiencePlaceholder')}
             />
           </div>
 
           {/* 品牌定位（无品牌/小型/中型/大型，可在待办中确认） */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">{t('createStore.brandPositioning')}</label>
+            <label className="block text-sm font-medium text-slate-700 mb-1.5 pl-1">{t('createStore.brandPositioning')}</label>
             <select
               value={formData.brandPositioning || '小型品牌'}
               onChange={(e) => setFormData({ ...formData, brandPositioning: e.target.value })}
-              className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full max-w-xs bg-white/40 backdrop-blur-md border border-white/60 hover:bg-white/60 transition-all duration-200 rounded-xl focus:outline-none focus:border-primary-400 focus:ring-4 focus:ring-primary-500/20 px-4 py-2.5 text-slate-800"
             >
               <option value="无品牌">{t('createStore.brandNone')}</option>
               <option value="小型品牌">{t('createStore.brandSmall')}</option>
               <option value="中型品牌">{t('createStore.brandMedium')}</option>
               <option value="大型品牌">{t('createStore.brandLarge')}</option>
             </select>
-            <p className="text-xs text-gray-500 mt-1">{t('createStore.brandPositioningHint')}</p>
-            <p className="text-xs text-blue-600 mt-1">{t('createStore.brandStrategyHint')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('createStore.brandPositioningHint')}</p>
+            <p className="text-xs text-primary-600 mt-1">{t('createStore.brandStrategyHint')}</p>
           </div>
         </div>
 
-        <div className="flex gap-3 mt-6 pt-6 border-t border-gray-200">
-          <button
+        <div className="flex gap-4 mt-8 pt-6 border-t border-slate-200/50">
+          <GlassButton
             onClick={onClose}
-            className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+            variant="secondary"
+            className="flex-1"
           >
             {t('createStore.cancel')}
-          </button>
-          <button
+          </GlassButton>
+          <GlassButton
             onClick={handleSubmit}
             disabled={createStore.isPending || updateStore.isPending}
-            className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            variant="primary"
+            className="flex-1"
           >
             {(createStore.isPending || updateStore.isPending) ? t('createStore.submitting') : (isEditMode ? t('createStore.saveChanges', { default: '保存修改' }) : t('createStore.submit'))}
-          </button>
+          </GlassButton>
         </div>
       </div>
     </div>

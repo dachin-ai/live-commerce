@@ -90,7 +90,7 @@ router.post('/login', async (req, res) => {
       const seen = await dbGet('SELECT 1 FROM tutorial_seen_ips WHERE ipHash = ?', [ipHash])
       newIpFirstLogin = !seen
       if (newIpFirstLogin) {
-        await dbRun('INSERT OR IGNORE INTO tutorial_seen_ips (ipHash, seenAt) VALUES (?, ?)', [
+        await dbRun('INSERT INTO tutorial_seen_ips (ipHash, seenAt) VALUES (?, ?) ON CONFLICT DO NOTHING', [
           ipHash,
           new Date().toISOString(),
         ])
@@ -115,8 +115,16 @@ router.post('/login', async (req, res) => {
     // 更新最后登录时间
     await dbRun('UPDATE users SET lastLoginAt = ? WHERE id = ?', [new Date().toISOString(), user.id])
 
+    const isProduction = process.env.NODE_ENV === 'production'
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: '/',
+    })
+
     res.json({
-      token,
       user: {
         id: user.id,
         name: user.name,
@@ -135,10 +143,11 @@ router.post('/login', async (req, res) => {
 // 用户登出
 router.post('/logout', async (req, res) => {
   try {
-    const token = req.headers.authorization?.replace('Bearer ', '')
+    const token = (req as any).cookies?.token || req.headers.authorization?.replace('Bearer ', '')
     if (token) {
       await dbRun('DELETE FROM user_sessions WHERE token = ?', [token])
     }
+    res.clearCookie('token', { httpOnly: true, path: '/' })
     res.json({ message: '登出成功' })
   } catch (error) {
     console.error('登出失败:', error)

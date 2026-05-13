@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+/* eslint-disable react-refresh/only-export-components */
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react'
 import { useStores } from '../services/stores'
 
 interface Store {
@@ -24,7 +25,7 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined)
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const { data, isLoading, error } = useStores({ page: 1, limit: 50, light: true })
-  const stores = data?.items ?? []
+  const stores = useMemo(() => data?.items ?? [], [data?.items])
   const [selectedStore, setSelectedStoreState] = useState<Store | null>(null)
 
   // 从localStorage恢复选中的店铺

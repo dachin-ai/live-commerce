@@ -1,0 +1,23 @@
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: lvbcsym-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: lvbcsym
+      POSTGRES_PASSWORD: lvbcsym2026
+      POSTGRES_DB: live_commerce
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U lvbcsym -d live_commerce"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
+    driver: local

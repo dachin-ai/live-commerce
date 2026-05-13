@@ -38,25 +38,23 @@
 **双击 `快速启动.bat`** 即可
 
 ### 更新数据库分类
-1. 修改 `backend/src/db.ts` 中的分类数据
+1. 修改 `backend/src/db.ts` 中的种子数据
 2. 打开 PowerShell，执行：`cd backend && npm run db:update-seed`
 3. 完成（保留业务数据）
 
-## 🔧 数据库操作优化
+## 🔧 数据库
+
+系统使用 **PostgreSQL 18**（自 2026-04-30 起从 SQLite 迁移）。连接参数通过 `backend/.env` 配置（`PG_HOST`、`PG_PORT`、`PG_DATABASE`、`PG_USER`、`PG_PASSWORD`）。
 
 ### 更新种子数据（不丢失业务数据）⭐ 推荐
 
-**之前**：需要删除数据库 → 重启后端 → 重新创建（3-4步）
-
-**现在**：
 1. 修改 `backend/src/db.ts` 中的种子数据
 2. 执行：`cd backend && npm run db:update-seed`
 3. 完成（保留所有业务数据）
 
-### 重置数据库（清空所有数据）
+### 重置数据库
 
-1. 删除 `backend\data.db` 文件
-2. 重启后端服务（会自动创建新数据库）
+使用 psql 命令重建，详见 [启动与数据库操作指南](docs/启动与数据库操作指南.md)。
 
 ## 📝 注意事项
 

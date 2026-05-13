@@ -6,7 +6,7 @@
  * 2. 重置数据库：npm run db:reset
  */
 
-import { getDatabase, dbRun, dbGet, initDatabase } from './db'
+import { getDatabase, dbRun, dbGet, dbAll, initDatabase } from './db'
 import crypto from 'crypto'
 
 // 数据库版本表
@@ -20,7 +20,7 @@ async function initVersionTable() {
     CREATE TABLE IF NOT EXISTS ${DB_VERSION_TABLE} (
       version INTEGER PRIMARY KEY,
       description TEXT,
-      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      applied_at TEXT NOT NULL DEFAULT NOW()
     )
   `)
 }
@@ -114,7 +114,7 @@ export async function updateSeedData() {
         id TEXT PRIMARY KEY,
         userId TEXT NOT NULL,
         storeId TEXT NOT NULL,
-        createdAt TEXT NOT NULL DEFAULT (datetime('now')),
+        createdAt TEXT NOT NULL DEFAULT NOW(),
         FOREIGN KEY (userId) REFERENCES users(id),
         FOREIGN KEY (storeId) REFERENCES stores(id),
         UNIQUE(userId, storeId)
@@ -123,6 +123,20 @@ export async function updateSeedData() {
     await dbRun('CREATE INDEX IF NOT EXISTS idx_user_store_access_userId ON user_store_access(userId)')
     await dbRun('CREATE INDEX IF NOT EXISTS idx_user_store_access_storeId ON user_store_access(storeId)')
     await recordMigration(12, '创建 user_store_access 表')
+  }
+
+  // 迁移：补齐「厨具」三级类目（已有库增量更新）
+  if (currentVersion < 13) {
+    console.log('📦 补齐厨具三级类目（锅具/刀具/餐具等）...')
+    await addMissingCategoriesV13()
+    await recordMigration(13, '补齐厨具三级类目')
+  }
+
+  // 迁移：为所有缺三级的二级类目补“其他”，并补充部分常用三级
+  if (currentVersion < 14) {
+    console.log('📦 补齐缺失的三级类目（至少“其他”）...')
+    await addMissingLevel3FallbacksV14()
+    await recordMigration(14, '补齐缺失的三级类目（其他）')
   }
 
   console.log('✅ 种子数据更新完成')
@@ -138,11 +152,139 @@ async function addMissingCategoriesV10() {
   ]
   for (const row of toAdd) {
     await dbRun(
-      'INSERT OR IGNORE INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?)',
+      'INSERT INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
       row
     )
   }
   console.log('✅ 运动户外细分类目已添加')
+}
+
+/** 补齐厨具(cat-2-26)下的三级类目（INSERT OR IGNORE 避免重复） */
+async function addMissingCategoriesV13() {
+  const toAdd = [
+    ['cat-3-80', '锅具', 'เครื่องครัวประเภทหม้อ/กระทะ', 3, 'cat-2-26', 1],
+    ['cat-3-81', '刀具', 'มีดทำครัว', 3, 'cat-2-26', 2],
+    ['cat-3-82', '砧板', 'เขียง', 3, 'cat-2-26', 3],
+    ['cat-3-83', '餐具', 'ช้อนส้อม/จานชาม', 3, 'cat-2-26', 4],
+    ['cat-3-84', '厨房收纳', 'ที่เก็บของในครัว', 3, 'cat-2-26', 5],
+    ['cat-3-85', '保鲜存储', 'กล่องถนอมอาหาร/เก็บรักษา', 3, 'cat-2-26', 6],
+    ['cat-3-86', '烘焙工具', 'อุปกรณ์อบ', 3, 'cat-2-26', 7],
+    ['cat-3-87', '厨房小工具', 'อุปกรณ์ครัวชิ้นเล็ก', 3, 'cat-2-26', 8],
+    ['cat-3-88', '清洁工具', 'อุปกรณ์ทำความสะอาดครัว', 3, 'cat-2-26', 9],
+    ['cat-3-89', '一次性用品', 'ของใช้แบบใช้ครั้งเดียวในครัว', 3, 'cat-2-26', 10],
+  ]
+  for (const row of toAdd) {
+    await dbRun(
+      'INSERT INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
+      row
+    )
+  }
+  console.log('✅ 厨具三级类目已补齐')
+}
+
+/**
+ * 为所有没有三级子类目的二级类目补一个“其他”三级（INSERT OR IGNORE）。
+ * 同时补充一批常见细分三级（用于提升可选性）。
+ */
+async function addMissingLevel3FallbacksV14() {
+  // 1) 自动补“其他”
+  const level2 = await dbAll<{ id: string; name: string }>(
+    `SELECT id, name FROM categories WHERE level = 2 ORDER BY sortOrder, name`
+  )
+  for (const c of level2) {
+    const row = await dbGet<{ c: number }>(
+      `SELECT COUNT(*) as c FROM categories WHERE level = 3 AND parentId = ?`,
+      [c.id]
+    )
+    const has = Number(row?.c ?? 0) > 0
+    if (has) continue
+    const id = `cat-3-auto-${c.id}`
+    await dbRun(
+      'INSERT INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
+      [id, '其他', null, 3, c.id, 999]
+    )
+  }
+
+  // 2) 常用细分补充（尽量通用，避免空洞；可后续按平台再细化）
+  const toAdd = [
+    // 家纺
+    ['cat-3-90', '床品套件', 'ชุดเครื่องนอน', 3, 'cat-2-22', 1],
+    ['cat-3-91', '被子', 'ผ้าห่ม', 3, 'cat-2-22', 2],
+    ['cat-3-92', '枕头', 'หมอน', 3, 'cat-2-22', 3],
+    ['cat-3-93', '毛巾浴巾', 'ผ้าเช็ดตัว', 3, 'cat-2-22', 4],
+    // 家具
+    ['cat-3-94', '沙发', 'โซฟา', 3, 'cat-2-23', 1],
+    ['cat-3-95', '床', 'เตียง', 3, 'cat-2-23', 2],
+    ['cat-3-96', '桌椅', 'โต๊ะและเก้าอี้', 3, 'cat-2-23', 3],
+    ['cat-3-97', '收纳柜', 'ตู้เก็บของ', 3, 'cat-2-23', 4],
+    // 家装建材
+    ['cat-3-98', '灯具', 'โคมไฟ', 3, 'cat-2-25', 1],
+    ['cat-3-99', '五金工具', 'เครื่องมือช่าง', 3, 'cat-2-25', 2],
+    ['cat-3-100', '卫浴', 'ห้องน้ำ', 3, 'cat-2-25', 3],
+    ['cat-3-101', '装饰材料', 'วัสดุตกแต่ง', 3, 'cat-2-25', 4],
+    // 数码配件
+    ['cat-3-102', '耳机音响', 'หูฟัง/ลำโพง', 3, 'cat-2-29', 1],
+    ['cat-3-103', '数据线', 'สายข้อมูล', 3, 'cat-2-29', 2],
+    ['cat-3-104', '充电器', 'ที่ชาร์จ', 3, 'cat-2-29', 3],
+    ['cat-3-105', '存储设备', 'อุปกรณ์จัดเก็บข้อมูล', 3, 'cat-2-29', 4],
+    // 智能设备
+    ['cat-3-106', '智能手表', 'สมาร์ทวอทช์', 3, 'cat-2-30', 1],
+    ['cat-3-107', '智能家居', 'สมาร์ทโฮม', 3, 'cat-2-30', 2],
+    ['cat-3-108', '智能穿戴', 'อุปกรณ์สวมใส่', 3, 'cat-2-30', 3],
+    // 办公设备
+    ['cat-3-109', '打印机', 'เครื่องพิมพ์', 3, 'cat-2-31', 1],
+    ['cat-3-110', '投影仪', 'โปรเจคเตอร์', 3, 'cat-2-31', 2],
+    ['cat-3-111', '办公耗材', 'อุปกรณ์สิ้นเปลืองสำนักงาน', 3, 'cat-2-31', 3],
+    // 运动装备
+    ['cat-3-112', '瑜伽健身', 'โยคะ/ฟิตเนส', 3, 'cat-2-33', 1],
+    ['cat-3-113', '球类运动', 'กีฬาแบบลูกบอล', 3, 'cat-2-33', 2],
+    ['cat-3-114', '跑步装备', 'อุปกรณ์วิ่ง', 3, 'cat-2-33', 3],
+    // 户外用品
+    ['cat-3-115', '登山徒步', 'เดินป่า', 3, 'cat-2-34', 1],
+    ['cat-3-116', '露营', 'แค้มป์ปิ้ง', 3, 'cat-2-34', 2],
+    ['cat-3-117', '旅行用品', 'อุปกรณ์ท่องเที่ยว', 3, 'cat-2-34', 3],
+    // 汽车用品
+    ['cat-3-118', '车载电器', 'อุปกรณ์ไฟฟ้ารถยนต์', 3, 'cat-2-35', 1],
+    ['cat-3-119', '清洁养护', 'ดูแล/ทำความสะอาดรถ', 3, 'cat-2-35', 2],
+    ['cat-3-120', '内饰用品', 'อุปกรณ์ตกแต่งภายใน', 3, 'cat-2-35', 3],
+    // 汽车配件
+    ['cat-3-121', '轮胎轮毂', 'ยาง/ล้อ', 3, 'cat-2-36', 1],
+    ['cat-3-122', '灯泡雨刷', 'ไฟ/ที่ปัดน้ำฝน', 3, 'cat-2-36', 2],
+    ['cat-3-123', '维修配件', 'อะไหล่ซ่อมบำรุง', 3, 'cat-2-36', 3],
+    // 绿植/园艺用品
+    ['cat-3-124', '室内绿植', 'ไม้ประดับในบ้าน', 3, 'cat-2-38', 1],
+    ['cat-3-125', '多肉盆栽', 'ไม้อวบน้ำ', 3, 'cat-2-38', 2],
+    ['cat-3-126', '花盆花土', 'กระถาง/ดิน', 3, 'cat-2-39', 1],
+    ['cat-3-127', '园艺工具', 'เครื่องมือทำสวน', 3, 'cat-2-39', 2],
+    // 宠物用品
+    ['cat-3-128', '猫砂猫砂盆', 'ทรายแมว/กระบะ', 3, 'cat-2-47', 1],
+    ['cat-3-129', '宠物清洁', 'ทำความสะอาดสัตว์เลี้ยง', 3, 'cat-2-47', 2],
+    ['cat-3-130', '宠物玩具', 'ของเล่นสัตว์เลี้ยง', 3, 'cat-2-47', 3],
+    // 玩具（亲子生活）
+    ['cat-3-131', '益智玩具', 'ของเล่นเสริมทักษะ', 3, 'cat-2-18', 1],
+    ['cat-3-132', '积木拼图', 'บล็อก/จิ๊กซอว์', 3, 'cat-2-18', 2],
+    ['cat-3-133', '毛绒玩具', 'ตุ๊กตา', 3, 'cat-2-18', 3],
+    // 教育培训
+    ['cat-3-134', '线上课程', 'คอร์สออนไลน์', 3, 'cat-2-21', 1],
+    ['cat-3-135', '教辅资料', 'สื่อการเรียน', 3, 'cat-2-21', 2],
+    // 香水
+    ['cat-3-136', '女士香水', 'น้ำหอมผู้หญิง', 3, 'cat-2-9', 1],
+    ['cat-3-137', '男士香水', 'น้ำหอมผู้ชาย', 3, 'cat-2-9', 2],
+    // 美发护发
+    ['cat-3-138', '洗发护发', 'แชมพู/ครีมนวด', 3, 'cat-2-10', 1],
+    ['cat-3-139', '造型工具', 'อุปกรณ์จัดแต่งทรง', 3, 'cat-2-10', 2],
+    // 个人护理
+    ['cat-3-140', '身体护理', 'ดูแลผิวกาย', 3, 'cat-2-11', 1],
+    ['cat-3-141', '口腔护理', 'ดูแลช่องปาก', 3, 'cat-2-11', 2],
+    ['cat-3-142', '剃须脱毛', 'โกนหนวด/กำจัดขน', 3, 'cat-2-11', 3],
+  ]
+  for (const row of toAdd) {
+    await dbRun(
+      'INSERT INTO categories (id, name, nameTh, level, parentId, sortOrder) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING',
+      row
+    )
+  }
+  console.log('✅ 缺失三级已补齐（含“其他”兜底 + 常用细分）')
 }
 
 /**

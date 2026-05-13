@@ -37,7 +37,9 @@ steps:
             --platform=managed \
             --allow-unauthenticated \
             --set-secrets=JWT_SECRET=jwt-secret:latest \
-            --set-env-vars=NODE_ENV=production,DATABASE_URL=$_DATABASE_URL,CORS_ORIGIN=$_CORS_ORIGIN && break
+            --set-env-vars=NODE_ENV=production,DATABASE_URL=$_DATABASE_URL,CORS_ORIGIN=$_CORS_ORIGIN \
+            --memory=512Mi \
+            --timeout=300 && break
           if [ "$i" -eq 3 ]; then
             echo "Backend deploy failed after retries"
             exit 1
@@ -75,7 +77,9 @@ steps:
             --image=asia-southeast1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/live-commerce-web:$SHORT_SHA \
             --region=$_REGION \
             --platform=managed \
-            --allow-unauthenticated && break
+            --allow-unauthenticated \
+            --port=8080 \
+            --memory=256Mi && break
           if [ "$i" -eq 3 ]; then
             echo "Frontend deploy failed after retries"
             exit 1

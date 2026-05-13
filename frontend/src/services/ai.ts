@@ -1,5 +1,5 @@
 import api from './api'
-import { API_BASE_URL } from './api'
+import { localeToCountryCode } from '../contexts/LanguageContext'
 
 export type ScriptType =
   | 'full-sales'
@@ -9,15 +9,57 @@ export type ScriptType =
   | 'segment-benefits'
   | 'segment-after-sales'
   | 'segment-closing'
-export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH'
+  | 'framework-weak-product'
+  | 'framework-strong-product'
+export type ScriptLanguage = 'zh-CN' | 'en-US' | 'th-TH' | 'id-ID'
 
 export interface GenerateScriptParams {
   productName?: string
+  /** Coze 范式，与 productName 同义 */
+  product_name?: string
   /** 产品 SKU（可选），对应 Coze sku_info */
   productSku?: string
   price?: string
   features?: string
+  /** 单品：核心卖点（优先展开） */
+  coreFeatures?: string
+  /** 单品：次要卖点（补充） */
+  secondaryFeatures?: string
   targetAudience?: string
+  /** 是否为组套（核心产品+配套工具） */
+  isBundle?: boolean
+  /** Coze 范式：与 isBundle 同义，请求体可显式传 true */
+  is_combo?: boolean
+  /** Coze 范式：组套子品列表（与 bundleItems 二选一，后端优先已有字段） */
+  products?: Array<{
+    id?: number
+    name: string
+    price?: string
+    sku?: string
+    features?: string
+    quantity?: number
+    is_main?: boolean
+    role?: 'core' | 'tool'
+  }>
+  /** Coze 范式：单品总价（组套「单买合计」） */
+  combo_original_price?: string
+  /** Coze 范式：优惠金额 */
+  combo_discount_amount?: string
+  /** 组套名称 */
+  bundleName?: string
+  /** 组套总价 */
+  bundleTotalPrice?: string
+  /** 组套特点（可多条） */
+  bundleFeatures?: string[]
+  /** 组套单品列表 */
+  bundleItems?: Array<{
+    name: string
+    price?: string
+    sku?: string
+    features?: string
+    quantity?: number
+    role?: 'core' | 'tool'
+  }>
   scriptType?: ScriptType
   language?: ScriptLanguage
   promoCopy?: string
@@ -31,9 +73,15 @@ export interface GenerateScriptParams {
   /** 自定义要求，对应 Coze custom_requirements */
   custom_requirements?: string
   customRequirements?: string
+  /** 售后/保障/退换等信息（单品与组套通用） */
+  afterSalesInfo?: string
+  /** 竞品参考：链接或多行对比要点（价参、卖点等）；后端亦可传 competitor_link / competitor_reference / competitor_urls */
+  competitorLink?: string
   topic?: string
   duration?: number
   style?: string
+  price_level?: string
+  product_role?: string
 }
 
 export interface GenerateTasksParams {
@@ -50,6 +98,8 @@ export interface GenerateTasksParams {
   locale?: string
   /** 国家/地区代码（如 CN、US、TH），不传则从 locale 推导 */
   countryCode?: string
+  /** 待办生成缓存周起始日（自然周，YYYY-MM-DD）；不传则后端使用当前自然周 */
+  weekStart?: string
 }
 
 export interface ScriptLLMResult {
@@ -70,10 +120,9 @@ export async function getScriptLLMConfig(): Promise<{
   return data as unknown as { configured: boolean; allowedUserIds?: string[] | null; enabledFeatures?: string[] | null; hasAccess?: boolean; hasAccessForTasks?: boolean }
 }
 
-/** 豆包（火山方舟）API 基地址 */
+/** @deprecated C2/C3: 内部 LLM 地址不应出现在前端代码中，仅保留向后兼容。实际配置从后端 /api/ai/script/config 获取。 */
 export const DOUBAO_LLM_BASE_URL = 'https://ark.cn-beijing.volces.com/api/v3'
-
-/** 默认 Coze 智能体 stream_run 地址（话术生成优先使用） */
+/** @deprecated C2/C3: 同上。实际 Coze URL 由后端环境变量或数据库配置决定。 */
 export const DEFAULT_SCRIPT_LLM_URL = 'https://zbmr4xq6rm.coze.site/stream_run'
 
 /** LLM 智能体方式：Coze Agent、OpenAI 兼容 */
@@ -90,14 +139,14 @@ export async function getLlmTools(): Promise<{
   tools: Array<{ id: string; name: string; url: string; model: string | null; sort_order: number }>
   defaultToolId: string | null
   selectedToolId: string | null
-  featureMapping?: { script?: string; tasks?: string; anomaly?: string; video?: string }
+  featureMapping?: { script?: string; tasks?: string; anomaly?: string; video?: string; systemAgent?: string }
 }> {
   const data = await api.get('/ai/llm-tools')
   return data as unknown as Awaited<ReturnType<typeof getLlmTools>>
 }
 
 /** 设置功能→工具映射（PUT /api/ai/feature-llm-mapping），仅管理员 */
-export async function setFeatureLlmMapping(mapping: { script?: string; tasks?: string; anomaly?: string; video?: string }): Promise<{ success: boolean; message?: string }> {
+export async function setFeatureLlmMapping(mapping: { script?: string; tasks?: string; anomaly?: string; video?: string; systemAgent?: string }): Promise<{ success: boolean; message?: string }> {
   const data = await api.put('/ai/feature-llm-mapping', mapping)
   return data as unknown as { success: boolean; message?: string }
 }
@@ -160,25 +209,13 @@ export async function saveScriptLLMConfig(
   return data as unknown as { success: boolean; message?: string }
 }
 
-/** 智能生成任务会调用 LLM，可能需 15～90 秒（含重试），单独延长超时 */
-const GENERATE_TASKS_TIMEOUT_MS = 90000
+/** 智能生成任务会调用 LLM，可能需 15～120 秒（含重试），单独延长超时。
+ *  后端单次 LLM 超时默认 120s，最多重试 1 次，前端须 > 单次上限才不会先断开。*/
+const GENERATE_TASKS_TIMEOUT_MS = 150000
 /** 话术生成（同步）、报告等长耗时接口超时 */
 const SCRIPT_AND_REPORT_TIMEOUT_MS = 60000
 
-/** 从 locale 推导国家/地区代码（与后端、LanguageContext 一致） */
-function localeToCountryCode(locale: string | undefined): string {
-  if (!locale) return 'CN'
-  const u = (locale || '').toUpperCase()
-  if (u.startsWith('ZH')) return 'CN'
-  if (u.startsWith('EN')) return 'US'
-  if (u.startsWith('TH')) return 'TH'
-  if (u.startsWith('VI')) return 'VN'
-  if (u.startsWith('ID')) return 'ID'
-  if (u.startsWith('MY') || u.startsWith('MS')) return 'MY'
-  if (u.startsWith('SG')) return 'SG'
-  if (u.startsWith('PH')) return 'PH'
-  return u.slice(0, 2) || 'CN'
-}
+// C4: localeToCountryCode 已从 LanguageContext 导入，此处不再重复定义
 
 declare global {
   interface Window {
@@ -196,6 +233,7 @@ export interface GenerateTasksMetadata {
   llmStatusMessage?: string
   llmStatus?: string
   statsDateRangeUsed?: { dateFrom: string; dateTo: string }
+  statsDateRangeReason?: string
 }
 
 export async function generateTasks(params: GenerateTasksParams): Promise<{ message: string; tasks: unknown[]; metadata?: GenerateTasksMetadata }> {
@@ -214,6 +252,7 @@ export async function generateTasks(params: GenerateTasksParams): Promise<{ mess
     locale,
     countryCode,
   }
+  if (params.weekStart) body.weekStart = params.weekStart
   if (params.useStatsFromStoreId) body.useStatsFromStoreId = params.useStatsFromStoreId
   if (params.rawDailyTable?.trim()) body.rawDailyTable = params.rawDailyTable.trim()
   if (params.metricsOverride && typeof params.metricsOverride === 'object') body.metricsOverride = params.metricsOverride
@@ -222,8 +261,11 @@ export async function generateTasks(params: GenerateTasksParams): Promise<{ mess
   return data as unknown as { message: string; tasks: unknown[]; metadata?: GenerateTasksMetadata }
 }
 
-/** 调用后端生成话术/脚本（POST /api/ai/script），长耗时单独超时 */
-export async function generateScript(params: GenerateScriptParams): Promise<ScriptLLMResult> {
+/**
+ * C4: 共享请求体构建 — generateScript 与 generateScriptStream 共用
+ * 新增参数时只需在此处添加一次，不会遗漏。
+ */
+function buildScriptRequestBody(params: GenerateScriptParams): Record<string, unknown> {
   const body: Record<string, unknown> = {
     topic: params.productName || params.topic || '直播脚本',
     duration: params.duration ?? 30,
@@ -233,7 +275,22 @@ export async function generateScript(params: GenerateScriptParams): Promise<Scri
   if (params.productSku) body.productSku = params.productSku
   if (params.price) body.price = params.price
   if (params.features) body.features = params.features
+  if (params.coreFeatures) body.coreFeatures = params.coreFeatures
+  if (params.secondaryFeatures) body.secondaryFeatures = params.secondaryFeatures
   if (params.targetAudience) body.targetAudience = params.targetAudience
+  if (params.isBundle != null) body.isBundle = params.isBundle
+  if (params.is_combo === true) body.is_combo = true
+  if (params.bundleName) body.bundleName = params.bundleName
+  if (params.bundleTotalPrice) {
+    body.bundleTotalPrice = params.bundleTotalPrice
+    body.combo_total_price = params.bundleTotalPrice
+  }
+  if (params.bundleFeatures && Array.isArray(params.bundleFeatures) && params.bundleFeatures.length > 0) body.bundleFeatures = params.bundleFeatures
+  if (params.bundleItems && Array.isArray(params.bundleItems) && params.bundleItems.length > 0) body.bundleItems = params.bundleItems
+  if (params.products && Array.isArray(params.products) && params.products.length > 0) body.products = params.products
+  if (params.combo_original_price) body.combo_original_price = params.combo_original_price
+  if (params.combo_discount_amount) body.combo_discount_amount = params.combo_discount_amount
+  if (params.product_name) body.product_name = params.product_name
   if (params.scriptType) body.scriptType = params.scriptType
   if (params.language) body.language = params.language
   if (params.promotion_info != null) body.promotion_info = params.promotion_info
@@ -242,15 +299,25 @@ export async function generateScript(params: GenerateScriptParams): Promise<Scri
   if (params.countryCode) body.countryCode = params.countryCode
   if (params.custom_requirements != null) body.custom_requirements = params.custom_requirements
   else if (params.customRequirements != null) body.custom_requirements = params.customRequirements
+  if (params.afterSalesInfo != null) body.afterSalesInfo = params.afterSalesInfo
+  if (params.competitorLink != null && String(params.competitorLink).trim()) body.competitorLink = String(params.competitorLink).trim()
   if (params.storeId) body.storeId = params.storeId
+  if (params.price_level) body.price_level = params.price_level
+  if (params.product_role) body.product_role = params.product_role
+  return body
+}
+
+/** 调用后端生成话术/脚本（POST /api/ai/script），长耗时单独超时 */
+export async function generateScript(params: GenerateScriptParams): Promise<ScriptLLMResult> {
+  const body = buildScriptRequestBody(params)
   const data = await api.post('/ai/script', body, { timeout: SCRIPT_AND_REPORT_TIMEOUT_MS })
   return data as unknown as ScriptLLMResult
 }
 
-/** 流式话术总超时（连接+读取），略大于后端 Coze 流超时（120s），避免完整销售流程在逼单处被前端先断开 */
-const SCRIPT_STREAM_TIMEOUT_MS = 135000
+/** 流式话术总超时（连接+读取）。Coze 长话术常见 2–3 分钟，须大于常见单次生成耗时，避免服务端已成功但前端先 abort */
+const SCRIPT_STREAM_TIMEOUT_MS = 210000
 /** 非中文时需预留后端翻译时间，延长超时 */
-const SCRIPT_STREAM_TIMEOUT_MS_NON_ZH = 180000
+const SCRIPT_STREAM_TIMEOUT_MS_NON_ZH = 240000
 
 /** 流式生成话术（POST /api/ai/script/stream），SSE 推送，支持打字机效果 */
 export async function generateScriptStream(
@@ -263,28 +330,10 @@ export async function generateScriptStream(
     onFallback?: (reason: string) => void
   }
 ): Promise<void> {
-  const body: Record<string, unknown> = {
-    topic: params.productName || params.topic || '直播脚本',
-    duration: params.duration ?? 30,
-    style: params.style || '专业',
-  }
-  if (params.productName) body.productName = params.productName
-  if (params.productSku) body.productSku = params.productSku
-  if (params.price) body.price = params.price
-  if (params.features) body.features = params.features
-  if (params.targetAudience) body.targetAudience = params.targetAudience
-  if (params.scriptType) body.scriptType = params.scriptType
-  if (params.language) body.language = params.language
-  if (params.promotion_info != null) body.promotion_info = params.promotion_info
-  else if (params.promoCopy != null) body.promoCopy = params.promoCopy
-  if (params.country) body.country = params.country
-  if (params.countryCode) body.countryCode = params.countryCode
-  if (params.custom_requirements != null) body.custom_requirements = params.custom_requirements
-  else if (params.customRequirements != null) body.custom_requirements = params.customRequirements
-  if (params.storeId) body.storeId = params.storeId
+  const body = buildScriptRequestBody(params)
 
   const token = localStorage.getItem('token')
-  const base = API_BASE_URL
+  const base = (typeof window !== 'undefined' && window.__API_BASE__) || '/api'
   const timeoutMs = params.language && params.language !== 'zh-CN' ? SCRIPT_STREAM_TIMEOUT_MS_NON_ZH : SCRIPT_STREAM_TIMEOUT_MS
   const ac = new AbortController()
   const timeoutId = setTimeout(() => ac.abort(), timeoutMs)
@@ -491,4 +540,17 @@ export async function translateLongTextForDisplay(
     e.response = error.response
     throw e
   }
+}
+
+export interface ProductParseResult {
+  productName?: string
+  price?: string
+  productSku?: string
+  coreFeatures?: string[]
+  afterSalesInfo?: string
+}
+
+export async function parseProductWithSystemAgent(text: string): Promise<ProductParseResult> {
+  const res = (await api.post('/ai/system-agent/parse-product', { text })) as { data?: ProductParseResult, success: boolean }
+  return res?.data ?? {}
 }

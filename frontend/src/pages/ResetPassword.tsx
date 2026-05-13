@@ -62,17 +62,17 @@ export default function ResetPassword() {
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+      <div className="min-h-screen bg-gradient-to-br from-primary-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 text-center">
           <div className="inline-flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-4">
             <CheckCircle className="w-8 h-8 text-green-600" />
           </div>
-          <h1 className="text-xl font-bold text-gray-900 mb-2">密码已重置</h1>
-          <p className="text-gray-600 mb-2">请使用新密码登录</p>
-          <p className="text-sm text-gray-500 mb-6">{countdown > 0 ? `${countdown} 秒后自动跳转至登录页` : '正在跳转...'}</p>
+          <h1 className="text-xl font-bold text-slate-900 mb-2">密码已重置</h1>
+          <p className="text-slate-600 mb-2">请使用新密码登录</p>
+          <p className="text-sm text-slate-500 mb-6">{countdown > 0 ? `${countdown} 秒后自动跳转至登录页` : '正在跳转...'}</p>
           <Link
             to="/login"
-            className="inline-block w-full py-2 px-4 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium text-center"
+            className="inline-block w-full py-2 px-4 bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium text-center"
           >
             立即去登录
           </Link>
@@ -82,14 +82,14 @@ export default function ResetPassword() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
+    <div className="min-h-screen bg-gradient-to-br from-primary-50 to-indigo-100 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary-600 rounded-full mb-4">
             <Lock className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">设置新密码</h1>
-          <p className="text-gray-600">请输入新密码（至少 6 位）</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">设置新密码</h1>
+          <p className="text-slate-600">请输入新密码（至少 6 位）</p>
         </div>
 
         {!token ? (
@@ -99,11 +99,11 @@ export default function ResetPassword() {
             </div>
             <Link
               to="/forgot-password"
-              className="block w-full py-2 text-center text-blue-600 hover:underline font-medium"
+              className="block w-full py-2 text-center text-primary-600 hover:underline font-medium"
             >
               重新获取重置链接
             </Link>
-            <Link to="/login" className="block w-full py-2 text-center text-gray-600 hover:underline">
+            <Link to="/login" className="block w-full py-2 text-center text-slate-600 hover:underline">
               返回登录
             </Link>
           </div>
@@ -116,14 +116,14 @@ export default function ResetPassword() {
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">新密码</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">新密码</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="至少 6 位"
                   required
                   minLength={6}
@@ -132,14 +132,14 @@ export default function ResetPassword() {
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">确认新密码</label>
+              <label className="block text-sm font-medium text-slate-700 mb-2">确认新密码</label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-slate-400" />
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="再次输入"
                   required
                 />
@@ -149,7 +149,7 @@ export default function ResetPassword() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
+              className="w-full bg-primary-600 text-white py-2 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center justify-center gap-2 font-medium"
             >
               {loading ? (
                 <>
@@ -163,8 +163,8 @@ export default function ResetPassword() {
           </form>
         )}
 
-        <p className="mt-6 text-center text-sm text-gray-600">
-          <Link to="/login" className="text-blue-600 hover:underline">
+        <p className="mt-6 text-center text-sm text-slate-600">
+          <Link to="/login" className="text-primary-600 hover:underline">
             返回登录
           </Link>
         </p>

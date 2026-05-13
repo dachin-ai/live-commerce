@@ -69,11 +69,11 @@ export default function Chart({
           boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
         }}
       >
-        <div className="text-sm text-gray-700">
+        <div className="text-sm text-slate-700">
           <span className="font-medium">{dateLabelText}：</span>
           {valueDate}
         </div>
-        <div className="text-sm text-gray-700 mt-0.5">
+        <div className="text-sm text-slate-700 mt-0.5">
           <span className="font-medium">{name}：</span>
           {displayValue}
         </div>

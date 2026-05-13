@@ -2,36 +2,54 @@
  * 待办生成规则模块
  * 所有判定逻辑以规则形式集中在此，避免一次性判定、便于维护与 A/B 调整。
  * 修改规则时仅改本文件与规则文档，无需散落修改业务代码。
+ *
+ * 支持环境变量覆盖：使用 TASK_ 前缀 + 大写驼峰转下划线格式。
+ * 例如：TASK_CONVERSION_RATE_MIN=5 覆盖 conversionRateMin 默认值 3。
  */
 
-// ==================== 规则 1：任务生成阈值（实验可控） ====================
+/** 从环境变量读取数值，未设置或无效时使用默认值 */
+function envNum(key: string, defaultVal: number): number {
+  const val = process.env[key]
+  if (val === undefined || val === '') return defaultVal
+  const n = Number(val)
+  return isNaN(n) ? defaultVal : n
+}
+
+/** 从环境变量读取布尔值 */
+function envBool(key: string, defaultVal: boolean): boolean {
+  const val = process.env[key]
+  if (val === undefined || val === '') return defaultVal
+  return val === '1' || val === 'true'
+}
+
+// ==================== 规则 1：任务生成阈值（支持环境变量覆盖） ====================
 
 export const TASK_GEN_CONFIG = {
-  conversionRateMin: 3,
-  conversionRateUrgentBelow: 1.5,
-  conversionRateMinViewers: 100,
-  durationMinHours: 20,
-  durationUrgentBelow: 15,
-  gmvPerHourMin: 5000,
-  durationTargetAdd: 10,
-  interactionRateMin: 10,
-  interactionRateUrgentBelow: 5,
-  interactionRateMinViewers: 50,
-  interactionRateTarget: 15,
-  platformInteractionAvg: 12,
-  avgOrderValueMin: 200,
-  avgOrderValueMinOrders: 10,
-  viewersMin: 500,
-  viewersMinDuration: 10,
-  viewersUrgentBelow: 200,
-  anomalyFallbackGmvDropRatio: 0.5,
-  anomalyFallbackConversionDropRatio: 0.7,
-  anomalyFallbackViewersDropRatio: 0.6,
-  anomalySigmaMultiplier: 2,
-  anomalyMinHistoricalPeriods: 3,
-  enableSingleSessionTasks: true,
-  enableAnchorTasks: true,
-} as const
+  conversionRateMin: envNum('TASK_CONVERSION_RATE_MIN', 3),
+  conversionRateUrgentBelow: envNum('TASK_CONVERSION_RATE_URGENT_BELOW', 1.5),
+  conversionRateMinViewers: envNum('TASK_CONVERSION_RATE_MIN_VIEWERS', 100),
+  durationMinHours: envNum('TASK_DURATION_MIN_HOURS', 20),
+  durationUrgentBelow: envNum('TASK_DURATION_URGENT_BELOW', 15),
+  gmvPerHourMin: envNum('TASK_GMV_PER_HOUR_MIN', 5000),
+  durationTargetAdd: envNum('TASK_DURATION_TARGET_ADD', 10),
+  interactionRateMin: envNum('TASK_INTERACTION_RATE_MIN', 10),
+  interactionRateUrgentBelow: envNum('TASK_INTERACTION_RATE_URGENT_BELOW', 5),
+  interactionRateMinViewers: envNum('TASK_INTERACTION_RATE_MIN_VIEWERS', 50),
+  interactionRateTarget: envNum('TASK_INTERACTION_RATE_TARGET', 15),
+  platformInteractionAvg: envNum('TASK_PLATFORM_INTERACTION_AVG', 12),
+  avgOrderValueMin: envNum('TASK_AVG_ORDER_VALUE_MIN', 200),
+  avgOrderValueMinOrders: envNum('TASK_AVG_ORDER_VALUE_MIN_ORDERS', 10),
+  viewersMin: envNum('TASK_VIEWERS_MIN', 500),
+  viewersMinDuration: envNum('TASK_VIEWERS_MIN_DURATION', 10),
+  viewersUrgentBelow: envNum('TASK_VIEWERS_URGENT_BELOW', 200),
+  anomalyFallbackGmvDropRatio: envNum('TASK_ANOMALY_GMV_DROP_RATIO', 0.5),
+  anomalyFallbackConversionDropRatio: envNum('TASK_ANOMALY_CONVERSION_DROP_RATIO', 0.7),
+  anomalyFallbackViewersDropRatio: envNum('TASK_ANOMALY_VIEWERS_DROP_RATIO', 0.6),
+  anomalySigmaMultiplier: envNum('TASK_ANOMALY_SIGMA', 2),
+  anomalyMinHistoricalPeriods: envNum('TASK_ANOMALY_MIN_PERIODS', 3),
+  enableSingleSessionTasks: envBool('TASK_ENABLE_SINGLE_SESSION', true),
+  enableAnchorTasks: envBool('TASK_ENABLE_ANCHOR', true),
+}
 
 // ==================== 规则 2：主播能力阶段判定（教育心理学 ZPD） ====================
 

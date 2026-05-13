@@ -27,7 +27,7 @@ let cachedAllowedIds: string[] | null = null
 /** 已启用的功能 id（script=话术生成, tasks=智能生成待办）；null 表示全部启用 */
 let cachedEnabledFeatures: string[] | null = null
 /** 按功能选择的智能体方式：coze_agent=Coze Agent，openai=OpenAI 兼容；异常分析与待办共用 todo */
-export type LLMModeValue = 'coze_agent' | 'openai'
+export type LLMModeValue = 'coze_agent' | 'openai' | 'gemini'
 let cachedModeTodo: LLMModeValue = 'coze_agent'
 let cachedModeScript: LLMModeValue = 'coze_agent'
 
@@ -183,8 +183,9 @@ export async function loadScriptLLMConfigCache(): Promise<void> {
   const scriptRow = await dbGet<{ value: string }>('SELECT value FROM system_config WHERE key = ?', [KEY_LLM_MODE_SCRIPT])
   const vTodo = todoRow?.value?.trim()
   const vScript = scriptRow?.value?.trim()
-  cachedModeTodo = (vTodo === 'coze_agent' || vTodo === 'openai' ? vTodo : 'coze_agent') as LLMModeValue
-  cachedModeScript = (vScript === 'coze_agent' || vScript === 'openai' ? vScript : 'coze_agent') as LLMModeValue
+  const VALID_MODES: LLMModeValue[] = ['coze_agent', 'openai', 'gemini']
+  cachedModeTodo = (VALID_MODES.includes(vTodo as LLMModeValue) ? vTodo : 'coze_agent') as LLMModeValue
+  cachedModeScript = (VALID_MODES.includes(vScript as LLMModeValue) ? vScript : 'coze_agent') as LLMModeValue
 }
 
 /** 同步读取当前按功能选择的智能体方式（异常分析与待办共用 todo） */

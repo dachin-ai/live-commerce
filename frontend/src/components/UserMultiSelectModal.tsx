@@ -1,6 +1,8 @@
 import { useState, useMemo } from 'react'
 import { X, Search, Users } from 'lucide-react'
 import type { User } from '../services/users'
+import { GlassInput } from './ui/GlassInput'
+import { GlassButton } from './ui/GlassButton'
 
 /**
  * 用户多选弹窗，用于权限配置等场景。
@@ -71,81 +73,80 @@ export default function UserMultiSelectModal({
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-black/50" onClick={handleClose} aria-hidden />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={handleClose} aria-hidden />
       <div
-        className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white rounded-xl shadow-xl border border-gray-200"
+        className="relative w-full max-w-md max-h-[85vh] flex flex-col bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-white/50 animate-in zoom-in-95 duration-200"
         role="dialog"
         aria-modal="true"
         aria-labelledby="user-multi-select-title"
       >
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
+        <div className="flex items-center justify-between p-5 border-b border-slate-200/60">
           <div className="flex items-center gap-2">
-            <Users className="w-5 h-5 text-indigo-600" />
-            <h2 id="user-multi-select-title" className="text-lg font-semibold text-gray-900">
+            <Users className="w-5 h-5 text-primary-600" />
+            <h2 id="user-multi-select-title" className="text-lg font-bold text-slate-900">
               {title}
             </h2>
           </div>
           <button
             type="button"
             onClick={handleClose}
-            className="p-1.5 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100/50 hover:text-slate-600 transition-colors"
             aria-label="关闭"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-4 space-y-3 flex-1 min-h-0 flex flex-col">
+        <div className="p-5 space-y-4 flex-1 min-h-0 flex flex-col">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-            <input
+            <GlassInput
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder={placeholder}
-              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+              icon={<Search className="w-4 h-4" />}
             />
           </div>
           <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-500">
-              已选 <strong className="text-gray-700">{draftIds.length}</strong> 人
+            <span className="text-slate-500">
+              已选 <strong className="text-slate-800">{draftIds.length}</strong> 人
             </span>
-            <div className="flex gap-2">
+            <div className="flex gap-3">
               <button
                 type="button"
                 onClick={selectAll}
-                className="text-indigo-600 hover:underline"
+                className="text-primary-600 font-medium hover:text-primary-700 transition-colors"
               >
                 全选
               </button>
               <button
                 type="button"
                 onClick={clearAll}
-                className="text-gray-500 hover:underline"
+                className="text-slate-500 hover:text-slate-700 transition-colors"
               >
                 清空
               </button>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto border border-gray-200 rounded-lg min-h-[200px]">
-            <ul className="p-2 space-y-0.5">
+          <div className="flex-1 overflow-y-auto border border-slate-200/60 rounded-xl min-h-[200px] bg-white/50">
+            <ul className="p-2 space-y-1">
               {filteredUsers.length === 0 ? (
-                <li className="py-6 text-center text-sm text-gray-500">
+                <li className="py-8 text-center text-sm text-slate-500 font-medium">
                   {search.trim() ? '无匹配用户' : '暂无用户'}
                 </li>
               ) : (
                 filteredUsers.map((u) => (
                   <li key={u.id}>
-                    <label className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 rounded px-2 py-2">
+                    <label className="flex items-center gap-3 cursor-pointer hover:bg-slate-50/80 rounded-lg px-3 py-2.5 transition-colors">
                       <input
                         type="checkbox"
                         checked={draftIds.includes(u.id)}
                         onChange={() => toggle(u.id)}
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        className="rounded border-slate-300 text-primary-600 focus:ring-primary-500 w-4 h-4"
                       />
-                      <span className="text-sm text-gray-800">{u.name}</span>
-                      <span className="text-xs text-gray-500 truncate">({u.email})</span>
+                      <span className="text-sm font-medium text-slate-800">{u.name}</span>
+                      <span className="text-xs text-slate-500 truncate mt-0.5">({u.email})</span>
                     </label>
                   </li>
                 ))
@@ -154,21 +155,19 @@ export default function UserMultiSelectModal({
           </div>
         </div>
 
-        <div className="flex justify-end gap-2 p-4 border-t border-gray-200 bg-gray-50 rounded-b-xl">
-          <button
-            type="button"
+        <div className="flex justify-end gap-3 p-5 border-t border-slate-200/60 bg-slate-50/50 rounded-b-2xl">
+          <GlassButton
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+            variant="secondary"
           >
             取消
-          </button>
-          <button
-            type="button"
+          </GlassButton>
+          <GlassButton
             onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700"
+            variant="primary"
           >
             确定
-          </button>
+          </GlassButton>
         </div>
       </div>
     </div>

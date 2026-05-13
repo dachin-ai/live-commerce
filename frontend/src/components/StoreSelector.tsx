@@ -6,9 +6,9 @@ export default function StoreSelector() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center gap-2 px-4 py-2 bg-gray-100 rounded-lg">
-        <Store className="w-4 h-4 text-gray-500" />
-        <span className="text-sm text-gray-500">加载中...</span>
+      <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-lg">
+        <Store className="w-4 h-4 text-slate-500" />
+        <span className="text-sm text-slate-500">加载中...</span>
       </div>
     )
   }
@@ -34,7 +34,7 @@ export default function StoreSelector() {
           const store = stores.find((s) => s.id === e.target.value)
           setSelectedStore(store || null)
         }}
-        className="appearance-none bg-white border border-gray-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-gray-900 hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+        className="appearance-none bg-white border border-slate-300 rounded-lg px-4 py-2 pr-8 text-sm font-medium text-slate-900 hover:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500 cursor-pointer"
       >
         {stores.map((store) => (
           <option key={store.id} value={store.id}>
@@ -42,7 +42,7 @@ export default function StoreSelector() {
           </option>
         ))}
       </select>
-      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+      <ChevronDown className="absolute right-2 top-1/2 transform -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
     </div>
   )
 }

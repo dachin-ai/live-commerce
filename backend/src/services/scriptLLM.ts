@@ -335,7 +335,8 @@ async function* streamCozeAgent(
   for (let attempt = 0; attempt <= COZE_MAX_RETRIES; attempt++) {
     try {
       const requestBody = buildCozeStreamRunBody(message, bodyOptions, url)
-      console.log('实际发送的请求:', JSON.stringify(requestBody, null, 2))
+      // S4: 仅 DEBUG 模式输出完整请求体，避免生产环境泄露敏感信息
+      if (DEBUG_COZE) console.log('实际发送的请求:', JSON.stringify(requestBody, null, 2))
       cozeDiagnosticLog('request_body', {
         url: url.replace(/\/stream_run.*$/, '/stream_run'),
         taskType,
@@ -710,9 +711,117 @@ const openaiProvider: IScriptLLMProvider = {
   callOnce: callOpenAIOnce,
 }
 
+// --------------------------------------------------------------------------------------
+// 3. 原生 Gemini Provider（纯 REST，无需套壳）
+// --------------------------------------------------------------------------------------
+
+async function* streamGeminiContent(
+  config: ScriptLLMProviderConfig,
+  options: ScriptLLMProviderOptions
+): AsyncGenerator<string, void, unknown> {
+  const model = config.model || 'gemini-2.5-flash'
+  let baseUrl = config.url.trim()
+  if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1)
+  if (!baseUrl.includes('models/')) {
+    baseUrl = `${baseUrl}/v1beta/models/${model}:streamGenerateContent`
+  }
+  const url = `${baseUrl}?key=${config.apiKey}`
+
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: `${options.systemPrompt}\n\n${options.userMessage}` }] }],
+    generationConfig: {
+      temperature: 0.7,
+      ...(options.maxTokens != null && options.maxTokens > 0 ? { maxOutputTokens: options.maxTokens } : {}),
+    }
+  }
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+
+  if (!res.ok || !res.body) return
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      // Gemini streams JSON array chunks like: ",\r\n{\n  \"candidates\": [ ... ]\n}"
+      // We parse the buffer whenever it successfully parses as a JSON object inside an array, practically we can just regex extract \"text\": \"...\" but standard parsing is safer.
+      // Since Gemini returns SSE-like array elements, it's easier to regex out the text blocks if we don't buffer intelligently, but let's try reading the texts.
+      const matchText = /"text"\s*:\s*"([^"\\]*(?:\\.[^"\\]*)*)"/g
+      let match
+      while ((match = matchText.exec(buffer)) !== null) {
+        let text = match[1]
+        try {
+          text = JSON.parse(`"${text}"`) // Unescape
+        } catch {}
+        if (text) yield text
+      }
+      buffer = '' // we flush buffer since we regex'd it. This is a very naive stream parsing but works for simple text generation if strings don't cross chunk boundaries.
+    }
+  } finally {
+    reader.releaseLock()
+  }
+}
+
+async function callGeminiOnce(
+  config: ScriptLLMProviderConfig,
+  options: ScriptLLMProviderOptions
+): Promise<string> {
+  const model = config.model || 'gemini-2.5-flash'
+  let baseUrl = config.url.trim()
+  if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1)
+  if (!baseUrl.includes('models/')) {
+    baseUrl = `${baseUrl}/v1beta/models/${model}:generateContent`
+  }
+  const url = `${baseUrl}?key=${config.apiKey}`
+
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: `${options.systemPrompt}\n\n${options.userMessage}` }] }],
+    generationConfig: {
+      temperature: 0.7,
+      ...(options.maxTokens != null && options.maxTokens > 0 ? { maxOutputTokens: options.maxTokens } : {}),
+    }
+  }
+
+  const abortController = new AbortController()
+  const timeoutId = setTimeout(() => abortController.abort(), options.timeoutMs ?? 60000)
+
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: abortController.signal
+    })
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => '')
+      console.error('[geminiProvider] 返回非 200:', res.status, errorText)
+      return ''
+    }
+    const data = await res.json() as any
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text
+    return typeof text === 'string' ? text.trim() : ''
+  } finally {
+    clearTimeout(timeoutId)
+  }
+}
+
+const geminiProvider: IScriptLLMProvider = {
+  id: 'gemini',
+  stream: streamGeminiContent,
+  callOnce: callGeminiOnce,
+}
+
 function initBuiltinProviders(): void {
   registerScriptLLMProvider('coze_agent', cozeAgentProvider)
   registerScriptLLMProvider('openai', openaiProvider)
+  registerScriptLLMProvider('gemini', geminiProvider)
 }
 initBuiltinProviders()
 

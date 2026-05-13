@@ -92,7 +92,7 @@ router.post('/upload-video', upload.single('file'), async (req: AuthRequest, res
 
     await dbRun(
       `INSERT INTO videos (id, userId, shopId, sessionId, fileName, fileKey, videoUrl, fileSize, contentType, status, createdAt)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing', datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'processing', NOW())`,
       [videoId, userId, storeId || null, sessionId || null, file.originalname, fileKey, videoUrl, file.size, file.mimetype]
     )
 
@@ -131,7 +131,7 @@ router.post('/upload-video', upload.single('file'), async (req: AuthRequest, res
           })
           await dbRun(
             `INSERT INTO materials (id, name, type, url, storeId, userId, title, content, videoId, tags, rating, metadata, description, createdAt)
-             VALUES (?, ?, 'excellent', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+             VALUES (?, ?, 'excellent', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               matId,
               m.title || '优秀片段',
@@ -160,7 +160,7 @@ router.post('/upload-video', upload.single('file'), async (req: AuthRequest, res
           })
           await dbRun(
             `INSERT INTO materials (id, name, type, url, storeId, userId, title, content, videoId, tags, metadata, description, createdAt)
-             VALUES (?, ?, 'problem', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+             VALUES (?, ?, 'problem', ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
             [
               matId,
               p.title || '问题片段',
@@ -273,7 +273,7 @@ router.delete('/:id', async (req: AuthRequest, res) => {
       return res.status(403).json({ error: '无权限删除' })
     }
 
-    await dbRun(`UPDATE videos SET deletedAt = datetime('now') WHERE id = ?`, [id])
+    await dbRun(`UPDATE videos SET deletedAt = NOW() WHERE id = ?`, [id])
     res.json({ message: '已删除' })
   } catch (err) {
     console.error('删除视频失败:', err)

@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, RefreshCw, MessageSquare, MessageCircle, Trash2 } from 'lucide-react'
+import { RefreshCw, MessageSquare, MessageCircle, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import {
   fetchFeedbackList,
@@ -11,7 +10,11 @@ import {
   type FeedbackItem,
   type FeedbackStatus,
 } from '../services/feedback'
+import CustomSelect from '../components/CustomSelect'
 import { useToast } from '../contexts/ToastContext'
+import AppLayout from '../components/AppLayout'
+import { GlassButton } from '../components/ui/GlassButton'
+import { GlassTextarea } from '../components/ui/GlassTextarea'
 
 const CATEGORY_OPTIONS = [
   { value: 'all', labelKey: 'feedbackManage.categoryAll' },
@@ -28,7 +31,6 @@ const STATUS_OPTIONS = [
 
 export default function FeedbackManagement() {
   const { t } = useTranslation()
-  const navigate = useNavigate()
   const toast = useToast()
   const queryClient = useQueryClient()
   const [category, setCategory] = useState('all')
@@ -100,79 +102,68 @@ export default function FeedbackManagement() {
     return []
   }
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="flex items-center justify-between mb-6">
-          <div className="flex items-center gap-3">
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="p-2 hover:bg-gray-200 rounded-lg"
-              aria-label={t('common.back')}
-            >
-              <ArrowLeft className="w-5 h-5 text-gray-600" />
-            </button>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t('feedbackManage.title')}</h1>
-              <p className="text-sm text-gray-500">{t('feedbackManage.subtitle')}</p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => refetch()}
-            disabled={isLoading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 bg-white hover:bg-gray-50 disabled:opacity-50"
-          >
-            <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-            {t('feedbackManage.refresh')}
-          </button>
-        </div>
+  const headerExtra = (
+    <GlassButton
+      type="button"
+      onClick={() => refetch()}
+      disabled={isLoading}
+      variant="secondary"
+      className="!py-1.5"
+    >
+      <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+      {t('feedbackManage.refresh')}
+    </GlassButton>
+  )
 
-        <div className="mb-6 p-4 bg-white rounded-xl border border-gray-200">
-          <h2 className="text-sm font-medium text-gray-700 mb-3">{t('feedbackManage.filters')}</h2>
+  return (
+    <AppLayout
+      title={t('feedbackManage.title')}
+      subtitle={t('feedbackManage.subtitle')}
+      headerExtra={headerExtra}
+    >
+      <div className="space-y-6">
+        <div className="card">
+          <h2 className="text-sm font-medium text-slate-700 mb-3">{t('feedbackManage.filters')}</h2>
           <div className="flex flex-wrap gap-4">
             <div>
-              <label className="block text-xs text-gray-500 mb-1">{t('feedbackManage.category')}</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                {CATEGORY_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {t(o.labelKey)}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs text-slate-500 mb-1">{t('feedbackManage.category')}</label>
+              <div className="w-36">
+                <CustomSelect
+                  value={category}
+                  onChange={setCategory}
+                  options={CATEGORY_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: t(o.labelKey)
+                  }))}
+                />
+              </div>
             </div>
             <div>
-              <label className="block text-xs text-gray-500 mb-1">{t('feedbackManage.status')}</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              >
-                {STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {t(o.labelKey)}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-xs text-slate-500 mb-1">{t('feedbackManage.status')}</label>
+              <div className="w-36">
+                <CustomSelect
+                  value={status}
+                  onChange={setStatus}
+                  options={STATUS_OPTIONS.map((o) => ({
+                    value: o.value,
+                    label: t(o.labelKey)
+                  }))}
+                />
+              </div>
             </div>
           </div>
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 min-h-[300px]">
+        <div className="card min-h-[300px]">
           {isLoading ? (
-            <div className="flex items-center justify-center py-20 text-gray-500">
+            <div className="flex items-center justify-center py-20 text-slate-500">
               <RefreshCw className="w-8 h-8 animate-spin mr-2" />
               {t('common.loading')}
             </div>
           ) : isError ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-600">
+            <div className="flex flex-col items-center justify-center py-20 text-slate-600">
               <p className="font-medium mb-2">加载失败</p>
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-slate-500 mb-4">
                 {(() => {
                   const err = error as { response?: { status?: number; data?: { error?: string } } } | Error | null
                   const response = (err as { response?: { status?: number; data?: { error?: string } } })?.response
@@ -185,42 +176,42 @@ export default function FeedbackManagement() {
               <button
                 type="button"
                 onClick={() => refetch()}
-                className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+                className="px-4 py-2 rounded-lg border border-slate-300 hover:bg-slate-50"
               >
                 {t('feedbackManage.refresh')}
               </button>
             </div>
           ) : list.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-gray-500">
-              <MessageSquare className="w-16 h-16 text-gray-300 mb-4" />
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <MessageSquare className="w-16 h-16 mb-4 opacity-50" />
               <p>{t('feedbackManage.noFeedback')}</p>
             </div>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-slate-100/50">
               {list.map((item: FeedbackItem) => (
-                <li key={item.id} className="p-4 hover:bg-gray-50/50">
+                <li key={item.id} className="p-4 hover:bg-slate-50/50">
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 flex-wrap mb-1">
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                        <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">
                           {typeLabel(item.type)}
                         </span>
-                        <span className="text-xs px-2 py-0.5 rounded bg-gray-100 text-gray-600">
+                        <span className="text-xs px-2 py-0.5 rounded bg-slate-100 text-slate-600">
                           {statusLabel(item.status)}
                         </span>
                       </div>
-                      <h3 className="font-medium text-gray-900 truncate">{item.subject}</h3>
-                      <p className="text-sm text-gray-600 mt-1 line-clamp-2">{item.content}</p>
+                      <h3 className="font-medium text-slate-900 truncate">{item.subject}</h3>
+                      <p className="text-sm text-slate-600 mt-1 line-clamp-2">{item.content}</p>
                       {getImageUrls(item).length > 0 && (
                         <div className="flex flex-wrap gap-1 mt-2">
                           {getImageUrls(item).map((url) => (
                             <a key={url} href={url} target="_blank" rel="noopener noreferrer" className="block">
-                              <img src={url} alt="" className="w-12 h-12 object-cover rounded border border-gray-200 hover:opacity-90" />
+                              <img src={url} alt="" className="w-12 h-12 object-cover rounded border border-slate-200 hover:opacity-90" />
                             </a>
                           ))}
                         </div>
                       )}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                      <div className="flex items-center gap-4 mt-2 text-xs text-slate-500">
                         <span>{t('feedbackManage.user')}: {item.userName || item.userEmail || '-'}</span>
                         {item.contact && (
                           <span>{t('feedbackManage.contact')}: {item.contact}</span>
@@ -229,44 +220,48 @@ export default function FeedbackManagement() {
                       </div>
                     </div>
                     <div className="flex gap-2 shrink-0 flex-wrap">
-                      <button
+                      <GlassButton
                         type="button"
                         onClick={() => { setReplyingId(item.id); setReplyText(item.replyContent || '') }}
                         disabled={replyMutation.isPending}
-                        className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-blue-200 text-blue-700 hover:bg-blue-50"
+                        variant="primary"
+                        className="!px-2.5 !py-1 !text-xs !bg-primary-50 !text-primary-700 !border-primary-200 hover:!bg-primary-100 gap-1"
                       >
                         <MessageCircle className="w-3.5 h-3.5" />
                         {t('feedbackManage.reply')}
-                      </button>
+                      </GlassButton>
                       {item.status !== 'read' && (
-                        <button
+                        <GlassButton
                           type="button"
                           onClick={() => updateStatus.mutate({ id: item.id, status: 'read' })}
                           disabled={updateStatus.isPending}
-                          className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-100"
+                          variant="secondary"
+                          className="!px-2.5 !py-1 !text-xs"
                         >
                           {t('feedbackManage.markRead')}
-                        </button>
+                        </GlassButton>
                       )}
                       {item.status !== 'replied' && (
-                        <button
+                        <GlassButton
                           type="button"
                           onClick={() => updateStatus.mutate({ id: item.id, status: 'replied' })}
                           disabled={updateStatus.isPending}
-                          className="px-2 py-1 text-xs rounded border border-gray-300 hover:bg-gray-100"
+                          variant="secondary"
+                          className="!px-2.5 !py-1 !text-xs"
                         >
                           {t('feedbackManage.markReplied')}
-                        </button>
+                        </GlassButton>
                       )}
-                      <button
+                      <GlassButton
                         type="button"
                         onClick={() => handleDelete(item)}
                         disabled={deleteMutation.isPending}
-                        className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-red-200 text-red-600 hover:bg-red-50"
+                        variant="danger"
+                        className="!px-2.5 !py-1 !text-xs gap-1"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                         {t('feedbackManage.delete')}
-                      </button>
+                      </GlassButton>
                     </div>
                   </div>
                   {item.replyContent && (
@@ -274,21 +269,21 @@ export default function FeedbackManagement() {
                       <p className="text-xs text-green-700 font-medium mb-1">
                         {t('feedbackManage.replyContent')} {item.replyAt && `· ${new Date(item.replyAt).toLocaleString()}`}
                       </p>
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap">{item.replyContent}</pre>
+                      <pre className="text-sm text-slate-700 whitespace-pre-wrap">{item.replyContent}</pre>
                     </div>
                   )}
                   <details className="mt-2">
-                    <summary className="text-xs text-blue-600 cursor-pointer hover:underline">
+                    <summary className="text-xs text-primary-600 cursor-pointer hover:underline">
                       {t('feedbackManage.viewFull')}
                     </summary>
-                    <pre className="mt-2 p-3 bg-gray-50 rounded text-sm text-gray-700 whitespace-pre-wrap">
+                    <pre className="mt-2 p-3 bg-slate-50 rounded text-sm text-slate-700 whitespace-pre-wrap">
                       {item.content}
                     </pre>
                     {getImageUrls(item).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-2">
                         {getImageUrls(item).map((url) => (
                           <a key={url} href={url} target="_blank" rel="noopener noreferrer">
-                            <img src={url} alt="" className="max-w-[200px] max-h-[200px] object-contain rounded border border-gray-200" />
+                            <img src={url} alt="" className="max-w-[200px] max-h-[200px] object-contain rounded border border-slate-200" />
                           </a>
                         ))}
                       </div>
@@ -302,37 +297,37 @@ export default function FeedbackManagement() {
 
         {/* 回复弹窗 */}
         {replyingId && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40" onClick={() => setReplyingId(null)}>
-            <div className="bg-white rounded-xl shadow-xl max-w-xl w-full p-5" onClick={e => e.stopPropagation()}>
-              <h3 className="font-medium text-gray-900 mb-3">{t('feedbackManage.reply')}</h3>
-              <textarea
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={() => setReplyingId(null)}>
+            <div className="bg-white/90 backdrop-blur-2xl border border-white/40 rounded-2xl shadow-2xl max-w-xl w-full p-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+              <h3 className="font-bold text-slate-800 mb-6">{t('feedbackManage.reply')}</h3>
+              <GlassTextarea
                 value={replyText}
                 onChange={e => setReplyText(e.target.value)}
                 placeholder={t('feedbackManage.replyPlaceholder')}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm min-h-[120px] resize-y"
+                className="w-full min-h-[120px] resize-y"
                 autoFocus
               />
-              <div className="flex justify-end gap-2 mt-4">
-                <button
+              <div className="flex justify-end gap-3 mt-6">
+                <GlassButton
                   type="button"
                   onClick={() => { setReplyingId(null); setReplyText('') }}
-                  className="px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50"
+                  variant="secondary"
                 >
                   {t('common.cancel')}
-                </button>
-                <button
+                </GlassButton>
+                <GlassButton
                   type="button"
                   disabled={!replyText.trim() || replyMutation.isPending}
                   onClick={() => replyMutation.mutate({ id: replyingId, content: replyText.trim() })}
-                  className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50"
+                  variant="primary"
                 >
                   {replyMutation.isPending ? t('common.loading') : t('common.save')}
-                </button>
+                </GlassButton>
               </div>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </AppLayout>
   )
 }

@@ -19,6 +19,10 @@ backend/data.db-shm
 backend/data.db.backup
 data/shared_state/state.db
 
+# PostgreSQL（本地压缩包安装）
+pgsql/
+pgdata/
+
 # 上传文件
 backend/uploads/
 frontend/uploads/

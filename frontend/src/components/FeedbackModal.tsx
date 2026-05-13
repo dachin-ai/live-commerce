@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X, Send, ImagePlus } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { submitFeedback, uploadFeedbackImage, type FeedbackType } from '../services/feedback'
 import { useToast } from '../contexts/ToastContext'
+import { GlassInput } from './ui/GlassInput'
+import { GlassTextarea } from './ui/GlassTextarea'
+import { GlassButton } from './ui/GlassButton'
 
 interface FeedbackModalProps {
   onClose: () => void
@@ -88,70 +92,65 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
     }
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
-      <div
-        className="bg-white rounded-2xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col"
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm animate-in fade-in duration-200" onClick={onClose}>
+      <div className="bg-white/70 backdrop-blur-3xl border border-white/60 rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-6 border-b border-gray-100 flex items-start justify-between">
+        <div className="p-6 border-b border-white/40 flex items-start justify-between">
           <div>
-            <h2 className="text-xl font-bold text-gray-900">{t('feedback.submitTitle')}</h2>
-            <p className="text-sm text-gray-500 mt-1">{t('feedback.submitIntro')}</p>
+            <h2 className="text-xl font-bold text-slate-900">{t('feedback.submitTitle')}</h2>
+            <p className="text-sm text-slate-500 mt-1">{t('feedback.submitIntro')}</p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="p-1 rounded-lg text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="p-1 rounded-lg text-slate-400 hover:bg-slate-100/50 hover:text-slate-600 transition-colors"
             aria-label={t('feedback.close')}
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto flex-1">
+        <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('feedback.typeLabel')}</label>
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('feedback.typeLabel')}</label>
             <div className="flex gap-2 flex-wrap">
               {TYPES.map(({ value, labelKey }) => (
-                <button
+                <GlassButton
                   key={value}
                   type="button"
+                  variant={type === value ? 'primary' : 'outline'}
+                  size="sm"
                   onClick={() => setType(value)}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    type === value
-                      ? 'bg-gray-900 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
+                  className="rounded-full px-4"
                 >
                   {t(labelKey)}
-                </button>
+                </GlassButton>
               ))}
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('feedback.subjectLabel')}</label>
-            <input
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('feedback.subjectLabel')}</label>
+            <GlassInput
               type="text"
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder={t('feedback.subjectPlaceholder')}
               maxLength={200}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('feedback.contentLabel')}</label>
-            <textarea
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('feedback.contentLabel')}</label>
+            <GlassTextarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[120px] resize-y"
               placeholder={t('feedback.contentPlaceholder')}
               maxLength={2000}
             />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <input
                 ref={fileInputRef}
                 type="file"
@@ -160,28 +159,30 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
                 className="hidden"
                 onChange={handleImageSelect}
               />
-              <button
+              <GlassButton
                 type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploading || imageUrls.length >= 5}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                className="gap-1.5 bg-white/40"
               >
                 <ImagePlus className="w-4 h-4" />
                 {t('feedback.insertImage')}
-              </button>
+              </GlassButton>
               {imageUrls.length > 0 && (
-                <span className="text-xs text-gray-500">
+                <span className="text-xs text-slate-500 font-medium">
                   {imageUrls.length}/5
                 </span>
               )}
-              <div className="flex flex-wrap gap-2 mt-1 w-full">
+              <div className="flex flex-wrap gap-2 mt-2 w-full">
                 {imageUrls.map((url) => (
-                  <div key={url} className="relative group">
-                    <img src={url} alt="" className="w-16 h-16 object-cover rounded border border-gray-200" />
+                  <div key={url} className="relative group rounded-lg overflow-hidden shadow-sm border border-slate-200">
+                    <img src={url} alt="" className="w-16 h-16 object-cover" />
                     <button
                       type="button"
                       onClick={() => setImageUrls(prev => prev.filter(u => u !== url))}
-                      className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-red-500 text-white flex items-center justify-center text-xs opacity-90 group-hover:opacity-100"
+                      className="absolute top-1 right-1 w-5 h-5 rounded-full bg-slate-900/60 backdrop-blur-md text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <X className="w-3 h-3" />
                     </button>
@@ -192,36 +193,38 @@ export default function FeedbackModal({ onClose }: FeedbackModalProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">{t('feedback.contactLabel')}</label>
-            <input
+            <label className="block text-sm font-medium text-slate-700 mb-2">{t('feedback.contactLabel')}</label>
+            <GlassInput
               type="text"
               value={contact}
               onChange={(e) => setContact(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
               placeholder={t('feedback.contactPlaceholder')}
             />
-            <p className="text-xs text-gray-500 mt-1">{t('feedback.contactHint')}</p>
+            <p className="text-xs text-slate-500 mt-1.5">{t('feedback.contactHint')}</p>
           </div>
 
-          <div className="flex justify-end gap-2 pt-2">
-            <button
+          <div className="flex justify-end gap-2 pt-4 border-t border-white/30">
+            <GlassButton
               type="button"
+              variant="ghost"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50"
+              className="text-slate-600 hover:text-slate-900 px-5"
             >
               {t('feedback.close')}
-            </button>
-            <button
+            </GlassButton>
+            <GlassButton
               type="submit"
+              variant="primary"
               disabled={submitting}
-              className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-50 flex items-center gap-2"
+              className="gap-2 px-6 shadow-primary-500/20"
             >
               <Send className="w-4 h-4" />
               {t('feedback.submit')}
-            </button>
+            </GlassButton>
           </div>
         </form>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

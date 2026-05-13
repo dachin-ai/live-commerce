@@ -10,7 +10,7 @@
     "start": "node dist/index.js",
     "db:update-seed": "tsx src/db-migrate.ts",
     "db:seed-test-users": "tsx scripts/seed-test-users.ts",
-    "db:reset": "node -e \"const fs = require('fs'); if (fs.existsSync('data.db')) { fs.unlinkSync('data.db'); console.log('✅ 数据库已删除'); } else { console.log('ℹ️  数据库不存在'); }\"",
+    "db:reset": "tsx scripts/reset-database.ts",
     "db:clean-stats": "tsx scripts/clean-stats-duplicates.ts",
     "db:clean-monthly-orphan": "tsx scripts/clean-monthly-orphan-stats.ts",
     "db:inspect": "tsx scripts/inspect-db.ts",
@@ -18,11 +18,15 @@
     "db:reset-full": "tsx scripts/reset-database.ts",
     "test:generate-logic": "tsx scripts/test-generate-logic.ts",
     "test:generate-api": "tsx scripts/test-generate-tasks-api.ts",
-    "test:script-fallback": "tsx scripts/test-script-fallback.ts"
+    "test:script-fallback": "tsx scripts/test-script-fallback.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.9.0",
     "compression": "^1.7.4",
+    "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
@@ -30,22 +34,26 @@
     "jsonwebtoken": "^9.0.2",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.1",
-    "sqlite3": "^5.1.7",
+    "pg": "^8.20.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/bcryptjs": "^2.4.6",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/compression": "^1.7.5",
+    "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.5",
     "@types/multer": "^1.4.11",
     "@types/node": "^20.10.4",
     "@types/nodemailer": "^7.0.9",
-    "@types/sqlite3": "^3.1.11",
+    "@types/pg": "^8.20.0",
     "@types/xlsx": "^0.0.36",
     "patch-package": "^8.0.1",
+    "ts-morph": "^27.0.2",
     "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.4"
   }
 }

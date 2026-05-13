@@ -99,17 +99,14 @@ function Show-DatabaseMenu {
         "1" {
             $confirm = Read-Host "Reset database? All data will be lost! (Y/N)"
             if ($confirm -eq "Y" -or $confirm -eq "y") {
-                $dbPath = Join-Path $PWD "backend\data.db"
-                if (Test-Path $dbPath) {
-                    $backupName = "data.db.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-                    $backupPath = Join-Path $PWD "backend\$backupName"
-                    Copy-Item $dbPath $backupPath -ErrorAction SilentlyContinue
-                    Write-Host "Backup created" -ForegroundColor Green
-                    Remove-Item $dbPath -Force
-                    Write-Host "Database deleted" -ForegroundColor Green
-                }
                 Write-Host ""
-                Write-Host "Restart backend to create new database" -ForegroundColor Yellow
+                Write-Host "Resetting PostgreSQL database..." -ForegroundColor Yellow
+                $backendPath = Join-Path $PWD "backend"
+                Push-Location $backendPath
+                npx tsx scripts/reset-database.ts
+                Pop-Location
+                Write-Host ""
+                Write-Host "Database reset complete. Restart backend to apply." -ForegroundColor Green
                 Start-Sleep -Seconds 3
             }
             Show-DatabaseMenu
@@ -127,14 +124,14 @@ function Show-DatabaseMenu {
         }
         "3" {
             Write-Host ""
-            $dbPath = Join-Path $PWD "backend\data.db"
-            if (Test-Path $dbPath) {
-                $backupName = "data.db.backup.$(Get-Date -Format 'yyyyMMdd_HHmmss')"
-                $backupPath = Join-Path $PWD "backend\$backupName"
-                Copy-Item $dbPath $backupPath
+            $pgDump = Join-Path $PWD "pgsql\bin\pg_dump.exe"
+            $backupName = "live_commerce_backup_$(Get-Date -Format 'yyyyMMdd_HHmmss').sql"
+            $backupPath = Join-Path $PWD "backend\$backupName"
+            if (Test-Path $pgDump) {
+                & $pgDump -U postgres live_commerce | Out-File $backupPath -Encoding utf8
                 Write-Host "Backup created: $backupName" -ForegroundColor Green
             } else {
-                Write-Host "Database not found" -ForegroundColor Yellow
+                Write-Host "pg_dump not found at: $pgDump" -ForegroundColor Yellow
             }
             Start-Sleep -Seconds 2
             Show-DatabaseMenu
