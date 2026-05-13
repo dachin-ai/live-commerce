@@ -11,6 +11,17 @@ const router = express.Router()
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production'
 const JWT_EXPIRES_IN = '7d'
 
+function getCookieOptions(isProduction: boolean) {
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    // FE and BE are different Cloud Run domains, so production must allow cross-site cookies.
+    sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+    path: '/',
+  }
+}
+
 // 用户注册（内测期暂停，控制 token 使用）
 router.post('/register', async (req, res) => {
   res.status(403).json({ error: '系统内测期，暂不支持注册' })
@@ -116,13 +127,7 @@ router.post('/login', async (req, res) => {
     await dbRun('UPDATE users SET lastLoginAt = ? WHERE id = ?', [new Date().toISOString(), user.id])
 
     const isProduction = process.env.NODE_ENV === 'production'
-    res.cookie('token', token, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-      path: '/',
-    })
+    res.cookie('token', token, getCookieOptions(isProduction))
 
     res.json({
       user: {
@@ -147,7 +152,13 @@ router.post('/logout', async (req, res) => {
     if (token) {
       await dbRun('DELETE FROM user_sessions WHERE token = ?', [token])
     }
-    res.clearCookie('token', { httpOnly: true, path: '/' })
+    const isProduction = process.env.NODE_ENV === 'production'
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: (isProduction ? 'none' : 'lax') as 'none' | 'lax',
+      path: '/',
+    })
     res.json({ message: '登出成功' })
   } catch (error) {
     console.error('登出失败:', error)
