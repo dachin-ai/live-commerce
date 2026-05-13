@@ -724,6 +724,38 @@ export async function initDatabase() {
     }
   }
 
+  // 固定管理员账号（幂等）：确保每次初始化后都可登录
+  // dena: 子管理员（manager）; ivan: 主管理员（admin）
+  // 默认密码为 123456（上线后请在后台立即修改）
+  {
+    const bcrypt = require('bcryptjs')
+    const defaultPassword = bcrypt.hashSync('123456', 10)
+    const fixedUsers = [
+      { id: 'admin-dena', name: 'dena', email: 'dena@dachin.ai', role: 'manager' },
+      { id: 'admin-ivan', name: 'ivan', email: 'ivan@dachin.ai', role: 'admin' },
+    ] as const
+
+    for (const user of fixedUsers) {
+      const existing = await dbGet<{ id: string }>('SELECT id FROM users WHERE email = ?', [user.email])
+      if (!existing) {
+        await dbRun(
+          'INSERT INTO users (id, name, email, password, role, status) VALUES (?, ?, ?, ?, ?, ?)',
+          [user.id, user.name, user.email, defaultPassword, user.role, 'active']
+        )
+      } else {
+        await dbRun('UPDATE users SET role = ?, status = ? WHERE email = ?', [user.role, 'active', user.email])
+      }
+
+      const pref = await dbGet<{ id: string }>('SELECT id FROM user_preferences WHERE userId = ?', [user.id])
+      if (!pref) {
+        await dbRun(
+          'INSERT INTO user_preferences (id, userId, preferences) VALUES (?, ?, ?)',
+          [crypto.randomUUID(), user.id, '{}']
+        )
+      }
+    }
+  }
+
   // 插入示例版本日志
   const existingLogs = await dbGet<{ count: number }>('SELECT COUNT(*) as count FROM version_logs')
   if (existingLogs && existingLogs.count == 0) {
